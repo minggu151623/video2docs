@@ -3,6 +3,8 @@
 import os
 from pathlib import Path
 
+from app.core.errors import AppError
+
 DETECTION_MODEL = "PP-OCRv5_mobile_det"
 DEFAULT_RECOGNITION_MODEL = "en_PP-OCRv5_mobile_rec"
 KOREAN_RECOGNITION_MODEL = "korean_PP-OCRv5_mobile_rec"
@@ -57,6 +59,18 @@ class OCR:
         return self._pipelines[rec]
 
     def read(self, image: Path, language: str | None = None) -> str:
+        try:
+            return self._read(image, language)
+        except AppError:
+            raise
+        except Exception as error:
+            raise AppError(
+                "OCR_FAILED",
+                "Không chạy được nhận dạng chữ local (thiếu thư viện, không tải được model hoặc kết quả lỗi).",
+                503,
+            ) from error
+
+    def _read(self, image, language):
         lines = []
         for result in self._pipeline(language).predict(str(image)):
             texts = list(result["rec_texts"])

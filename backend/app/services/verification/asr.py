@@ -20,6 +20,19 @@ class ASR:
         return self._model
 
     def transcribe(self, audio: Path, check_cancel) -> Transcript:
+        """The timeout also covers the model load and faster-whisper's VAD pass, not only decoding."""
+        try:
+            return self._transcribe(audio, check_cancel)
+        except AppError:
+            raise
+        except Exception as error:
+            raise AppError(
+                "ASR_FAILED",
+                "Không chạy được nhận dạng giọng nói local (thiếu thư viện, không tải được model hoặc lỗi giải mã).",
+                503,
+            ) from error
+
+    def _transcribe(self, audio, check_cancel):
         started = time.monotonic()
         timeout = self.settings.asr_timeout_seconds
 

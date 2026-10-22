@@ -83,7 +83,7 @@ def test_engine_settings_are_validated_and_snapshotted():
 def test_extract_audio_writes_16khz_mono_wav(tmp_path):
     source = make_tone_clip(tmp_path / "tone.mp4")
     target = tmp_path / "out" / "audio.wav"
-    media.extract_audio(source, target, lambda: None)
+    media.extract_audio(source, target, lambda: None, timeout=60)
     with wave.open(str(target)) as wav:
         assert (wav.getframerate(), wav.getnchannels(), wav.getsampwidth()) == (16000, 1, 2)
         assert 1.5 < wav.getnframes() / 16000 < 2.5
@@ -93,9 +93,14 @@ def test_extract_audio_writes_16khz_mono_wav(tmp_path):
 def test_extract_audio_on_fixture_without_audio_fails_cleanly(tmp_path):
     target = tmp_path / "audio.wav"
     with pytest.raises(AppError) as error:
-        media.extract_audio(ROOT / "fixtures" / "synthetic_tutorial.mp4", target, lambda: None)
+        media.extract_audio(ROOT / "fixtures" / "synthetic_tutorial.mp4", target, lambda: None, timeout=60)
     assert error.value.code == "MEDIA_INVALID"
     assert not target.exists() and not target.with_suffix(".partial").exists()
+
+
+def test_extract_audio_requires_explicit_timeout(tmp_path):
+    with pytest.raises(TypeError):
+        media.extract_audio(tmp_path / "in.mp4", tmp_path / "out.wav", lambda: None)
 
 
 def test_extract_audio_honours_cancellation(tmp_path):
@@ -105,7 +110,7 @@ def test_extract_audio_honours_cancellation(tmp_path):
         raise AppError("CANCELLED", "stop", 409)
 
     with pytest.raises(AppError) as error:
-        media.extract_audio(source, tmp_path / "audio.wav", cancel)
+        media.extract_audio(source, tmp_path / "audio.wav", cancel, timeout=60)
     assert error.value.code == "CANCELLED"
 
 
@@ -211,6 +216,55 @@ def test_asr_model_is_created_lazily_and_once(monkeypatch, tmp_path):
     assert created == [("tiny", "auto", "int8")]
 
 
+def test_asr_missing_dependency_is_a_clean_error(monkeypatch, tmp_path):
+    monkeypatch.setitem(sys.modules, "faster_whisper", None)
+    with pytest.raises(AppError) as error:
+        ASR(Settings()).transcribe(tmp_path / "a.wav", lambda: None)
+    assert (error.value.code, error.value.status) == ("ASR_FAILED", 503)
+    assert isinstance(error.value.__cause__, ImportError)
+
+
+def test_asr_model_download_failure_is_a_clean_error(monkeypatch, tmp_path):
+    def broken(name, device, compute_type):
+        raise OSError("offline")
+
+    monkeypatch.setitem(sys.modules, "faster_whisper", types.SimpleNamespace(WhisperModel=broken))
+    with pytest.raises(AppError) as error:
+        ASR(Settings()).transcribe(tmp_path / "a.wav", lambda: None)
+    assert error.value.code == "ASR_FAILED"
+    assert "offline" not in error.value.message
+
+
+def test_asr_engine_failure_is_a_clean_error(tmp_path):
+    class Broken(FakeModel):
+        def transcribe(self, audio, **kwargs):
+            raise RuntimeError("decode failed")
+
+    with pytest.raises(AppError) as error:
+        asr_with(Broken([])).transcribe(tmp_path / "a.wav", lambda: None)
+    assert error.value.code == "ASR_FAILED"
+
+
+def test_asr_failure_while_iterating_segments_is_a_clean_error(tmp_path):
+    class BrokenSegment:
+        @property
+        def words(self):
+            raise RuntimeError("engine died")
+
+    with pytest.raises(AppError) as error:
+        asr_with(FakeModel([BrokenSegment()])).transcribe(tmp_path / "a.wav", lambda: None)
+    assert error.value.code == "ASR_FAILED"
+
+
+def test_asr_keeps_app_errors_untouched(tmp_path):
+    def cancel():
+        raise AppError("CANCELLED", "stop", 409)
+
+    with pytest.raises(AppError) as error:
+        asr_with(FakeModel([FakeSegment([])])).transcribe(tmp_path / "a.wav", cancel)
+    assert (error.value.code, error.value.status) == ("CANCELLED", 409)
+
+
 def array(*rows):
     return types.SimpleNamespace(tolist=lambda: [list(r) for r in rows])
 
@@ -292,6 +346,54 @@ def test_ocr_skips_blank_lines_and_handles_empty(monkeypatch, tmp_path):
     assert OCR(Settings()).read(tmp_path / "f.png") == "keep"
     install_fake_paddle(monkeypatch, FakeOCRResult(rec_texts=[], rec_boxes=[]))
     assert OCR(Settings()).read(tmp_path / "f.png") == ""
+
+
+def test_ocr_missing_dependency_is_a_clean_error(monkeypatch, tmp_path):
+    monkeypatch.setitem(sys.modules, "paddleocr", None)
+    with pytest.raises(AppError) as error:
+        OCR(Settings()).read(tmp_path / "f.png")
+    assert (error.value.code, error.value.status) == ("OCR_FAILED", 503)
+
+
+def test_ocr_model_download_failure_is_a_clean_error(monkeypatch, tmp_path):
+    def broken(**kwargs):
+        raise OSError("offline")
+
+    monkeypatch.setitem(sys.modules, "paddleocr", types.SimpleNamespace(PaddleOCR=broken))
+    with pytest.raises(AppError) as error:
+        OCR(Settings()).read(tmp_path / "f.png")
+    assert error.value.code == "OCR_FAILED"
+    assert "offline" not in error.value.message
+
+
+def test_ocr_engine_failure_is_a_clean_error(monkeypatch, tmp_path):
+    class Broken:
+        def __init__(self, **kwargs):
+            pass
+
+        def predict(self, path):
+            raise RuntimeError("inference failed")
+
+    monkeypatch.setitem(sys.modules, "paddleocr", types.SimpleNamespace(PaddleOCR=Broken))
+    with pytest.raises(AppError) as error:
+        OCR(Settings()).read(tmp_path / "f.png")
+    assert error.value.code == "OCR_FAILED"
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        FakeOCRResult(rec_boxes=[]),
+        FakeOCRResult(rec_texts=["a"]),
+        FakeOCRResult(rec_texts=["a"], rec_boxes=[[1, 2]]),
+        FakeOCRResult(rec_texts=["a"], rec_boxes=[["x", 0, 1, 1]]),
+    ],
+)
+def test_ocr_malformed_result_is_a_clean_error(monkeypatch, tmp_path, result):
+    install_fake_paddle(monkeypatch, result)
+    with pytest.raises(AppError) as error:
+        OCR(Settings()).read(tmp_path / "f.png")
+    assert error.value.code == "OCR_FAILED"
 
 
 def test_adapters_import_without_loading_engines():

@@ -218,7 +218,7 @@ def extract_frame(source, target, timestamp, check_cancel=lambda: None):
         partial.unlink(missing_ok=True)
 
 
-def extract_audio(source, target, check_cancel=lambda: None, timeout=1200):
+def extract_audio(source, target, check_cancel, *, timeout):
     target.parent.mkdir(parents=True, exist_ok=True)
     partial = target.with_suffix(".partial")
     try:

@@ -20,6 +20,7 @@ dependencies = [
   "faster-whisper>=1.2.1",
   "paddleocr==3.7.0",
   "paddlepaddle==3.3.1",
+  # faster-whisper 1.2.1 allows any av>=11, but av 19 dropped open(metadata_errors=...) and breaks decode_audio
   "av>=15,<17",
 ]
 [dependency-groups]
