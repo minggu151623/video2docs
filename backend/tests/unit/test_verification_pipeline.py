@@ -1,3 +1,4 @@
+import logging
 import time
 from pathlib import Path
 from types import SimpleNamespace as NS
@@ -162,7 +163,9 @@ def test_transcript_cached_per_asset_and_asr_config(tmp_path, monkeypatch, media
     assert pipeline.ensure_transcript(cfg, asset(), lambda: None) == (TRANSCRIPT, "ok")
     assert fake.calls == 1 and len(media["audio"]) == 1
     assert media["audio"][0][1] == cfg.asr_timeout_seconds
-    assert not media["audio"][0][0].exists()  # the temporary WAV is removed
+    wav = media["audio"][0][0]
+    assert wav.is_relative_to(tmp_path / "transcripts" / "work")  # inside DATA_DIR without a job workdir
+    assert not wav.exists()  # the temporary WAV is removed
     other = settings(tmp_path, asr_model="medium")
     assert pipeline.ensure_transcript(other, asset(), lambda: None) == (TRANSCRIPT, "ok")
     assert fake.calls == 2
@@ -189,8 +192,9 @@ def test_no_audio_skips_asr(tmp_path, monkeypatch, media):
     report = pipeline.run_verification(
         cfg, asset(has_audio=0), draft(SPOKEN), None, "skipped", tmp_path, lambda: None
     )
-    assert report.asr_status == "skipped"
+    assert report.asr_status == "skipped" and report.asr_error is None
     assert report.items["materials/0"].status == "not_checked"
+    assert report.items["materials/0"].reason == "video không có track âm thanh"
 
 
 def test_asr_engine_none_is_skipped(tmp_path, monkeypatch, media):
@@ -200,22 +204,42 @@ def test_asr_engine_none_is_skipped(tmp_path, monkeypatch, media):
         "skipped",
     )
     assert not media["audio"]
+    cfg = settings(tmp_path, asr_engine="none")
+    report = pipeline.run_verification(cfg, asset(), draft(SPOKEN), None, "skipped", tmp_path, lambda: None)
+    assert report.items["materials/0"].reason == "ASR đang tắt"
 
 
 @pytest.mark.parametrize(
-    "error",
+    "error, code, kind, reason",
     [
-        RuntimeError("boom"),
-        AppError("ASR_FAILED", "x", 503),
-        AppError("ASR_TIMEOUT", "x", 503),
+        (RuntimeError("boom"), "ASR_INTERNAL_ERROR", "RuntimeError", "ASR lỗi (ASR_INTERNAL_ERROR)"),
+        (AppError("ASR_FAILED", "x", 503), "ASR_FAILED", None, "ASR lỗi (ASR_FAILED)"),
+        (AppError("ASR_TIMEOUT", "x", 503), "ASR_TIMEOUT", None, "hết thời gian ASR (ASR_TIMEOUT)"),
     ],
 )
-def test_asr_failure_does_not_raise(tmp_path, monkeypatch, media, error):
+def test_asr_failure_does_not_raise(tmp_path, monkeypatch, media, caplog, error, code, kind, reason):
     use(monkeypatch, asr=FakeASR(error=error))
     cfg = settings(tmp_path)
-    assert pipeline.ensure_transcript(cfg, asset(), lambda: None) == (None, "failed")
+    work = tmp_path / "projects" / "p" / "derived" / "job" / "verification"
+    with caplog.at_level(logging.WARNING, logger="video2docs.verification"):
+        assert pipeline.transcribe_asset(cfg, asset(), lambda: None, work) == (None, "failed", code)
+    assert code in caplog.text and (kind is None or kind in caplog.text)
     assert not (tmp_path / pipeline.transcript_cache_path(SHA, cfg)).exists()
-    assert not media["audio"][0][0].exists()
+    wav = media["audio"][0][0]
+    assert wav.is_relative_to(work) and not wav.exists()
+    report = pipeline.run_verification(
+        cfg, asset(), draft(SPOKEN), None, "failed", tmp_path, lambda: None, code
+    )
+    assert report.asr_error == code
+    assert report.items["materials/0"].status == "not_checked"
+    assert report.items["materials/0"].reason == reason
+    assert pipeline.degraded_warning(report) == {
+        "code": "VERIFICATION_DEGRADED",
+        "asr": "failed",
+        "ocr": "skipped",
+        "asr_error": code,
+        "ocr_error": None,
+    }
 
 
 @pytest.mark.parametrize("code", ["MEDIA_TIMEOUT", "MEDIA_INVALID"])
@@ -227,6 +251,7 @@ def test_audio_extraction_failure_does_not_raise(tmp_path, monkeypatch, code):
         raise AppError(code, "x", 422)
 
     monkeypatch.setattr(pipeline, "extract_audio", broken)
+    assert pipeline.transcribe_asset(settings(tmp_path), asset(), lambda: None) == (None, "failed", code)
     assert pipeline.ensure_transcript(settings(tmp_path), asset(), lambda: None) == (None, "failed")
     assert fake.calls == 0
 
@@ -312,18 +337,30 @@ def test_ocr_budget_exhaustion_marks_remaining_not_checked(tmp_path, monkeypatch
         "code": "VERIFICATION_DEGRADED",
         "asr": "ok",
         "ocr": "failed",
+        "asr_error": None,
+        "ocr_error": "OCR_TIMEOUT",
     }
     assert pipeline.needs_review(report)
 
 
-def test_ocr_failure_does_not_raise(tmp_path, monkeypatch, media):
-    use(monkeypatch, ocr=FakeOCR(error=AppError("OCR_FAILED", "x", 503)))
-    report = pipeline.run_verification(
-        settings(tmp_path), asset(), draft(SCREEN), None, "skipped", tmp_path, lambda: None
-    )
-    assert report.ocr_status == "failed"
+@pytest.mark.parametrize(
+    "error, code, kind",
+    [
+        (AppError("OCR_FAILED", "x", 503), "OCR_FAILED", None),
+        (KeyError("rec_texts"), "OCR_INTERNAL_ERROR", "KeyError"),
+    ],
+)
+def test_ocr_failure_does_not_raise(tmp_path, monkeypatch, media, caplog, error, code, kind):
+    use(monkeypatch, ocr=FakeOCR(error=error))
+    with caplog.at_level(logging.WARNING, logger="video2docs.verification"):
+        report = pipeline.run_verification(
+            settings(tmp_path), asset(), draft(SCREEN), None, "skipped", tmp_path, lambda: None
+        )
+    assert code in caplog.text and (kind is None or kind in caplog.text)
+    assert report.ocr_status == "failed" and report.ocr_error == code
     assert report.items["materials/0"].status == "not_checked"
-    assert report.items["materials/0"].reason == "OCR lỗi"
+    assert report.items["materials/0"].reason == f"OCR lỗi ({code})"
+    assert pipeline.degraded_warning(report)["ocr_error"] == code
 
 
 def test_ocr_checks_cancellation_between_frames(tmp_path, monkeypatch, media):
@@ -342,18 +379,45 @@ def test_ocr_checks_cancellation_between_frames(tmp_path, monkeypatch, media):
     assert len(media["frames"]) == 1
 
 
-def test_frame_extraction_failure_leaves_item_not_checked(tmp_path, monkeypatch):
+def test_frame_extraction_failure_leaves_item_not_checked(tmp_path, monkeypatch, caplog):
     use(monkeypatch, ocr=FakeOCR())
 
     def broken(source, target, timestamp, check_cancel=lambda: None):
         raise AppError("FRAME_FAILED", "x", 422)
 
     monkeypatch.setattr(pipeline, "extract_frame", broken)
-    report = pipeline.run_verification(
-        settings(tmp_path), asset(), draft(SCREEN), None, "skipped", tmp_path, lambda: None
-    )
-    assert report.ocr_status == "ok"
+    with caplog.at_level(logging.WARNING, logger="video2docs.verification"):
+        report = pipeline.run_verification(
+            settings(tmp_path), asset(), draft(SCREEN), None, "skipped", tmp_path, lambda: None
+        )
+    assert "FRAME_FAILED" in caplog.text
+    assert report.ocr_status == "failed" and report.ocr_error == "NO_FRAME"
     assert report.items["materials/0"].status == "not_checked"
+    assert pipeline.degraded_warning(report) == {
+        "code": "VERIFICATION_DEGRADED",
+        "asr": "skipped",
+        "ocr": "failed",
+        "asr_error": None,
+        "ocr_error": "NO_FRAME",
+    }
+
+
+def test_observed_item_without_visual_span_is_unverified_by_matcher(tmp_path, monkeypatch, media):
+    use(monkeypatch, ocr=FakeOCR())
+    built = draft(SCREEN)
+    built.materials[0].evidence_spans = built.steps[0].evidence_spans[:0] + [
+        built.steps[0].evidence_spans[0].model_copy(update={"source": "audio"})
+    ]
+    report = pipeline.run_verification(
+        settings(tmp_path), asset(), built, None, "skipped", tmp_path, lambda: None
+    )
+    item = report.items["materials/0"]
+    assert (item.status, item.method, item.reason) == (
+        "unverified",
+        "ocr",
+        "không có khoảng bằng chứng phù hợp",
+    )
+    assert not media["frames"] and report.ocr_status == "ok"
 
 
 def test_report_review_and_degraded_rules(tmp_path, monkeypatch, media):
@@ -367,4 +431,6 @@ def test_report_review_and_degraded_rules(tmp_path, monkeypatch, media):
         "code": "VERIFICATION_DEGRADED",
         "asr": "failed",
         "ocr": "ok",
+        "asr_error": None,
+        "ocr_error": None,
     }

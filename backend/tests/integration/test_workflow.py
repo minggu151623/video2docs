@@ -143,7 +143,11 @@ def test_two_workers_claim_and_restart(env, clip):
                 job_id=job["id"], purpose="analyze", attempt=1, status="sent", requested_model="mock-fixture"
             )
         )
+    scratch = cfg.data_dir / f"projects/{project['id']}/derived/{job['id']}/verification/asr-x/audio.wav"
+    scratch.parent.mkdir(parents=True)
+    scratch.write_bytes(b"RIFF")
     other.recover()
+    assert not scratch.parent.parent.parent.exists()  # a killed run leaves no speech audio behind
     status = client.get(f"/api/v1/jobs/{job['id']}").json()
     assert status["state"] == "interrupted" and status["error_code"] == "UNKNOWN_OUTCOME"
     assert client.post(f"/api/v1/jobs/{job['id']}/retry", json={"reason": "manual"}).status_code == 422
@@ -856,6 +860,15 @@ def test_pipeline_writes_verification_and_marks_review(env, voiced_clip, monkeyp
     client, worker, cfg = env
     asr = FakeASR("đặt nhiệt độ 180 độ rồi khuấy đều")
     ocr = FakeOCR()
+    from app.services.verification import pipeline
+
+    real, audio = pipeline.extract_audio, []
+
+    def spy(source, target, check_cancel, *, timeout):
+        audio.append(target)
+        return real(source, target, check_cancel, timeout=timeout)
+
+    monkeypatch.setattr(pipeline, "extract_audio", spy)
     project, asset, detail, document, generation, phases = verified_generation(
         env, voiced_clip, monkeypatch, asr, ocr
     )
@@ -874,6 +887,8 @@ def test_pipeline_writes_verification_and_marks_review(env, voiced_clip, monkeyp
     assert (items["materials/0"]["status"], items["materials/0"]["method"]) == ("verified", "ocr")
     assert items["materials/1"]["status"] == "unverified"
     assert 1 <= len(ocr.frames) <= 3 and asr.calls == 1
+    job_dir = cfg.data_dir / "projects" / project["id"] / "derived" / detail["id"]
+    assert len(audio) == 1 and audio[0].is_relative_to(job_dir) and not audio[0].exists()
     assert generation["draft"]["schema_version"] == "2.0" and "yield" in generation["draft"]
     assert "verification_json_path" not in generation
     markdown = document["revision"]["markdown"]
@@ -993,7 +1008,13 @@ def test_ocr_budget_exhaustion_degrades_but_completes(env, voiced_clip, monkeypa
     item = generation["verification"]["items"]["materials/0"]
     assert item["status"] == "not_checked" and item["reason"] == "hết thời gian OCR"
     assert generation["verification"]["ocr_status"] == "failed"
-    assert {"code": "VERIFICATION_DEGRADED", "asr": "ok", "ocr": "failed"} in detail["warnings"]
+    assert {
+        "code": "VERIFICATION_DEGRADED",
+        "asr": "ok",
+        "ocr": "failed",
+        "asr_error": None,
+        "ocr_error": "OCR_TIMEOUT",
+    } in detail["warnings"]
     assert generation["quality_status"] == "needs_review"
 
 
@@ -1026,3 +1047,24 @@ def test_delete_project_removes_cached_transcript(env, voiced_clip, monkeypatch)
     assert client.delete(f"/api/v1/projects/{project['id']}").status_code == 202
     worker.once()
     assert not cached[0].exists()
+
+
+def test_asr_failure_is_reported_with_code(env, voiced_clip, monkeypatch, caplog):
+    client, worker, cfg = env
+
+    class BrokenASR:
+        def transcribe(self, audio, check_cancel):
+            raise AppError("ASR_FAILED", "Không chạy được nhận dạng giọng nói local.", 503)
+
+    with caplog.at_level("WARNING", logger="video2docs.verification"):
+        project, asset, detail, document, generation, _ = verified_generation(
+            env, voiced_clip, monkeypatch, BrokenASR(), FakeOCR()
+        )
+    assert "ASR_FAILED" in caplog.text
+    assert detail["state"] == "needs_review"
+    warning = next(w for w in detail["warnings"] if w.get("code") == "VERIFICATION_DEGRADED")
+    assert (warning["asr"], warning["asr_error"], warning["ocr_error"]) == ("failed", "ASR_FAILED", None)
+    report = generation["verification"]
+    assert report["asr_status"] == "failed" and report["asr_error"] == "ASR_FAILED"
+    item = report["items"]["steps/0/parameters/0"]
+    assert (item["status"], item["reason"]) == ("not_checked", "ASR lỗi (ASR_FAILED)")

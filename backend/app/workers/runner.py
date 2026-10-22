@@ -38,10 +38,10 @@ from app.services.exports import build_export
 from app.services.budget import check_budget, cost
 from app.services.verification.pipeline import (
     degraded_warning,
-    ensure_transcript,
     needs_review,
     run_verification,
     save_report,
+    transcribe_asset,
     transcript_cache_path,
 )
 
@@ -128,6 +128,11 @@ class Worker:
                 job.error_code = "UNKNOWN_OUTCOME" if calls else "WORKER_RESTARTED"
                 job.error_message = "Worker bị gián đoạn. Checkpoint được giữ; cần chủ động thử lại."
                 job.lease_owner, job.lease_expires_at = None, None
+                if job.project_id:  # scratch of the killed run (clips, speech audio, OCR frames)
+                    shutil.rmtree(
+                        safe_path(self.settings.data_dir, f"projects/{job.project_id}/derived/{job.id}"),
+                        ignore_errors=True,
+                    )
             active = s.scalar(
                 select(func.count())
                 .select_from(Job)
@@ -339,7 +344,9 @@ class Worker:
         parts, repairs = [], 0
         try:
             self.phase(job.id, "transcribing")
-            transcript, asr_status = ensure_transcript(cfg, asset, Cancellation(self, job.id))
+            transcript, asr_status, asr_error = transcribe_asset(
+                cfg, asset, Cancellation(self, job.id), self.workdir(job)
+            )
             for index, chunk in enumerate(chunks):
                 self.check(job.id)
                 if chunk.state == "validated" and chunk.result_path:
@@ -599,7 +606,14 @@ class Worker:
                     warnings.append(exc.code)
             self.phase(job.id, "verifying")
             report = run_verification(
-                cfg, asset, draft, transcript, asr_status, self.workdir(job), Cancellation(self, job.id)
+                cfg,
+                asset,
+                draft,
+                transcript,
+                asr_status,
+                self.workdir(job),
+                Cancellation(self, job.id),
+                asr_error,
             )
             if warning := degraded_warning(report):
                 warnings.append(warning)
@@ -658,9 +672,11 @@ class Worker:
         )
         check = Cancellation(self, job.id)
         self.phase(job.id, "transcribing")
-        transcript, asr_status = ensure_transcript(cfg, asset, check)
+        transcript, asr_status, asr_error = transcribe_asset(cfg, asset, check, self.workdir(job))
         self.phase(job.id, "verifying")
-        report = run_verification(cfg, asset, draft, transcript, asr_status, self.workdir(job), check)
+        report = run_verification(
+            cfg, asset, draft, transcript, asr_status, self.workdir(job), check, asr_error
+        )
         self.check(job.id)
         document = safe_path(
             cfg.data_dir, f"projects/{job.project_id}/generations/{generation.id}/document.md"

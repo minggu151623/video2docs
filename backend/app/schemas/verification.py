@@ -32,3 +32,5 @@ class VerificationReport(BaseModel):
     items: dict[str, ItemVerification]
     asr_status: Literal["ok", "skipped", "failed"]
     ocr_status: Literal["ok", "skipped", "failed"]
+    asr_error: str | None = None  # error code when asr_status is "failed"
+    ocr_error: str | None = None  # error code when ocr_status is "failed"

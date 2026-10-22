@@ -4,6 +4,7 @@ Nothing here calls the AI provider, so a generation can be re-verified for free.
 never fails the job: the affected items become `not_checked` and the report says which source failed.
 Only the worker's own stop signals (cancel, lost lease, job timeout, disk/storage guards) propagate."""
 
+import logging
 import shutil
 import tempfile
 import time
@@ -21,15 +22,27 @@ from app.services.verification.asr import get_asr
 from app.services.verification.matcher import iter_grounded_items, verify_item
 from app.services.verification.ocr import get_ocr
 
+LOG = logging.getLogger("video2docs.verification")
 Status = Literal["ok", "skipped", "failed"]
 STOP = {"CANCELLED", "LEASE_LOST", "JOB_TIMEOUT", "DISK_FULL", "STORAGE_LIMIT"}
 REVIEW = {"unverified", "not_checked"}
 EOF_MARGIN = 0.5  # same distance from the end as screenshot fallbacks; frame timing tolerates 0.5 s
-OCR_TIMEOUT, OCR_ERROR, NO_FRAME = "hết thời gian OCR", "OCR lỗi", "không trích được khung hình để OCR"
+NO_FRAME = "không trích được khung hình để OCR"
+TIMEOUTS = {"ASR_TIMEOUT", "MEDIA_TIMEOUT"}
 
 
 def _stop(error: BaseException) -> bool:
     return isinstance(error, AppError) and error.code in STOP
+
+
+def _code(error: BaseException, fallback: str) -> str:
+    """The AppError code, or `fallback` for an unexpected exception (a bug or an engine crash)."""
+    return error.code if isinstance(error, AppError) else fallback
+
+
+def _log(source: str, error: BaseException, code: str):
+    kind = "" if isinstance(error, AppError) else f" ({type(error).__name__})"
+    LOG.warning("%s verification degraded: %s%s", source, code, kind, exc_info=False)
 
 
 def transcript_cache_path(asset_sha256: str, settings) -> str:
@@ -37,32 +50,60 @@ def transcript_cache_path(asset_sha256: str, settings) -> str:
     return f"transcripts/{asset_sha256}-{config}.json"
 
 
-def ensure_transcript(settings, asset, check_cancel) -> tuple[Transcript | None, Status]:
+def transcribe_asset(
+    settings, asset, check_cancel, workdir: Path | None = None
+) -> tuple[Transcript | None, Status, str | None]:
+    """(transcript, status, error code). The temporary WAV stays inside DATA_DIR: in `workdir` (the
+    job's derived folder, removed when the job ends) or, without one, under `transcripts/work`."""
     if settings.asr_engine == "none" or asset.has_audio == 0:
-        return None, "skipped"
+        return None, "skipped", None
     cache = safe_path(settings.data_dir, transcript_cache_path(asset.sha256, settings))
     if cache.is_file():
         try:
-            return Transcript.model_validate_json(cache.read_bytes()), "ok"
+            return Transcript.model_validate_json(cache.read_bytes()), "ok", None
         except (ValidationError, ValueError, OSError):
-            pass  # unreadable cache: recompute and overwrite it
+            LOG.warning("Unreadable transcript cache %s; recomputing", cache.name)
     asr = get_asr(settings)
     if asr is None:
-        return None, "skipped"
+        return None, "skipped", None
     source = safe_path(settings.data_dir, asset.playback_path)
-    workdir = Path(tempfile.mkdtemp(prefix="video2docs-asr-"))
+    workdir = workdir or safe_path(settings.data_dir, "transcripts/work")
+    workdir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    scratch = Path(tempfile.mkdtemp(prefix="asr-", dir=workdir))
     try:
-        audio = workdir / "audio.wav"
+        audio = scratch / "audio.wav"
         extract_audio(source, audio, check_cancel, timeout=settings.asr_timeout_seconds)
         transcript = asr.transcribe(audio, check_cancel)
     except Exception as error:
         if _stop(error):
             raise
-        return None, "failed"
+        code = _code(error, "ASR_INTERNAL_ERROR")
+        _log("ASR", error, code)
+        return None, "failed", code
     finally:
-        shutil.rmtree(workdir, ignore_errors=True)
+        shutil.rmtree(scratch, ignore_errors=True)
     atomic_write(cache, transcript.model_dump_json().encode())
-    return transcript, "ok"
+    return transcript, "ok", None
+
+
+def ensure_transcript(
+    settings, asset, check_cancel, workdir: Path | None = None
+) -> tuple[Transcript | None, Status]:
+    transcript, status, _ = transcribe_asset(settings, asset, check_cancel, workdir)
+    return transcript, status
+
+
+def no_transcript_reason(settings, asset, asr_status: Status, asr_error: str | None) -> str:
+    """Why a spoken item could not be checked, more specific than the matcher's generic reason."""
+    if asr_status == "failed":
+        if asr_error in TIMEOUTS:
+            return f"hết thời gian ASR ({asr_error})"
+        return f"ASR lỗi ({asr_error or 'ASR_FAILED'})"
+    if asset.has_audio == 0:
+        return "video không có track âm thanh"
+    if settings.asr_engine == "none":
+        return "ASR đang tắt"
+    return "không có bản ghi lời nói"
 
 
 def ocr_seconds(item, duration: float, limit: int) -> list[float]:
@@ -93,9 +134,16 @@ def run_verification(
     asr_status: Status,
     workdir: Path,
     check_cancel,
+    asr_error: str | None = None,
 ) -> VerificationReport:
     items = list(iter_grounded_items(draft))
     results = {path: verify_item(path, item, transcript, None, settings) for path, _, item in items}
+    if transcript is None:
+        reason = no_transcript_reason(settings, asset, asr_status, asr_error)
+        for path, result in results.items():
+            if result.status == "not_checked" and result.method == "asr":
+                results[path] = result.model_copy(update={"reason": reason})
+    asr_error = asr_error if asr_status == "failed" else None
     pending = [
         (path, item)
         for path, _, item in items
@@ -103,9 +151,11 @@ def run_verification(
     ]
     ocr = get_ocr(settings) if pending else None
     if ocr is None:
-        return VerificationReport(items=results, asr_status=asr_status, ocr_status="skipped")
-    ocr_status: Status = "ok"
-    failure = None
+        return VerificationReport(
+            items=results, asr_status=asr_status, ocr_status="skipped", asr_error=asr_error
+        )
+    failure = None  # (error code, item reason) once OCR has stopped
+    missing = False  # some item got no frame at all
     language = transcript.language if transcript else None
     source = safe_path(settings.data_dir, asset.playback_path)
     workdir.mkdir(parents=True, exist_ok=True)
@@ -115,6 +165,9 @@ def run_verification(
     try:
         for path, item in pending:
             seconds = ocr_seconds(item, asset.duration_sec, settings.verify_max_ocr_frames)
+            if not seconds:  # no visual span: the matcher gives the precise `unverified` reason
+                results[path] = verify_item(path, item, transcript, [], settings)
+                continue
             if failure is None:
                 try:
                     for second in seconds:
@@ -129,29 +182,41 @@ def run_verification(
                         except AppError as error:
                             if _stop(error):
                                 raise
+                            _log("OCR frame", error, error.code)
                             texts[second] = None  # this frame is missing; the others still count
                             continue
                         texts[second] = (actual, ocr.read(image, language))
                         image.unlink(missing_ok=True)
                 except _Budget:
-                    failure = OCR_TIMEOUT
+                    LOG.warning(
+                        "OCR verification degraded: OCR_TIMEOUT after %s s", settings.ocr_timeout_seconds
+                    )
+                    failure = ("OCR_TIMEOUT", "hết thời gian OCR")
                 except Exception as error:
                     if _stop(error):
                         raise
-                    failure = OCR_ERROR
+                    code = _code(error, "OCR_INTERNAL_ERROR")
+                    _log("OCR", error, code)
+                    failure = (code, f"OCR lỗi ({code})")
             if failure is not None:
-                ocr_status = "failed"
-                results[path] = ItemVerification(status="not_checked", method="ocr", reason=failure)
+                results[path] = ItemVerification(status="not_checked", method="ocr", reason=failure[1])
                 continue
             read = [texts[s] for s in seconds if texts.get(s) is not None]
-            results[path] = (
-                verify_item(path, item, transcript, read, settings)
-                if read
-                else ItemVerification(status="not_checked", method="ocr", reason=NO_FRAME)
-            )
+            if read:
+                results[path] = verify_item(path, item, transcript, read, settings)
+            else:
+                missing = True
+                results[path] = ItemVerification(status="not_checked", method="ocr", reason=NO_FRAME)
     finally:
         shutil.rmtree(frames, ignore_errors=True)
-    return VerificationReport(items=results, asr_status=asr_status, ocr_status=ocr_status)
+    ocr_error = failure[0] if failure else "NO_FRAME" if missing else None
+    return VerificationReport(
+        items=results,
+        asr_status=asr_status,
+        ocr_status="failed" if ocr_error else "ok",
+        asr_error=asr_error,
+        ocr_error=ocr_error,
+    )
 
 
 def needs_review(report: VerificationReport) -> bool:
@@ -160,7 +225,13 @@ def needs_review(report: VerificationReport) -> bool:
 
 def degraded_warning(report: VerificationReport) -> dict | None:
     if "failed" in (report.asr_status, report.ocr_status):
-        return {"code": "VERIFICATION_DEGRADED", "asr": report.asr_status, "ocr": report.ocr_status}
+        return {
+            "code": "VERIFICATION_DEGRADED",
+            "asr": report.asr_status,
+            "ocr": report.ocr_status,
+            "asr_error": report.asr_error,
+            "ocr_error": report.ocr_error,
+        }
     return None
 
 
