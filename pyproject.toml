@@ -17,11 +17,17 @@ dependencies = [
   "pypdf>=5",
   "httpx>=0.28",
   "rapidfuzz>=3.14.6",
+  "faster-whisper>=1.2.1",
+  "paddleocr==3.7.0",
+  "paddlepaddle==3.3.1",
+  "av>=15,<17",
 ]
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.9"]
 [tool.pytest.ini_options]
 pythonpath = ["backend"]
 testpaths = ["backend/tests"]
+addopts = "-m \"not slow\""
+markers = ["slow: runs a real ASR/OCR engine and may download model weights"]
 [tool.ruff]
 line-length = 110

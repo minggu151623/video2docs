@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 from functools import lru_cache
 from pydantic import model_validator, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -42,6 +43,11 @@ class Settings(BaseSettings):
     verify_window_seconds: float = Field(default=5, ge=0, le=60)
     verify_text_threshold: int = Field(default=85, ge=0, le=100)
     verify_max_ocr_frames: int = Field(default=3, ge=1, le=10)
+    asr_engine: Literal["faster-whisper", "none"] = "faster-whisper"
+    asr_model: str = "small"
+    asr_timeout_seconds: int = Field(default=1200, gt=0)
+    ocr_engine: Literal["paddleocr", "none"] = "paddleocr"
+    ocr_timeout_seconds: int = Field(default=300, gt=0)
 
     @model_validator(mode="after")
     def validate_settings(self):
