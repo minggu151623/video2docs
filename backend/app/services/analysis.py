@@ -27,6 +27,7 @@ def clip_metadata(original_name, index, chunks, video_duration, previous_parts):
         for offset, draft in previous_parts
         for step in draft.steps[-3:]
     ][-3:]
+    first = previous_parts[0][1] if previous_parts else None
     return {
         "original_name": original_name,
         "clip_index": index + 1,
@@ -34,6 +35,7 @@ def clip_metadata(original_name, index, chunks, video_duration, previous_parts):
         "clip_start_sec": chunks[index].start_sec,
         "video_duration_sec": video_duration,
         "previous_steps": previous,
+        "domain": first.domain if first else None,
     }
 
 

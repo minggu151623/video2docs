@@ -9,7 +9,7 @@ from app.services.budget import normalized_usage
 from app.providers.structured_schema import video_provider_schema
 from app.providers.timecodes import FIELDS, format_timecode, to_seconds, to_timecodes
 
-PROMPT = Path(__file__).resolve().parents[1] / "prompts/tutorial_v1.txt"
+PROMPT = Path(__file__).resolve().parents[1] / "prompts/tutorial_v2.txt"
 
 
 class GeminiProvider:
@@ -73,7 +73,7 @@ class GeminiProvider:
     def analyze(self, reference, duration, language, metadata, repair=None):
         request = (
             f"output_language: {language}\nclip_duration: {format_timecode(duration)}\n"
-            "Trích bước hướng dẫn và bằng chứng, timestamp MM:SS tương đối từ đầu clip.\n"
+            "Trích bước hướng dẫn thực hành và bằng chứng, timestamp MM:SS tương đối từ đầu clip.\n"
             "<untrusted_metadata>\n"
             + json.dumps(to_timecodes(metadata), ensure_ascii=True)
             .replace("<", "\\u003c")

@@ -139,17 +139,17 @@ def test_content_mentioning_token_limits_is_not_truncation(monkeypatch):
 def test_provider_schema_is_derived_compact_and_strict_application_schema_remains():
     import json
     from app.providers.structured_schema import tutorial_provider_schema, analysis_contract_hash
-    from app.schemas.tutorial import TutorialDraftV1
+    from app.schemas.tutorial_v2 import TutorialDraftV2
 
     schema = tutorial_provider_schema()
     encoded = json.dumps(schema)
     for key in ("$ref", "$defs", "const", "anyOf", "minLength", "maxLength", "minItems", "maxItems"):
         assert '"' + key + '"' not in encoded
-    assert schema["properties"]["schema_version"]["enum"] == ["1.0"]
+    assert schema["properties"]["schema_version"]["enum"] == ["2.0"]
     step = schema["properties"]["steps"]["items"]
     assert step["properties"]["expected_result"]["type"] == ["string", "null"]
     assert "Maximum items: 80." in schema["properties"]["steps"]["description"]
-    assert TutorialDraftV1.model_json_schema()["properties"]["steps"]["maxItems"] == 80
+    assert TutorialDraftV2.model_json_schema()["properties"]["steps"]["maxItems"] == 80
     assert len(analysis_contract_hash()) == 64
 
 
@@ -197,3 +197,120 @@ def test_repair_data_cannot_close_its_untrusted_block(monkeypatch):
     assert text.count("</untrusted_repair_data>") == 1
     assert "<instruction>" not in text
     assert "\\u003c/instruction\\u003e" in text
+
+
+GROUNDED_PATHS = {
+    "prerequisites": lambda p: p["prerequisites"]["items"],
+    "safety": lambda p: p["safety"]["items"],
+    "materials": lambda p: p["materials"]["items"],
+    "troubleshooting": lambda p: p["troubleshooting"]["items"],
+    "parameters": lambda p: p["steps"]["items"]["properties"]["parameters"]["items"],
+    "exact_inputs": lambda p: p["steps"]["items"]["properties"]["exact_inputs"]["items"],
+    "warnings": lambda p: p["steps"]["items"]["properties"]["warnings"]["items"],
+    "tips": lambda p: p["steps"]["items"]["properties"]["tips"]["items"],
+}
+
+
+def test_provider_schema_v2_has_new_fields_and_no_sec_suffix():
+    import json
+    from app.providers.structured_schema import video_provider_schema
+
+    s = video_provider_schema(120)
+    step = s["properties"]["steps"]["items"]["properties"]
+    assert {"parameters", "exact_inputs", "warnings", "tips"} <= step.keys() and "commands" not in step
+    assert s["properties"]["domain"]["enum"][-1] == "other" and "yield" in s["properties"]
+    assert "yield_" not in json.dumps(s) and "yield_" not in s["properties"]
+    assert "_sec" not in json.dumps(s)
+    for key in ("is_tutorial", "not_tutorial_reason", "safety", "materials", "equipment"):
+        assert key in s["properties"] and key in s["required"]
+    assert "tools" not in s["properties"]
+
+
+def test_provider_schema_v2_requires_nullable_verbatim_fields_on_every_grounded_item():
+    from app.providers.structured_schema import video_provider_schema
+
+    properties = video_provider_schema(120)["properties"]
+    for name, locate in GROUNDED_PATHS.items():
+        item = locate(properties)
+        for field in ("quote", "on_screen_text"):
+            assert item["properties"][field]["type"] == ["string", "null"], (name, field)
+            assert field in item["required"], (name, field)
+
+
+def test_provider_schema_v2_keeps_timecodes_in_nested_spans():
+    from app.providers.structured_schema import video_provider_schema
+
+    properties = video_provider_schema(101.642)["properties"]
+    for name, locate in GROUNDED_PATHS.items():
+        span = locate(properties)["properties"]["evidence_spans"]["items"]["properties"]
+        assert span["start"]["type"] == "string" and span["end"]["type"] == "string", name
+        assert "At most 01:41." in span["start"]["description"], name
+
+
+def test_contract_is_v9():
+    import hashlib
+    import json
+    from app.providers.structured_schema import (
+        analysis_contract,
+        analysis_contract_hash,
+        tutorial_provider_schema,
+    )
+    from app.schemas.tutorial_v2 import TutorialDraftV2
+
+    contract = analysis_contract()
+    assert contract["adapter"] == "interactions-static-v9"
+    assert contract["provider_schema"] == tutorial_provider_schema()
+    assert contract["application_schema"] == TutorialDraftV2.model_json_schema()
+    assert "quote" in contract["claim_policy"] and "MM:SS" in contract["timestamp_policy"]
+    expected = hashlib.sha256(json.dumps(contract, sort_keys=True).encode()).hexdigest()
+    assert analysis_contract_hash() == expected
+
+
+def test_gemini_prompt_is_v2_and_covers_new_rules():
+    from app.providers.gemini import PROMPT
+
+    assert PROMPT.name == "tutorial_v2.txt"
+    text = PROMPT.read_text()
+    assert "how-to" in text and "hướng dẫn phần mềm" not in text
+    assert "chỉ ghi khi video thể hiện, không suy đoán" in text
+    for domain_hint in ("Nấu ăn", "Sửa chữa", "Thể thao", "Làm đẹp", "Phần mềm"):
+        assert domain_hint in text
+    for needle in ("quote", "on_screen_text", "is_tutorial", "not_tutorial_reason", "domain", "[REDACTED]"):
+        assert needle in text
+
+
+def test_analyze_sends_v2_system_instruction_and_schema(monkeypatch):
+    provider, reference, calls, _ = fake_client(monkeypatch)
+    provider.analyze(reference, 101.642, "vi", {"domain": "cooking"})
+    request = calls[0]
+    assert "how-to" in request["system_instruction"]
+    assert "domain" in request["response_format"]["schema"]["properties"]
+    assert '"domain": "cooking"' in request["input"][1]["text"]
+
+
+def test_v2_draft_round_trips_through_provider_timecodes():
+    import json
+    from app.core.config import Settings
+    from app.providers.mock import MockProvider
+    from app.providers.timecodes import to_seconds, to_timecodes
+    from app.schemas.tutorial_v2 import TutorialDraftV2
+
+    data = json.loads(MockProvider(Settings(ai_provider="mock")).analyze(None, 10, "vi", {})["text"])
+    data["yield"] = "2 người ăn"
+    span = {"start_sec": 1, "end_sec": 2, "source": "both", "description": "Nguồn"}
+    data["steps"][0]["parameters"] = [
+        {
+            "name": "Thời gian",
+            "value": "2",
+            "unit": "phút",
+            "evidence_spans": [span],
+            "basis": "observed",
+            "quote": None,
+            "on_screen_text": "2 phút",
+        }
+    ]
+    provider_json = json.dumps(to_timecodes(data))
+    assert '"start": "00:01"' in provider_json
+    draft = TutorialDraftV2.model_validate_json(to_seconds(provider_json), context={"duration": 10})
+    assert draft.yield_ == "2 người ăn"
+    assert draft.steps[0].parameters[0].evidence_spans[0].end_sec == 2

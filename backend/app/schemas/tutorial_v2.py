@@ -12,12 +12,17 @@ Quote = Annotated[str, Field(max_length=1000)] | None
 ScreenText = Annotated[str, Field(max_length=2000)] | None
 
 
-def check_quote(item, needs_screen_text):
-    """Verbatim-text rules of spec 2.3: stated needs a quote, observed text/values need on_screen_text."""
-    if item.basis == "stated" and not item.quote:
+def check_grounding(item, needs_screen_text):
+    """Spec 2.3 rules for every grounded item: verbatim text per basis and matching evidence modality."""
+    stated, observed = item.basis == "stated", item.basis == "observed"
+    if stated and not (item.quote or "").strip():
         raise ValueError("A stated item requires the speaker's verbatim quote")
-    if item.basis == "observed" and needs_screen_text and not item.on_screen_text:
+    if observed and needs_screen_text and not (item.on_screen_text or "").strip():
         raise ValueError("An observed value requires the verbatim on_screen_text")
+    if stated and not any(s.source in ("audio", "both") for s in item.evidence_spans):
+        raise ValueError("A spoken claim requires audio evidence")
+    if observed and not any(s.source in ("visual", "both") for s in item.evidence_spans):
+        raise ValueError("An observed claim requires visual evidence")
 
 
 class GroundedClaim(Strict):
@@ -30,11 +35,7 @@ class GroundedClaim(Strict):
 
     @model_validator(mode="after")
     def grounded(self):
-        check_quote(self, False)
-        if self.basis == "stated" and not any(s.source in ("audio", "both") for s in self.evidence_spans):
-            raise ValueError("A spoken claim requires audio evidence")
-        if self.basis == "observed" and not any(s.source in ("visual", "both") for s in self.evidence_spans):
-            raise ValueError("An observed claim requires visual evidence")
+        check_grounding(self, False)
         return self
 
 
@@ -50,7 +51,7 @@ class Material(Strict):
 
     @model_validator(mode="after")
     def grounded(self):
-        check_quote(self, self.quantity is not None)
+        check_grounding(self, self.quantity is not None)
         return self
 
 
@@ -71,7 +72,7 @@ class Parameter(Strict):
 
     @model_validator(mode="after")
     def grounded(self):
-        check_quote(self, True)
+        check_grounding(self, True)
         return self
 
 
@@ -87,7 +88,7 @@ class ExactInput(Strict):
 
     @model_validator(mode="after")
     def grounded(self):
-        check_quote(self, True)
+        check_grounding(self, True)
         return self
 
 

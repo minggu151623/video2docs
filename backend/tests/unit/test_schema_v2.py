@@ -48,6 +48,56 @@ def test_observed_value_requires_on_screen_text():
     assert ExactInput.model_validate({**exact, "on_screen_text": "$ ls"})
 
 
+ITEMS = {
+    "material": (Material, {"name": "Bột", "quantity": None, "unit": None, "note": None}),
+    "parameter": (Parameter, {"name": "Nhiệt độ", "value": "180", "unit": "°C"}),
+    "exact_input": (
+        ExactInput,
+        {"kind": "command", "language": "sh", "text": "ls", "completeness": "complete"},
+    ),
+}
+
+
+def grounded_item(name, source, basis, **extra):
+    model, fields = ITEMS[name]
+    base = {"evidence_spans": [span(source)], "basis": basis, "quote": None, "on_screen_text": None}
+    return model.model_validate({**fields, **base, **extra})
+
+
+@pytest.mark.parametrize("name", ITEMS)
+def test_stated_item_requires_audio_evidence(name):
+    with pytest.raises(ValidationError, match="audio"):
+        grounded_item(name, "visual", "stated", quote="Nguyên văn")
+    assert grounded_item(name, "audio", "stated", quote="Nguyên văn")
+    assert grounded_item(name, "both", "stated", quote="Nguyên văn")
+
+
+@pytest.mark.parametrize("name", ITEMS)
+def test_observed_item_requires_visual_evidence(name):
+    with pytest.raises(ValidationError, match="visual"):
+        grounded_item(name, "audio", "observed", on_screen_text="180")
+    assert grounded_item(name, "visual", "observed", on_screen_text="180")
+    assert grounded_item(name, "both", "observed", on_screen_text="180")
+
+
+@pytest.mark.parametrize("name", ITEMS)
+def test_unclear_item_needs_no_modality(name):
+    assert grounded_item(name, "audio", "unclear")
+    assert grounded_item(name, "visual", "inferred")
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\n\t "])
+def test_whitespace_only_verbatim_text_counts_as_missing(blank):
+    with pytest.raises(ValidationError, match="quote"):
+        GroundedClaim.model_validate(claim(basis="stated", quote=blank, on_screen_text=None))
+    with pytest.raises(ValidationError, match="quote"):
+        grounded_item("parameter", "audio", "stated", quote=blank)
+    with pytest.raises(ValidationError, match="on_screen_text"):
+        grounded_item("parameter", "visual", "observed", on_screen_text=blank)
+    with pytest.raises(ValidationError, match="on_screen_text"):
+        grounded_item("exact_input", "visual", "observed", on_screen_text=blank)
+
+
 def test_observed_action_claim_needs_no_text():
     parsed = GroundedClaim.model_validate(claim(quote=None, on_screen_text=None))
     assert parsed.basis == "observed"

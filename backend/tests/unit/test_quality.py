@@ -139,6 +139,18 @@ def test_previous_context_is_bounded_and_converts_times_once(draft):
     assert data["previous_steps"][-1]["end_sec"] == 15
 
 
+def test_later_clips_receive_first_clip_domain(draft):
+    cooking = draft.model_copy(update={"domain": "cooking"})
+    later = draft.model_copy(update={"domain": "repair"})
+    chunks = [NS(start_sec=0), NS(start_sec=115), NS(start_sec=230)]
+    assert clip_metadata("x.mp4", 1, chunks[:2], 216, [(0, cooking)])["domain"] == "cooking"
+    assert clip_metadata("x.mp4", 2, chunks, 345, [(0, cooking), (115, later)])["domain"] == "cooking"
+
+
+def test_first_clip_has_no_domain_context(draft):
+    assert clip_metadata("x.mp4", 0, [NS(start_sec=0), NS(start_sec=115)], 216, [])["domain"] is None
+
+
 def test_repair_carries_exact_previous_response_and_refuses_oversized_input():
     import json
     from app.core.errors import AppError

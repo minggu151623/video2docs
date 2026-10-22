@@ -5,13 +5,13 @@ import json
 import math
 from copy import deepcopy
 from functools import lru_cache
-from app.schemas.tutorial import TutorialDraftV1
+from app.schemas.tutorial_v2 import TutorialDraftV2
 from app.providers.timecodes import FIELDS, format_timecode
 
 
 @lru_cache
 def tutorial_provider_schema():
-    original = TutorialDraftV1.model_json_schema()
+    original = TutorialDraftV2.model_json_schema(by_alias=True)
     definitions = original.get("$defs", {})
 
     def convert(node, references=()):
@@ -106,17 +106,20 @@ def video_provider_schema(duration):
     return schema
 
 
-def analysis_contract_hash():
-    contract = {
-        "adapter": "interactions-static-v8",
-        "timestamp_policy": "MM:SS strings from clip start, parsed to seconds by the adapter; screenshots inside step and before EOF; empty candidates allowed",
+def analysis_contract():
+    return {
+        "adapter": "interactions-static-v9",
+        "timestamp_policy": "MM:SS strings from clip start in every span, step and screenshot field, parsed to seconds by the adapter; screenshots inside step and before EOF; empty candidates allowed",
         "repair_policy": "bounded previous output in untrusted repair data; transient only; errors without raw input in audit",
         "screenshot_candidates_limit": 2,
-        "claim_policy": "declared basis; later prerequisites scoped to clip; ungrounded claims shown as review",
-        "context_policy": "bounded previous step titles, never evidence; local timestamps",
+        "claim_policy": "declared basis with verbatim quote when stated and on-screen text when observed; basis must match span source (audio for stated, visual for observed); later prerequisites scoped to clip; ungrounded claims shown as review",
+        "context_policy": "bounded previous step titles and first-clip domain, never evidence; local timestamps",
         "evidence_policy": "latest supported result candidate; on candidate/span conflict use end of latest visual span with review; midpoint only without candidates",
         "thinking_level": "low",
         "provider_schema": tutorial_provider_schema(),
-        "application_schema": TutorialDraftV1.model_json_schema(),
+        "application_schema": TutorialDraftV2.model_json_schema(),
     }
-    return hashlib.sha256(json.dumps(contract, sort_keys=True).encode()).hexdigest()
+
+
+def analysis_contract_hash():
+    return hashlib.sha256(json.dumps(analysis_contract(), sort_keys=True).encode()).hexdigest()

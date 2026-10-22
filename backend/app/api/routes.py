@@ -406,7 +406,7 @@ def enqueue(
         snapshot = {
             "config": cfg.snapshot(),
             "prompt_sha256": sha256(PROMPT.read_bytes()),
-            "schema_version": "1.0",
+            "schema_version": "2.0",
             "analysis_contract_sha256": analysis_contract_hash(),
             "asset_sha256": asset.sha256,
             **body.model_dump(),
