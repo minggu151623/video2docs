@@ -164,3 +164,73 @@ def test_same_tool_from_later_chunk_is_merged_not_repeated(draft):
     merged = assemble([(0, first), (8, second)], 20)
     assert [(t.name, t.spec) for t in merged.equipment] == [("Python", "3.13.0"), ("IDLE", None)]
     assert [s.start_sec for s in merged.equipment[0].evidence_spans] == [0, 9]
+
+
+def grounded(text, start=0):
+    span = {"start_sec": start, "end_sec": start + 1, "source": "audio", "description": "Spoken"}
+    return GroundedClaim.model_validate(
+        {"text": text, "basis": "stated", "scope": "tutorial", "quote": text, "evidence_spans": [span]}
+    )
+
+
+def material(name, start=0):
+    from app.schemas.tutorial_v2 import Material
+
+    span = {"start_sec": start, "end_sec": start + 1, "source": "visual", "description": "Shown"}
+    return Material.model_validate(
+        {
+            "name": name,
+            "quantity": None,
+            "unit": None,
+            "note": None,
+            "evidence_spans": [span],
+            "basis": "observed",
+            "quote": None,
+            "on_screen_text": None,
+        }
+    )
+
+
+def test_assemble_carries_safety_and_materials_from_every_part(draft):
+    first, second = draft.model_copy(deep=True), draft.model_copy(deep=True)
+    first.safety, first.materials = [grounded("Unplug first")], [material("Flour")]
+    second.safety, second.materials = [grounded("Wear gloves")], [material("Sugar", 2)]
+    merged = assemble([(0, first), (8, second)], 20)
+    assert [c.text for c in merged.safety] == ["Unplug first", "Wear gloves"]
+    assert [m.name for m in merged.materials] == ["Flour", "Sugar"]
+    assert merged.safety[1].evidence_spans[0].start_sec == 8
+    assert merged.materials[1].evidence_spans[0].start_sec == 10
+
+
+def test_assemble_takes_document_fields_from_first_part_and_dumps_yield_by_alias(draft):
+    first, second = draft.model_copy(deep=True), draft.model_copy(deep=True)
+    first.yield_, first.domain, first.is_tutorial = "4 người ăn", "cooking", True
+    second.yield_, second.domain = "other yield", "repair"
+    second.is_tutorial, second.not_tutorial_reason = False, "Not a tutorial"
+    merged = assemble([(0, first), (8, second)], 20)
+    assert merged.yield_ == "4 người ăn" and merged.domain == "cooking" and merged.is_tutorial
+    dumped = merged.model_dump(by_alias=True)
+    assert dumped["yield"] == "4 người ăn" and "yield_" not in dumped
+
+
+def test_exact_input_without_language_renders_plain_fence(draft):
+    from app.schemas.tutorial_v2 import ExactInput
+
+    step = draft.steps[0]
+    step.exact_inputs = [
+        ExactInput.model_validate(
+            {
+                "kind": "text",
+                "language": None,
+                "text": "pinch of salt",
+                "completeness": "complete",
+                "evidence_spans": [s.model_dump() for s in step.evidence_spans],
+                "basis": "unclear",
+                "quote": None,
+                "on_screen_text": None,
+            }
+        )
+    ]
+    lines = markdown(draft).splitlines()
+    index = lines.index("pinch of salt")
+    assert lines[index - 1] == "```" and lines[index + 1] == "```"
