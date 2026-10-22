@@ -1,6 +1,6 @@
 # Quyết định triển khai
 
-Khởi tạo ngày 20/10/2026, cập nhật ngày 21/10/2026, Asia/Ho_Chi_Minh. Nguồn yêu cầu: PROJECT_SPEC.md v1.0 và chỉ dẫn tiếp theo của người dùng.
+Khởi tạo ngày 20/10/2026, cập nhật ngày 22/10/2026, Asia/Ho_Chi_Minh. Nguồn yêu cầu: PROJECT_SPEC.md v1.0 và chỉ dẫn tiếp theo của người dùng.
 
 1. Giữ stack, provider/model mặc định, static và store=false. Dùng `google-genai==2.31.0` từ lockfile; đã kiểm tra kiểu request bằng `interactions.CreateModelInteraction.model_validate`. Không gọi live khi không có key.
 2. Theo [Interactions](https://ai.google.dev/gemini-api/docs/interactions-overview), worker local độc lập với background provider. Không tools, không previous_interaction_id, không Search/code execution. [Static video](https://ai.google.dev/gemini-api/docs/video-understanding) dùng processing object có type/fps; cắt clip local và chỉ cộng offset một lần.
@@ -27,3 +27,41 @@ Khởi tạo ngày 20/10/2026, cập nhật ngày 21/10/2026, Asia/Ho_Chi_Minh. 
 19. Flash Lite lượt đầu còn lỗi timestamp ảnh nằm ngoài bước ở đoạn 2 sau khi repair budget đã dùng cho đoạn 1. Bổ sung chỉ dẫn giây, thứ tự start/end và ảnh trong bước vào prompt/schema description; không clamp và không giảm validation. Contract adapter tăng lên v4, prompt hash đổi nên chạy job mới. Lượt sau pass cả hai đoạn bằng hai request, không repair, xuất MD/ZIP/PDF và cleanup đầy đủ. Đây là pass pipeline trên một video; giữ `needs_review` vì nội dung còn lỗi ngữ cảnh giữa đoạn và suy diễn PATH, được ghi riêng trong báo cáo live. 72 tests pass; adapter test kiểm tra cả model mới và model cũ để cấu hình không gây silent fallback.
 
 20. Theo yêu cầu cải tiến, thêm scope/basis cho SourceClaim (giá trị mặc định bảo thủ để đọc JSON cũ), ngữ cảnh có giới hạn giữa đoạn, nhãn phạm vi nhận xét và chọn ảnh trong bằng chứng. Claim inferred/unclear được giữ để review thay vì trình bày như hướng dẫn đã có bằng chứng. Sửa repair để truyền JSON gốc trong khối untrusted, giới hạn 128 KiB UTF-8 và chỉ giữ tạm; audit vẫn chỉ có lỗi đã lọc. Thêm `maxItems=2` riêng cho đề xuất ảnh theo subset Google hỗ trợ. Sau QA ảnh, v7 từ chối fallback khi đề xuất mâu thuẫn khoảng bằng chứng. V7 có một lượt lỗi timestamp đoạn 2; retry chủ động tái dùng checkpoint đoạn 1 thành công. Không thêm synthesis request, không nới validation, không diễn giải pass pipeline thành chất lượng nội dung hoàn hảo. 84 tests pass; kết quả và các lỗi còn lại ở `quality-improvements.md`.
+
+## OCR engine (22/10/2026)
+
+21. Spike chọn OCR engine để Task 7 đối chiếu chữ trên màn hình (lệnh terminal, caption công thức, con số) với trích dẫn của LLM. Chạy trong venv riêng `tmp/ocr-spike/.venv` (Python 3.12, Apple M1 Pro, CPU), không đụng `pyproject.toml`/`uv.lock`; script và frame nằm trong `tmp/` (git-ignored). So sánh Tesseract 5.5.3 (`pytesseract` 0.3.13, tessdata `eng`, `vie`, `kor`) với PaddleOCR 3.7.0 (`paddlepaddle` 3.3.1, `paddlex` 3.7.2). Cả hai cài được trên macOS arm64 ở lần thử đầu, không lỗi.
+
+**Dữ liệu thử.** 21 frame 1280x720, 27 mục chữ chuẩn (`truth.json`). 7 frame thật lấy từ `video_test/HowtoinstallPythonWindows11.mp4` (giây 30, 60, 85, 120, 151, 180, 200; chữ chuẩn do tôi nhìn frame rồi chép tay, chỉ ghi đoạn chữ cần kiểm). 14 frame caption tự tạo bằng Pillow, vẽ chữ lên frame video với font hệ thống (Arial Unicode, Tahoma, Apple SD Gothic Neo), ba kiểu: nền đen mờ, chữ viền, nhãn trắng. Nhóm: terminal/IDE (6 mục, 3 frame), UI cài đặt (7 mục, 4 frame), tiếng Việt có dấu (6 frame), tiếng Hàn (3 frame), số (5 frame: `1/2 chén`, `2-3 phút`, `1,5 kg`, `0,5 lít`, `22/10/2026`, `12.500 đ`). Mỗi frame còn chứa chữ khác (cửa sổ, watermark) nên đo theo việc tìm lại đoạn chữ chuẩn trong toàn bộ output, không theo CER cả frame. Hai số đo: (a) khớp chính xác đoạn chữ chuẩn sau khi gộp khoảng trắng và chuẩn hóa NFC; (b) `rapidfuzz.fuzz.partial_ratio` (0-100) của chữ chuẩn với output, lấy trung bình theo nhóm.
+
+**Cấu hình.** Tesseract: mặc định (`--psm 3`) và `--psm 11` (sparse text, tốt hơn cho frame nhiều vùng chữ rời); `eng` cho terminal/UI, `vie+eng+kor` cho caption. PaddleOCR: `lang="en"` và `lang="vi"` cùng nạp `PP-OCRv6_medium_det` + `PP-OCRv6_medium_rec` (output hai bên giống hệt nhau, tức `vi` không có model tiếng Việt riêng); `lang="korean"` nạp `PP-OCRv5_server_det` + `korean_PP-OCRv5_mobile_rec`. Thêm biến thể nhẹ: `PP-OCRv5_mobile_det` + `en_PP-OCRv5_mobile_rec` / `latin_PP-OCRv5_mobile_rec` / `korean_PP-OCRv5_mobile_rec`. Tắt doc orientation, unwarping, textline orientation. Bảng dưới là cấu hình "routed", tức mỗi nhóm dùng model hợp ngôn ngữ nhất: Tesseract psm 11 (terminal/UI `eng`, còn lại `vie+eng+kor`); PaddleOCR mặc định (terminal/UI/Việt/số dùng PP-OCRv6 medium, Hàn dùng model korean); PaddleOCR mobile (en/latin/korean mobile).
+
+| Nhóm (số mục) | Tesseract mặc định, psm 3 | Tesseract psm 11 | PaddleOCR PP-OCRv6 medium + korean | PaddleOCR mobile |
+|---|---|---|---|---|
+| Terminal/IDE (6) | 2/6, 87 | 3/6, 98 | 6/6, 100 | 6/6, 100 |
+| UI cài đặt (7) | 4/7, 89 | 4/7, 92 | 7/7, 100 | 7/7, 100 |
+| Tiếng Việt có dấu (6) | 2/6, 67 | 1/6, 84 | 0/6, 88 | 0/6, 89 |
+| Tiếng Hàn (3) | 0/3, 26 | 0/3, 69 | 1/3, 93 | 1/3, 88 |
+| Số (5) | 1/5, 46 | 3/5, 89 | 3/5, 98 | 3/5, 98 |
+| Tổng (27) | 9/27, 69 | 11/27, 88 | 17/27, 96 | 17/27, 96 |
+
+Mỗi ô là số mục khớp chính xác / điểm fuzzy trung bình.
+
+**Thời gian, giây/frame trên CPU (trung bình, đã loại lần chạy khởi động; máy còn chạy worker khác nên số có nhiễu).** Tesseract `eng` 0,31-0,33; `vie+eng+kor` 0,60-0,64 (phóng 2x: 0,85). PaddleOCR PP-OCRv6 medium 9,0 (trung vị 8,5, tối đa 17); korean 9,8; mobile 5,2-7,9 (trung vị 4,3-6,2). Paddle chậm hơn Tesseract khoảng 10-30 lần.
+
+**Dung lượng cài.** Tesseract: Cellar `tesseract` 25 MB + `leptonica` 6,8 MB; `tesseract-lang` kéo toàn bộ gói ngôn ngữ 654 MB, nhưng Task 7 chỉ cần `eng` 4,1 MB + `vie` 0,5 MB + `kor` 1,7 MB. PaddleOCR: venv đầy đủ 787 MB trong đó `paddle` 404 MB, `cv2` 171 MB, `paddleocr` + `paddlex` 11 MB, ngoài ra model tải về `~/.paddlex/official_models` (PP-OCRv6 medium det 59 MB + rec 73 MB, PP-OCRv5 server det 84 MB, korean rec 13 MB, các model mobile 5-8 MB mỗi cái).
+
+**Nhận xét theo dữ liệu.**
+- Terminal và UI: PaddleOCR đọc đủ 13/13 mục (lệnh `python --version`, `print("Amit Diwan")`, `Python 3.13.0`); Tesseract chỉ 6-7/13 vì bỏ sót cả dòng trên frame có nền ảnh, đây là tiêu chí ưu tiên số một nên PaddleOCR thắng rõ.
+- Tiếng Việt: không engine nào khớp chính xác tốt. PaddleOCR phát hiện đúng dòng caption nhưng bỏ rơi ký tự có dấu chồng (`Nướng` thành `Nưng`, `bột` thành `bt`, `Hướng dẫn sử dụng` thành `Hưng dn s dng`), cả model PP-OCRv6 lẫn `latin_PP-OCRv5` (khoảng 0/6 khớp chính xác). Tesseract `vie` nhận đúng dấu khi đã bắt được dòng (`Cho 200 g bột mì vào tô`, `Pha 250 ml nước ... 0,5 lit sữa`) nhưng hay bỏ cả dòng hoặc đọc sai từ đầu (`Thêm` thành `1610`); khớp chính xác 1-2/6 tùy cấu hình. Điểm fuzzy hai bên gần nhau (84-89). Mẫu nhỏ (6 mục) nên chưa kết luận hơn kém.
+- Tiếng Hàn: chỉ model `korean` của PaddleOCR đọc được (`설탕 두 큰술`, `오븐을 180도로 예열하세요`); Tesseract `kor` đọc kém (26-69).
+- Số: PaddleOCR đọc đúng `1/2`, `1,5`, `3/4`, `0,5`, `12.500`; hai mục hụt đều do dấu tiếng Việt đi kèm chữ chuẩn, không phải do số. Tesseract psm 11 đọc đúng số ở 3/5 mục nhưng điểm fuzzy thấp hơn (89 so với 98) vì caption nằm trên nền ảnh.
+
+**Quyết định: chọn PaddleOCR làm OCR engine.** Lý do theo thứ tự tiêu chí: chính xác nhóm terminal tốt nhất rõ rệt (13/13 so với 6-7/13), tiếng Việt tương đương Tesseract ở mức fuzzy và cùng yếu ở khớp chính xác, đồng thời hơn hẳn ở tiếng Hàn và số; thua về thời gian (5-9 giây/frame) và dung lượng (khoảng 0,8 GB cộng model), hai tiêu chí xếp sau. Task 7 vì vậy:
+- Cài Python (vào project ở Task 7): `paddlepaddle==3.3.1` và `paddleocr==3.7.0` (kéo theo `paddlex==3.7.2`, `opencv-contrib-python`, `shapely`, `modelscope`...), Python 3.12 khớp `requires-python` hiện tại. Không cần `pytesseract`.
+- Không cần gói hệ thống nào để chạy PaddleOCR. Chỉ cài `brew install tesseract tesseract-lang` nếu Task 7 giữ Tesseract làm phương án dự phòng; khi đó dùng `tesseract` 5.5.3 với `--psm 11` và chỉ cần `eng`, `vie`, `kor` traineddata.
+- Model tự tải về `~/.paddlex/official_models` ở lần chạy đầu (cần mạng một lần, nên đặt thư mục cache và khởi tạo trước khi chạy job). Khuyến nghị tạo `PaddleOCR` một lần và tái sử dụng, vì nạp model mất vài giây.
+- Model: `PP-OCRv6_medium_det` + `PP-OCRv6_medium_rec` mặc định cho Latin/Anh/Việt/số (tham số `lang="en"`), và `korean_PP-OCRv5_mobile_rec` khi cần chữ Hàn. Bản mobile (`PP-OCRv5_mobile_det` + `en_/latin_/korean_PP-OCRv5_mobile_rec`) nhanh hơn khoảng 1,7 lần và kết quả gần tương đương trên mẫu này nếu cần giảm thời gian.
+- Đối chiếu tiếng Việt: vì PaddleOCR bỏ ký tự có dấu chồng, so khớp trích dẫn tiếng Việt phải bỏ dấu và dùng fuzzy (ví dụ `partial_ratio` sau khi bỏ dấu và hạ chữ thường), không coi thiếu dấu là chữ sai; chỉ dùng OCR để xác nhận số và từ khóa, không để OCR sửa chữ có dấu của LLM.
+
+**Giới hạn.** Chỉ 7 frame video thật, thuộc một video cài đặt Python bằng tiếng Anh; 14 frame còn lại là caption tổng hợp, sạch, chữ ngang, nền video. Không có chữ trên bao bì thật, cảnh quay thật, chữ nghiêng, mờ hay chuyển động, nên đây là bước chọn engine, không phải đánh giá độ chính xác. Số mục mỗi nhóm nhỏ (3-7). Chữ chuẩn của frame video do tôi chép tay. Thời gian đo trên một máy M1 Pro đang có tải khác.
