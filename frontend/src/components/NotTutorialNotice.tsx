@@ -12,16 +12,18 @@ export default function NotTutorialNotice({
   busy: boolean;
   providerReady: boolean;
   initialBudget: string;
-  onAnalyze: (budgetUsd: number) => Promise<boolean>;
+  onAnalyze: (budgetUsd: number) => Promise<string | null>;
 }) {
   const [open, setOpen] = useState(false),
     [consent, setConsent] = useState(false),
     [cost, setCost] = useState(false),
-    [budget, setBudget] = useState(initialBudget);
+    [budget, setBudget] = useState(initialBudget),
+    [failure, setFailure] = useState<string | null>(null);
   const close = () => {
     setOpen(false);
     setConsent(false);
     setCost(false);
+    setFailure(null);
   };
   return (
     <section
@@ -76,13 +78,21 @@ export default function NotTutorialNotice({
               onChange={(e) => setBudget(e.target.value)}
             />
           </label>
+          {failure && (
+            <p className="review-label" role="alert">
+              {failure}
+            </p>
+          )}
           <div className="dialog-actions">
             <button onClick={close}>Giữ nguyên</button>
             <button
               className="primary"
               disabled={busy || !consent || !cost || Number(budget) <= 0}
               onClick={async () => {
-                if (await onAnalyze(Number(budget))) close();
+                setFailure(null);
+                const message = await onAnalyze(Number(budget));
+                if (message === null) close();
+                else setFailure(message);
               }}
             >
               Xác nhận phân tích toàn bộ

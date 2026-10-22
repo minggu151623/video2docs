@@ -274,6 +274,21 @@ with sync_playwright() as p:
     dialog.get_by_label("Gửi lại video này tới provider để phân tích toàn bộ.").check()
     expect(confirm).to_be_disabled()
     dialog.get_by_label("Chấp nhận có thể tính phí thêm, chưa xác định trước.").check()
+    page.route(
+        "**/api/v1/projects/*/jobs",
+        lambda route: route.fulfill(
+            status=409,
+            content_type="application/json",
+            body=json.dumps({"error": {"code": "JOB_IN_PROGRESS", "message": "Dự án đang có một job tạo tài liệu."}}),
+        )
+        if route.request.method == "POST"
+        else route.continue_(),
+    )
+    confirm.click()
+    expect(dialog.get_by_role("alert").filter(has_text="Dự án đang có một job tạo tài liệu.")).to_be_visible()
+    expect(page.locator(".notice.error")).to_have_count(0)
+    page.unroute("**/api/v1/projects/*/jobs")
+    checked("failed skip-gate enqueue shows its error inside the open dialog")
     with page.expect_request(lambda r: r.method == "POST" and r.url.endswith("/jobs")) as skip_request:
         confirm.click()
     assert json.loads(skip_request.value.post_data)["skip_tutorial_gate"] is True

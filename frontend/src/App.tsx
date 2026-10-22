@@ -343,13 +343,19 @@ export default function App() {
     latestAnalysis?.state === "not_tutorial" ? latestAnalysis : null;
   async function generate() {
     if (!consented || !unknownCost) return;
-    if (await startAnalysis(false, Number(budget))) {
+    if ((await startAnalysis(false, Number(budget))) === null) {
       setConsented(false);
       setUnknownCost(false);
     }
   }
-  async function startAnalysis(skipGate: boolean, budgetUsd: number) {
-    if (!detail || !asset || !cap) return false;
+  /** Enqueue an analysis. Resolves to null on success, else the error message; with `inline` the
+   * caller shows that message itself (inside a dialog) instead of the page-level notice. */
+  async function startAnalysis(
+    skipGate: boolean,
+    budgetUsd: number,
+    inline = false,
+  ): Promise<string | null> {
+    if (!detail || !asset || !cap) return "Chưa có video hợp lệ để phân tích.";
     setBusy(true);
     setError("");
     try {
@@ -374,11 +380,13 @@ export default function App() {
         },
         { "Idempotency-Key": crypto.randomUUID() },
       );
-      await refresh(detail.id);
-      return true;
+      await refresh(detail.id).catch(report);
+      return null;
     } catch (err) {
-      report(err);
-      return false;
+      if (!inline) report(err);
+      return err instanceof Error
+        ? err.message
+        : "Đã xảy ra lỗi. Thử tải lại trang.";
     } finally {
       setBusy(false);
     }
@@ -813,7 +821,7 @@ export default function App() {
                 busy={busy}
                 providerReady={!!cap?.provider_ready}
                 initialBudget={budget}
-                onAnalyze={(usd) => startAnalysis(true, usd)}
+                onAnalyze={(usd) => startAnalysis(true, usd, true)}
               />
             )}
             <div className="work-grid">
@@ -888,7 +896,7 @@ export default function App() {
                       {phaseText[active.phase] ?? active.phase}
                     </strong>
                     <p>
-                      {active.total_units && active.state !== "not_tutorial"
+                      {active.total_units
                         ? `${active.completed_units}/${active.total_units} đoạn hoàn tất · `
                         : ""}
                       {active.started_at
