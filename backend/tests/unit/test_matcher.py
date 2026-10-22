@@ -27,11 +27,11 @@ def transcript(text, at=10.0, language="vi"):
     return Transcript(language=language, words=words)
 
 
-def material(quantity="200", quote="200 gram bột", basis="stated", on_screen_text=None, spans=None):
+def material(quantity="200", quote="200 gram bột", basis="stated", on_screen_text=None, spans=None, unit="g"):
     return Material(
         name="Bột",
         quantity=quantity,
-        unit="g",
+        unit=unit,
         note=None,
         evidence_spans=spans or [span()],
         basis=basis,
@@ -63,11 +63,19 @@ def exact(text="python --version", basis="observed", on_screen_text="python --ve
     )
 
 
-def parameter(value="180", on_screen_text="Nướng ở 180°C", basis="observed", quote=None, spans=None):
+def parameter(
+    value="180",
+    on_screen_text="Nướng ở 180°C",
+    basis="observed",
+    quote=None,
+    spans=None,
+    unit="°C",
+    name="Nhiệt độ",
+):
     return Parameter(
-        name="Nhiệt độ",
+        name=name,
         value=value,
-        unit="°C",
+        unit=unit,
         evidence_spans=spans or [span(source="visual")],
         basis=basis,
         quote=quote,
@@ -109,6 +117,40 @@ def test_korean_quote_matches_korean_transcript():
     assert (out.status, out.method) == ("verified", "asr")
     assert out.matched_text and "설탕" in out.matched_text
     assert out.matched_sec == pytest.approx(10.0 + 2 * 0.4)
+
+
+def test_korean_value_must_appear_exactly():
+    verified = verify(
+        material(quantity="두", unit="큰술", quote="설탕 두 큰술"),
+        transcript("설탕 두 큰술 넣어주세요", language="ko"),
+    )
+    assert (verified.status, verified.method) == ("verified", "asr")
+    wrong = verify(
+        material(quantity="두", unit="큰술", quote="설탕 두 큰술"),
+        transcript("설탕 세 큰술 넣어주세요", language="ko"),
+    )
+    assert wrong.status == "unverified"
+
+
+def test_non_numeric_value_must_appear_exactly():
+    item = parameter(
+        value="lửa nhỏ", unit=None, basis="stated", quote="để lửa nhỏ", on_screen_text=None, spans=[span()]
+    )
+    assert verify(item, transcript("để lửa lớn")).status == "unverified"
+    assert verify(item, transcript("để lửa nhỏ")).status == "verified"
+
+
+def test_unit_and_quantity_are_exact_substrings_after_number_spelling():
+    tr = transcript("cho hai trăm gram bột vào tô")
+    assert verify(material(), tr).status == "verified"
+    assert verify(material(quantity="200", quote="hai trăm gram bột"), tr).status == "verified"
+    assert verify(material(quote="hai trăm gram bột", unit="ml"), tr).status == "unverified"
+
+
+def test_ocr_value_must_appear_exactly():
+    assert verify(parameter(unit=None), None, [(11.0, "Nưng ở 180°C")]).status == "verified"
+    item = parameter(value="Nướng", unit=None, on_screen_text="Nướng ở 180°C")
+    assert verify(item, None, [(11.0, "Nưng ở 180°C")]).status == "unverified"
 
 
 def test_number_mismatch_never_verifies():
@@ -240,7 +282,7 @@ def test_ocr_frame_with_wrong_number_beats_nothing():
 def test_stated_checks_speech_not_ocr_and_vice_versa():
     tr = transcript("nướng ở 180 độ")
     assert verify(parameter(), tr, []).status == "unverified"
-    stated = parameter(basis="stated", quote="nướng ở 180 độ", on_screen_text=None, spans=[span()])
+    stated = parameter(basis="stated", quote="nướng ở 180 độ", on_screen_text=None, spans=[span()], unit="độ")
     assert verify(stated, tr, None).status == "verified"
 
 

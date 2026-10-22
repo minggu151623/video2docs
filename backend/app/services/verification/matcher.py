@@ -102,15 +102,18 @@ def _fold(text: str) -> str:
     return "".join(out)
 
 
-def _match_screen(expected: str, ocr_text: str, threshold: int) -> tuple[str | None, bool]:
+def _match_screen(
+    expected: str, ocr_text: str, threshold: int, required: tuple[str, ...] = ()
+) -> tuple[str | None, bool]:
     """PaddleOCR drops stacked Vietnamese diacritics, so both sides lose them; numbers stay exact."""
     needle, haystack = _fold(expected), _fold(ocr_text)
     found = _locate(needle, haystack, threshold, DIGITS_ONLY)
-    return (normalize(ocr_text)[found[0] : found[1]] if found else None), bool(found and found[2])
+    ok = bool(found and found[2] and all(_fold(r) in haystack for r in required))
+    return (normalize(ocr_text)[found[0] : found[1]] if found else None), ok
 
 
-def _match_speech(quote: str, words: list[Word], language: str | None, threshold: int):
-    """(matched text, first matched word start, numbers_ok) or None; diacritics stay significant."""
+def _match_speech(quote: str, words: list[Word], language: str | None, threshold: int, required=()):
+    """(matched text, first matched word start, values_ok) or None; diacritics stay significant."""
     spoken = [(w, normalize(w.text)) for w in words]
     spoken = [(w, t) for w, t in spoken if t]
     base = " ".join(t for _, t in spoken)
@@ -121,7 +124,8 @@ def _match_speech(quote: str, words: list[Word], language: str | None, threshold
     if not found:
         return None
     begin, end = starts[found[0]], ends[found[1] - 1]
-    return base[begin:end], spoken[bisect_right(word_starts, begin) - 1][0].start, found[2]
+    exact = all(spell_digits(normalize(r), language)[0] in haystack for r in required)
+    return base[begin:end], spoken[bisect_right(word_starts, begin) - 1][0].start, found[2] and exact
 
 
 def _value(item) -> str | None:
@@ -138,6 +142,17 @@ def _consistent(item, source_text: str, language: str | None, threshold: int) ->
     return value is None or contains_numbers(value, source_text, language)
 
 
+def _required(item) -> tuple[str, ...]:
+    """Quantities and parameters must appear verbatim (not just similarly) in the source text."""
+    if isinstance(item, Material):
+        values = (item.quantity, item.unit)
+    elif isinstance(item, Parameter):
+        values = (item.value, item.unit)
+    else:
+        return ()
+    return tuple(v for v in values if v and v.strip())
+
+
 def _result(status, method, reason=None, **rest) -> ItemVerification:
     return ItemVerification(status=status, method=method, reason=reason, **rest)
 
@@ -147,7 +162,7 @@ def _match_frame(item, source_text: str, sec: float, ocr_text: str, settings):
     if isinstance(item, ExactInput):
         found = exact_input_matches(source_text, ocr_text, settings.verify_input_threshold)
         return (found, sec, True) if found else None
-    found, numbers_ok = _match_screen(source_text, ocr_text, settings.verify_text_threshold)
+    found, numbers_ok = _match_screen(source_text, ocr_text, settings.verify_text_threshold, _required(item))
     return (found, sec, numbers_ok) if found is not None else None
 
 
@@ -183,7 +198,7 @@ def verify_item(
     for s in spans:
         if spoken:
             words = _window_words(transcript, s.start_sec, s.end_sec, pad)
-            hit = _match_speech(source_text, words, language, settings.verify_text_threshold)
+            hit = _match_speech(source_text, words, language, settings.verify_text_threshold, _required(item))
             hits = [hit] if hit else []
         else:
             low, high = max(0.0, s.start_sec - pad), s.end_sec + pad
@@ -200,7 +215,7 @@ def verify_item(
             numbers_differ = True
     where = "bản ghi lời nói" if spoken else "chữ OCR"
     if numbers_differ:
-        reason = f"con số không khớp {where}"
+        reason = f"con số hoặc giá trị không khớp {where}"
     elif not spoken and not frames:
         reason = "không có khung hình OCR trong khoảng bằng chứng"
     else:
