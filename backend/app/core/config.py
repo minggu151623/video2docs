@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     job_timeout_seconds: int = Field(default=2700, gt=0)
     provider_request_timeout_seconds: int = Field(default=300, gt=0)
     keep_raw_provider_output: bool = False
+    verify_window_seconds: float = Field(default=5, ge=0)
+    verify_text_threshold: int = Field(default=85, ge=0, le=100)
+    verify_input_threshold: int = Field(default=95, ge=0, le=100)
+    verify_max_ocr_frames: int = Field(default=3, ge=1)
 
     @model_validator(mode="after")
     def validate_settings(self):
