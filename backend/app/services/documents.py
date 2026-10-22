@@ -1,6 +1,6 @@
 import re
 from difflib import SequenceMatcher
-from app.schemas.tutorial import TutorialDraftV1
+from app.schemas.tutorial_v2 import TutorialDraftV2
 from app.core.errors import AppError
 from app.core.storage import sha256, uid
 from app.db.models import Document, Revision, now
@@ -25,13 +25,21 @@ def has_review_claims(draft):
 
 
 def assemble(parts, duration, max_steps=80):
-    first = parts[0][1].model_dump()
+    first = parts[0][1].model_dump(by_alias=True)
     first.update(
-        steps=[], prerequisites=[], tools=[], troubleshooting=[], uncertainties=[], objectives=[], summary=""
+        steps=[],
+        prerequisites=[],
+        safety=[],
+        materials=[],
+        equipment=[],
+        troubleshooting=[],
+        uncertainties=[],
+        objectives=[],
+        summary="",
     )
     summaries = []
     for chunk_index, (offset, draft) in enumerate(parts):
-        data = draft.model_dump()
+        data = draft.model_dump(by_alias=True)
 
         def shift(node):
             if isinstance(node, dict):
@@ -52,22 +60,29 @@ def assemble(parts, duration, max_steps=80):
                 prerequisite["scope"] = "clip"
         if data["summary"] and data["summary"] not in summaries:
             summaries.append(data["summary"])
-        for field in ("objectives", "prerequisites", "troubleshooting", "uncertainties"):
+        for field in (
+            "objectives",
+            "prerequisites",
+            "safety",
+            "materials",
+            "troubleshooting",
+            "uncertainties",
+        ):
             for value in data[field]:
                 if value not in first[field]:
                     first[field].append(value)
-        for tool in data["tools"]:
-            key = (tool["name"].casefold().strip(), (tool["version"] or "").casefold().strip())
+        for tool in data["equipment"]:
+            key = (tool["name"].casefold().strip(), (tool["spec"] or "").casefold().strip())
             same = next(
                 (
                     t
-                    for t in first["tools"]
-                    if (t["name"].casefold().strip(), (t["version"] or "").casefold().strip()) == key
+                    for t in first["equipment"]
+                    if (t["name"].casefold().strip(), (t["spec"] or "").casefold().strip()) == key
                 ),
                 None,
             )
             if same is None:
-                first["tools"].append(tool)
+                first["equipment"].append(tool)
             else:
                 spans = [s for s in tool["evidence_spans"] if s not in same["evidence_spans"]]
                 same["evidence_spans"] = (same["evidence_spans"] + spans)[:5]
@@ -94,7 +109,7 @@ def assemble(parts, duration, max_steps=80):
     if len(first["steps"]) > max_steps:
         raise AppError("DOCUMENT_LIMIT_EXCEEDED", "Tài liệu vượt giới hạn số bước; hãy tách video.", 422)
     try:
-        return TutorialDraftV1.model_validate(first, context={"duration": duration})
+        return TutorialDraftV2.model_validate(first, context={"duration": duration})
     except ValueError:
         raise AppError("DOCUMENT_LIMIT_EXCEEDED", "Kết quả ghép vượt schema; hãy tách video.", 422)
 
@@ -125,7 +140,7 @@ def render_markdown(draft, asset, model, generation, evidence):
         ),
         (
             "Tools" if en else "Công cụ",
-            [claim(t.name + (" " + t.version if t.version else ""), t.evidence_spans) for t in draft.tools],
+            [claim(t.name + (" " + t.spec if t.spec else ""), t.evidence_spans) for t in draft.equipment],
         ),
     ]
     for title, values in sections:
@@ -156,9 +171,9 @@ def render_markdown(draft, asset, model, generation, evidence):
         if step.needs_review:
             lines += ["> " + ("Needs review: " if en else "Cần kiểm tra: ") + escape(step.review_reason), ""]
         lines += ["- " + escape(a) for a in step.actions] + [""]
-        for command in step.commands:
+        for command in step.exact_inputs:
             fence = "`" * max(3, max([len(m) for m in re.findall(r"`+", command.text)] or [0]) + 1)
-            language = re.sub("[^a-zA-Z0-9_+-]", "", command.language)
+            language = re.sub("[^a-zA-Z0-9_+-]", "", command.language or "")
             lines += [f"{fence}{language}", command.text, fence, "", f"*{escape(command.completeness)}*", ""]
         if step.expected_result:
             lines += [("Expected result: " if en else "Kết quả: ") + escape(step.expected_result), ""]

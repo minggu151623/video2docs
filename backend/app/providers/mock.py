@@ -1,4 +1,4 @@
-from app.schemas.tutorial import TutorialDraftV1
+from app.schemas.tutorial_v2 import TutorialDraftV2
 
 
 class MockProvider:
@@ -18,15 +18,21 @@ class MockProvider:
 
     def analyze(self, reference, duration, language, metadata, repair=None):
         end = min(duration, 2)
-        draft = TutorialDraftV1.model_validate(
+        draft = TutorialDraftV2.model_validate(
             {
-                "schema_version": "1.0",
+                "schema_version": "2.0",
+                "is_tutorial": True,
+                "not_tutorial_reason": None,
+                "domain": "other",
+                "yield": None,
                 "title": "MOCK: Tài liệu kiểm thử luồng",
                 "summary": "Dữ liệu tổng hợp để kiểm thử ứng dụng; chưa phân tích nội dung video.",
                 "language": language,
                 "objectives": [],
                 "prerequisites": [],
-                "tools": [],
+                "safety": [],
+                "materials": [],
+                "equipment": [],
                 "steps": [
                     {
                         "local_id": "fixture-step",
@@ -35,7 +41,10 @@ class MockProvider:
                         "end_sec": end,
                         "actions": ["Đối chiếu frame với video do bạn tải lên."],
                         "expected_result": None,
-                        "commands": [],
+                        "parameters": [],
+                        "exact_inputs": [],
+                        "warnings": [],
+                        "tips": [],
                         "evidence_spans": [
                             {
                                 "start_sec": 0,
@@ -57,7 +66,7 @@ class MockProvider:
             context={"duration": duration},
         )
         return {
-            "text": draft.model_dump_json(),
+            "text": draft.model_dump_json(by_alias=True),
             "usage": None,
             "model": "mock-fixture",
             "request_id": None,

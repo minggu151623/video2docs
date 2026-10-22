@@ -2,25 +2,27 @@ from types import SimpleNamespace as NS
 import pytest
 from app.core.config import Settings
 from app.providers.mock import MockProvider
-from app.schemas.tutorial import SourceClaim, TutorialDraftV1
+from app.schemas.tutorial import SourceClaim
+from app.schemas.tutorial_v2 import GroundedClaim, TutorialDraftV2
 from app.services.analysis import clip_metadata, evidence_timestamp, repair_payload
 from app.services.documents import assemble, render_markdown, has_review_claims
 
 
 @pytest.fixture
 def draft():
-    return TutorialDraftV1.model_validate_json(
+    return TutorialDraftV2.model_validate_json(
         MockProvider(Settings(ai_provider="mock")).analyze(None, 10, "vi", {})["text"],
         context={"duration": 10},
     )
 
 
 def claim(text, basis="observed", scope="tutorial", source="visual"):
-    return SourceClaim.model_validate(
+    return GroundedClaim.model_validate(
         {
             "text": text,
             "basis": basis,
             "scope": scope,
+            "quote": "Spoken words" if basis == "stated" else None,
             "evidence_spans": [{"start_sec": 0, "end_sec": 2, "source": source, "description": "Source"}],
         }
     )
@@ -56,7 +58,7 @@ def test_inferred_advice_is_preserved_for_review_not_presented_as_troubleshootin
 
 
 def test_legacy_claims_require_review_without_assuming_support():
-    legacy = claim("Legacy").model_dump(exclude={"basis", "scope"})
+    legacy = claim("Legacy").model_dump(exclude={"basis", "scope", "quote", "on_screen_text"})
     parsed = SourceClaim.model_validate(legacy)
     assert parsed.basis == "unclear" and parsed.scope == "clip"
 
@@ -150,15 +152,15 @@ def test_repair_carries_exact_previous_response_and_refuses_oversized_input():
 
 
 def test_same_tool_from_later_chunk_is_merged_not_repeated(draft):
-    from app.schemas.tutorial import ToolMention
+    from app.schemas.tutorial_v2 import Equipment
 
     def tool(name, version, start):
         span = {"start_sec": start, "end_sec": start + 1, "source": "visual", "description": "Tool"}
-        return ToolMention.model_validate({"name": name, "version": version, "evidence_spans": [span]})
+        return Equipment.model_validate({"name": name, "spec": version, "evidence_spans": [span]})
 
     first, second = draft.model_copy(deep=True), draft.model_copy(deep=True)
-    first.tools = [tool("Python", "3.13.0", 0)]
-    second.tools = [tool("python ", "3.13.0", 1), tool("IDLE", None, 2)]
+    first.equipment = [tool("Python", "3.13.0", 0)]
+    second.equipment = [tool("python ", "3.13.0", 1), tool("IDLE", None, 2)]
     merged = assemble([(0, first), (8, second)], 20)
-    assert [(t.name, t.version) for t in merged.tools] == [("Python", "3.13.0"), ("IDLE", None)]
-    assert [s.start_sec for s in merged.tools[0].evidence_spans] == [0, 9]
+    assert [(t.name, t.spec) for t in merged.equipment] == [("Python", "3.13.0"), ("IDLE", None)]
+    assert [s.start_sec for s in merged.equipment[0].evidence_spans] == [0, 9]

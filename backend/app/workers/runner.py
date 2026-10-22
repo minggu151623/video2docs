@@ -29,7 +29,7 @@ from app.db.models import (
     now,
 )
 from app.providers import get_provider
-from app.schemas.tutorial import TutorialDraftV1
+from app.schemas.tutorial_v2 import TutorialDraftV2, load_draft
 from app.services.media import plan_chunks, probe, encode, extract_frame
 from app.services.documents import assemble, render_markdown, create_revision, has_review_claims
 from app.services.analysis import clip_metadata, evidence_timestamp, repair_payload
@@ -305,9 +305,7 @@ class Worker:
                     path = safe_path(cfg.data_dir, chunk.result_path)
                     if file_hash(path) != chunk.result_sha256:
                         raise AppError("CHECKPOINT_CHANGED", "Checkpoint không khớp hash.", 422)
-                    draft = TutorialDraftV1.model_validate_json(
-                        path.read_bytes(), context={"duration": chunk.duration_sec}
-                    )
+                    draft = load_draft(path.read_bytes(), chunk.duration_sec)
                     parts.append((chunk.start_sec, draft))
                     continue
                 clip_rel = f"projects/{job.project_id}/derived/{job.id}/{chunk.id}.mp4"
@@ -432,7 +430,7 @@ class Worker:
                             422,
                         )
                     try:
-                        draft = TutorialDraftV1.model_validate_json(
+                        draft = TutorialDraftV2.model_validate_json(
                             provider.decode(result["text"]), context={"duration": chunk.duration_sec}
                         )
                         if draft.language != snapshot["output_language"]:
@@ -489,7 +487,7 @@ class Worker:
                         repairs += 1
                         repair = repair_payload(chunk.duration_sec, errors, result["text"])
                 rel = f"projects/{job.project_id}/derived/results/{chunk.id}.json"
-                content = draft.model_dump_json().encode()
+                content = draft.model_dump_json(by_alias=True).encode()
                 atomic_write(safe_path(cfg.data_dir, rel), content)
                 with self.Session.begin() as s:
                     s.execute(
@@ -505,7 +503,7 @@ class Worker:
             draft = assemble(parts, asset.duration_sec, cfg.max_steps)
             generation_id = uid()
             json_rel = f"projects/{job.project_id}/generations/{generation_id}/draft.json"
-            atomic_write(safe_path(cfg.data_dir, json_rel), draft.model_dump_json().encode())
+            atomic_write(safe_path(cfg.data_dir, json_rel), draft.model_dump_json(by_alias=True).encode())
             with self.Session.begin() as s:
                 generation = Generation(
                     id=generation_id,
@@ -559,7 +557,7 @@ class Worker:
                 if draft.uncertainties or has_review_claims(draft) or any(s.needs_review for s in draft.steps)
                 else "succeeded"
             )
-            atomic_write(safe_path(cfg.data_dir, json_rel), draft.model_dump_json().encode())
+            atomic_write(safe_path(cfg.data_dir, json_rel), draft.model_dump_json(by_alias=True).encode())
             markdown = render_markdown(
                 draft,
                 asset,

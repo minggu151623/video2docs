@@ -1,4 +1,4 @@
-import type { TutorialDraftV1 } from "./tutorial";
+import type { TutorialDraftV2 } from "./tutorial";
 export interface Project {
   id: string;
   name: string;
@@ -71,7 +71,7 @@ export interface Generation {
   job_id: string;
 }
 export interface GenerationDetail extends Generation {
-  draft: TutorialDraftV1;
+  draft: TutorialDraftV2;
   evidence: Evidence[];
 }
 export interface Capabilities {
