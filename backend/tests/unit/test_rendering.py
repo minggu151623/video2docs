@@ -5,7 +5,7 @@ from app.providers.mock import MockProvider
 from app.schemas.tutorial_v2 import TutorialDraftV2
 from app.schemas.verification import ItemVerification, VerificationReport
 from app.services.documents import render_markdown as reexported
-from app.services.rendering import SECTION_LABELS, render_markdown, stamp
+from app.services.rendering import SECTION_LABELS, escape, render_markdown, stamp
 
 ASSET = NS(original_name="source.mp4", duration_sec=10)
 GENERATION = NS(id="generation", created_at="2026-10-22")
@@ -300,3 +300,38 @@ def test_stamp_formats_hours():
 def test_audio_only_note(language, expected):
     draft = with_step(build(language=language), evidence_spans=[{**span("audio")}])
     assert expected in render(draft)
+
+
+def escaped_fields():
+    def mat(**kw):
+        return build(materials=[{**material(), "quote": "quote", **kw}])
+
+    def par(**kw):
+        return with_step(build(), parameters=[{**parameter(), "quote": "quote", **kw}])
+
+    return {
+        "material_name": lambda p: mat(name=p),
+        "material_quantity": lambda p: mat(quantity=p),
+        "material_unit": lambda p: mat(unit=p),
+        "material_note": lambda p: mat(note=p),
+        "parameter_name": lambda p: par(name=p),
+        "parameter_value": lambda p: par(value=p),
+        "parameter_unit": lambda p: par(unit=p),
+        "yield": lambda p: build(**{"yield": p}),
+        "safety_text": lambda p: build(safety=[claim(p)]),
+        "equipment_spec": lambda p: build(
+            equipment=[{"name": "Chảo", "spec": p, "evidence_spans": [span()]}]
+        ),
+    }
+
+
+FIELDS = escaped_fields()
+
+
+@pytest.mark.parametrize("payload", ["*x*", "[a](b)", "<script>"])
+@pytest.mark.parametrize("field", list(FIELDS))
+def test_markdown_metacharacters_are_escaped(field, payload):
+    text = render(FIELDS[field](payload))
+    assert payload not in text
+    assert escape(payload) in text
+    assert escape(payload) != payload
