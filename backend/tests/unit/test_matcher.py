@@ -648,7 +648,9 @@ def test_ranges_and_alternatives_around_a_number_never_verify(case):
 def test_a_number_two_tokens_away_from_a_non_numeric_edge_is_fine():
     out = verify(material(quote="cho 200 gram bột"), transcript("cho 200 gram bột và 100 gram đường"))
     assert out.status == "verified"
-    out = verify(material(quote="cho 200 gram bột"), transcript("cho 100 gram đường và cho 200 gram bột"))
+    out = verify(
+        material(quote="cho 200 gram bột"), transcript("cho 100 gram đường rồi sau đó cho 200 gram bột")
+    )
     assert out.status == "verified"
 
 
@@ -707,3 +709,120 @@ def test_decimal_leading_zeros_equal_verifies():
 def test_unit_g_is_not_found_in_gram_recall_trade_off():
     out = verify(material(unit="g"), transcript("cho 200 gram bột vào"))
     assert (out.status, out.reason) == ("unverified", NO_VALUE)
+
+
+# ---- regression: round 3 (structural ranges, repeated scales, unread runs, bare decimals) ------
+
+
+@pytest.mark.parametrize(
+    "text,lang,expected",
+    [
+        ("hai trăm năm mươi", "vi", ["250"]),
+        ("hai nghìn ba trăm", "vi", ["2300"]),
+        ("hai trăm nghìn", "vi", ["200000"]),
+        ("hai triệu ba trăm nghìn", "vi", ["2300000"]),
+        ("một nghìn không trăm hai mươi", "vi", ["1020"]),
+        ("hai chục", "vi", ["20"]),
+        ("two hundred thousand", "en", ["200000"]),
+        ("two million", "en", ["2000000"]),
+        ("hai mươi ba mươi", "vi", []),
+        ("ba mươi bốn mươi", "vi", []),
+        ("mười hai mươi", "vi", []),
+        ("hai nghìn ba nghìn", "vi", []),
+        ("hai trăm nghìn ba trăm nghìn", "vi", []),
+        ("two thousand three thousand", "en", []),
+        ("two hundred three hundred", "en", []),
+    ],
+)
+def test_repeated_scales_are_ambiguous_but_compounds_are_read(text, lang, expected):
+    assert digit_runs(text, lang) == expected
+
+
+def test_unread_number_words_become_opaque_tokens():
+    from app.services.verification.numbers import number_tokens
+
+    assert number_tokens("cho hai ba chén", "vi") == ["~hai ba"]
+    assert number_tokens("cho hai ba chén và 5 muỗng", "vi") == ["~hai ba", "5"]
+    assert number_tokens("Cho  hai   mươi ba mươi", "vi") == ["~hai mươi ba mươi"]
+    assert number_tokens("Dùng .05 ml, 1,5 và ,5", None) == [".05", "1.5", ".5"]
+
+
+UNREAD_CLAIM_CASES = [
+    ("cho khoảng hai ba chén đường", "cho khoảng ba bốn chén đường", "vi"),
+    ("add about two three cups of sugar", "add about four five cups of sugar", "en"),
+    ("cho khoảng hai ba chén đường", "cho khoảng hai chén đường", "vi"),
+    ("nấu hai mươi ba mươi phút nhé", "nấu hai mươi phút nhé", "vi"),
+]
+
+
+@pytest.mark.parametrize("quote,spoken,lang", UNREAD_CLAIM_CASES)
+def test_unread_number_runs_still_have_to_agree(quote, spoken, lang):
+    assert verify(claim(quote=quote, text="x"), transcript(spoken, language=lang)).status == "unverified"
+    same = verify(claim(quote=quote, text="x"), transcript(quote, language=lang))
+    assert same.status == "verified"
+
+
+@pytest.mark.parametrize(
+    "value,unit,quote,spoken,lang",
+    [
+        ("3", "phút", "3 phút nhé", "nấu 2 phút hay là 3 phút nhé", "vi"),
+        ("3", "phút", "3 phút nhé", "nấu 2 hoặc là 3 phút nhé", "vi"),
+        ("3", "phút", "ba phút nhé", "nấu hai đến tầm ba phút nhé", "vi"),
+        ("3", "minutes", "3 minutes until golden", "bake 2 or maybe 3 minutes until golden", "en"),
+        ("3", "minutes", "three minutes until golden", "bake two or maybe three minutes until golden", "en"),
+        ("3", "minutes", "3 minutes until golden", "bake 2 to about 3 minutes until golden", "en"),
+        (
+            "3",
+            "minutes",
+            "three minutes until golden",
+            "bake two minutes or three minutes until golden",
+            "en",
+        ),
+        ("10", "phút", "nấu 10 phút là chín", "nấu hai mươi ba mươi phút là chín", "vi"),
+        ("10", "phút", "nấu 10 phút là chín", "nấu ba mươi bốn mươi phút là chín", "vi"),
+        ("5000", "đồng", "giá 5000 đồng một gói", "giá hai nghìn ba nghìn đồng một gói", "vi"),
+        (
+            "5000",
+            "dollars",
+            "about 5000 dollars total",
+            "about two thousand three thousand dollars total",
+            "en",
+        ),
+        ("500000", "đồng", "giá 500000 đồng", "giá hai trăm nghìn ba trăm nghìn đồng", "vi"),
+        ("3", "분", "3분 끓여주세요", "2~3분 끓여주세요", "ko"),
+        ("3", "분", "3분 끓여주세요", "2 ~ 3분 끓여주세요", "ko"),
+    ],
+)
+def test_ranges_with_filler_words_and_repeated_scales_never_verify(value, unit, quote, spoken, lang):
+    assert verify(stated_param(value, unit, quote), transcript(spoken, language=lang)).status == "unverified"
+
+
+def test_range_in_ocr_with_filler_words():
+    assert oparam("3", "phút", "3 phút", "Nấu 2 hoặc là 3 phút").status == "unverified"
+    assert oparam("3", "phút", "3 phút", "Nau 2 hoac la 3 phut").status == "unverified"
+    assert oparam("3", "phút", "3 phút", "Nấu hai đến tầm 3 phút").status == "unverified"
+    assert oparam("3", "phút", "3 phút", "Nấu 3 phút").status == "verified"
+
+
+def test_vietnamese_words_that_fold_to_number_words_do_not_block_speech():
+    # "sau" (after) is the diacritic-free form of "sáu" (six) but is a plain word in speech
+    out = verify(
+        material(quote="cho 200 gram bột"), transcript("cho 100 gram đường rồi sau đó cho 200 gram bột")
+    )
+    assert out.status == "verified"
+
+
+def test_bare_leading_separator_numbers_are_kept_verbatim():
+    assert oclaim("Dùng 5 ml thuốc", "Dùng .05 ml thuốc").status == "unverified"
+    assert oclaim("Dùng .05 ml thuốc", "Dùng .05 ml thuốc").status == "verified"
+    assert oclaim("Dùng 0.05 ml thuốc", "Dùng .05 ml thuốc").status == "unverified"
+
+
+def test_valid_compounds_verify_end_to_end():
+    for spoken, value in [
+        ("cho hai nghìn ba trăm gram bột", "2300"),
+        ("cho hai trăm nghìn gram bột", "200000"),
+        ("cho hai trăm năm mươi gram bột", "250"),
+    ]:
+        item = stated_param(value, "gram", f"cho {value} gram bột")
+        assert verify(item, transcript(spoken)).status == "verified", spoken

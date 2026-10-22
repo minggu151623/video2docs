@@ -15,18 +15,20 @@ import unicodedata
 from bisect import bisect_right
 from collections import Counter
 from collections.abc import Iterator
+from functools import lru_cache
 from itertools import accumulate
 from typing import Any
 from rapidfuzz import fuzz
 from app.schemas.tutorial_v2 import ExactInput, Material, Parameter, TutorialDraftV2
 from app.schemas.verification import ItemVerification, Transcript, Word
-from app.services.verification.numbers import number_tokens, spell_digits
+from app.services.verification.numbers import number_tokens, number_words, spell_digits
 
 NO_VALUE = "giá trị không có trong nguyên văn"
 DIGITS_ONLY = "und"
 SIGNS, SEPARATORS = "-–−+", ".,/"
 MODIFIERS = {"rưỡi", "phẩy", "chấm", "nửa", "âm", "trừ", "half", "point", "minus", "negative", "½", "¼", "¾"}
-CONNECTORS = {"-", "–", "−", "~", "đến", "tới", "hoặc", "hay", "or", "to"}
+DASHES = {"-", "–", "−", "~"}
+NEIGHBOURHOOD = 4
 MIN_QUOTE_CHARS = 6
 
 
@@ -88,28 +90,37 @@ def _words(text: str) -> list[str]:
     return re.findall(r"[^\W_]+|[½¼¾]", text)
 
 
-def _beside_number(haystack: str, start: int, end: int) -> bool:
-    """A number, or a connector like '-', 'đến', 'or', right next to a number at the segment's edge.
+@lru_cache
+def _number_words(folded: bool) -> frozenset[str]:
+    return frozenset({_fold(w) for w in number_words()} if folded else number_words())
 
-    Looks two tokens out on a side only when the segment has a number among its first (or last) two
-    tokens, so '2 - 3 phút' and 'hai hoặc ba' end a match while a later '100 gram đường' does not."""
-    folded = CONNECTORS | {_fold(c) for c in CONNECTORS}
+
+def _has_number(token: str, folded: bool = False) -> bool:
+    """A digit or a Vietnamese / English number word, read or not ('2', 'hai', 'Two,')."""
+    word = token.strip(".,;:!?()[]\"'").casefold()
+    return any(c.isdigit() for c in word) or word in _number_words(folded)
+
+
+def _beside_number(haystack: str, start: int, end: int, folded: bool) -> bool:
+    """Another number, or a dash, near a number at the segment's edge: ranges and alternatives.
+
+    A side is checked only when the segment has a number among its first (last) two tokens; then any
+    number or number word within NEIGHBOURHOOD tokens beyond it, or a bare dash right next to it, ends
+    the match ('2 - 3 phút', 'hai đến tầm ba', 'or maybe 3'). A later '100 gram đường' does not."""
     tokens = haystack[start:end].split()
     before, after = haystack[:start].split(), haystack[end:].split()
 
-    def numeric(words):
-        return any(any(c.isdigit() for c in w) for w in words)
+    def near(words):  # words nearest the segment first
+        return any(_has_number(w, folded) for w in words[:NEIGHBOURHOOD]) or (
+            bool(words) and words[0] in DASHES
+        )
 
-    if numeric(tokens[:2]):
-        if numeric(before[-2:]) or (before and before[-1] in folded):
-            return True
-    if numeric(tokens[-2:]):
-        if numeric(after[:2]) or (after and after[0] in folded):
-            return True
-    return False
+    return (any(_has_number(w, folded) for w in tokens[:2]) and near(before[::-1])) or (
+        any(_has_number(w, folded) for w in tokens[-2:]) and near(after)
+    )
 
 
-def _edges_ok(needle: str, haystack: str, start: int, end: int) -> bool:
+def _edges_ok(needle: str, haystack: str, start: int, end: int, language: str | None, folded: bool) -> bool:
     """False when the segment is cut out of a longer number or sits next to a modifier."""
     segment = haystack[start:end]
     if segment[:1].isdigit() and start > 0 and haystack[start - 1] in SIGNS + SEPARATORS:
@@ -118,15 +129,17 @@ def _edges_ok(needle: str, haystack: str, start: int, end: int) -> bool:
         after = haystack[end : end + 2]
         if after[0].isdigit() or (after[0] in SIGNS + SEPARATORS and after[1:].isdigit()):
             return False
-    if not any(c.isdigit() for c in needle):
+    if not number_tokens(needle, language):
         return True
-    if _beside_number(haystack, start, end):
+    if _beside_number(haystack, start, end, folded):
         return False
     around = _words(haystack[:start])[-1:] + _words(segment) + _words(haystack[end:])[:1]
     return all(w not in MODIFIERS or w in _words(needle) for w in around)
 
 
-def _locate(needle: str, haystack: str, threshold: int, language: str | None) -> tuple[int, int, bool] | None:
+def _locate(
+    needle: str, haystack: str, threshold: int, language: str | None, folded: bool = False
+) -> tuple[int, int, bool] | None:
     """(start, end, numbers_ok) of the best alignment on canonical text, None when the words differ."""
     found = _align(needle, haystack, threshold)
     if not found:
@@ -134,7 +147,7 @@ def _locate(needle: str, haystack: str, threshold: int, language: str | None) ->
     same = Counter(number_tokens(needle, language)) == Counter(
         number_tokens(haystack[found[0] : found[1]], language)
     )
-    ok = same and _edges_ok(needle, haystack, *found)
+    ok = same and _edges_ok(needle, haystack, *found, language, folded)
     return (*found, ok)
 
 
@@ -206,7 +219,7 @@ def _match_screen(
 ) -> tuple[str, bool] | None:
     """PaddleOCR drops stacked Vietnamese diacritics, so both sides lose them; numbers stay exact."""
     needle, haystack = _fold(expected), _fold(ocr_text)
-    found = _locate(needle, haystack, threshold, DIGITS_ONLY)
+    found = _locate(needle, haystack, threshold, DIGITS_ONLY, folded=True)
     if not found:
         return None
     segment = haystack[found[0] : found[1]]
