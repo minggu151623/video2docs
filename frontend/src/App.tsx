@@ -18,10 +18,20 @@ import type {
 } from "./types/app";
 import Markdown from "./components/Markdown";
 import Dialog from "./components/Dialog";
+import NotTutorialNotice from "./components/NotTutorialNotice";
+import VerificationSummary, {
+  StepBadge,
+} from "./components/VerificationSummary";
+import {
+  notTutorialReason,
+  pendingInStep,
+  warningLines,
+} from "./lib/verification";
 
 const terminal = new Set([
   "succeeded",
   "needs_review",
+  "not_tutorial",
   "failed",
   "cancelled",
   "interrupted",
@@ -32,6 +42,8 @@ const phaseText: Record<string, string> = {
   preparing: "Chuẩn bị clip",
   uploading: "Gửi clip tới provider",
   analyzing: "Phân tích video",
+  transcribing: "Chép lời nói",
+  verifying: "Kiểm chứng",
   assembling: "Ghép tài liệu",
   extracting_evidence: "Trích ảnh bằng chứng",
   saving: "Lưu tài liệu",
@@ -40,6 +52,7 @@ const phaseText: Record<string, string> = {
   deleting: "Đang xóa",
   succeeded: "Hoàn tất",
   needs_review: "Cần kiểm tra",
+  not_tutorial: "Không phải tutorial",
   failed: "Thất bại",
   cancelled: "Đã hủy",
   cancel_requested: "Đang hủy",
@@ -48,6 +61,7 @@ const phaseText: Record<string, string> = {
 const kindText: Record<string, string> = {
   validate_asset: "Kiểm tra video",
   analyze: "Tạo tài liệu",
+  verify: "Kiểm chứng lại",
   export: "Xuất file",
   extract_evidence: "Chọn ảnh",
   provider_check: "Kiểm tra kết nối",
@@ -91,6 +105,7 @@ export default function App() {
     textRef = useRef(""),
     saveInFlight = useRef(false),
     lastJobStates = useRef(""),
+    verifyTarget = useRef<string | null>(null),
     currentProject = useRef(projectId);
   const [generations, setGenerations] = useState<Generation[]>([]),
     [generation, setGeneration] = useState<GenerationDetail | null>(null),
@@ -107,6 +122,12 @@ export default function App() {
     [exports, setExports] = useState<
       Record<string, { state: string; url?: string; error?: string }>
     >({});
+  const [onlyPending, setOnlyPending] = useState(false),
+    [verifyJob, setVerifyJob] = useState<Job | null>(null),
+    [verifyNotice, setVerifyNotice] = useState<{
+      kind: "error" | "info";
+      text: string;
+    } | null>(null);
   const video = useRef<HTMLVideoElement>(null);
 
   const report = useCallback((err: unknown) => {
@@ -177,6 +198,9 @@ export default function App() {
     setUnknownCost(false);
     setConflict(false);
     setExports({});
+    setVerifyJob(null);
+    setVerifyNotice(null);
+    setOnlyPending(false);
     dirty.current = false;
     revisionRef.current = null;
     lastJobStates.current = "";
@@ -314,8 +338,18 @@ export default function App() {
   }
   const asset = detail?.assets[0];
   const active = detail?.jobs.find((j) => !terminal.has(j.state));
+  const latestAnalysis = detail?.jobs.find((j) => j.kind === "analyze");
+  const stopped =
+    latestAnalysis?.state === "not_tutorial" ? latestAnalysis : null;
   async function generate() {
-    if (!detail || !asset || !cap || !consented || !unknownCost) return;
+    if (!consented || !unknownCost) return;
+    if (await startAnalysis(false, Number(budget))) {
+      setConsented(false);
+      setUnknownCost(false);
+    }
+  }
+  async function startAnalysis(skipGate: boolean, budgetUsd: number) {
+    if (!detail || !asset || !cap) return false;
     setBusy(true);
     setError("");
     try {
@@ -334,18 +368,35 @@ export default function App() {
           mode: "static",
           output_language: detail.output_language,
           consent_id: c.id,
-          allow_unknown_cost: unknownCost,
-          budget_usd: Number(budget),
+          allow_unknown_cost: true,
+          budget_usd: budgetUsd,
+          ...(skipGate ? { skip_tutorial_gate: true } : {}),
         },
         { "Idempotency-Key": crypto.randomUUID() },
       );
       await refresh(detail.id);
-      setConsented(false);
-      setUnknownCost(false);
+      return true;
     } catch (err) {
       report(err);
+      return false;
     } finally {
       setBusy(false);
+    }
+  }
+  async function reverify() {
+    if (!generation) return;
+    setVerifyNotice(null);
+    try {
+      verifyTarget.current = generation.id;
+      setVerifyJob(
+        await api<Job>(`/generations/${generation.id}/verify`, "POST"),
+      );
+    } catch (err) {
+      setVerifyNotice({
+        kind: "error",
+        text:
+          err instanceof Error ? err.message : "Không bắt đầu được kiểm chứng.",
+      });
     }
   }
   async function retry(job: Job) {
@@ -477,6 +528,41 @@ export default function App() {
     );
     return () => clearInterval(timer);
   }, [checkJob, report]);
+  useEffect(() => {
+    if (!verifyJob || terminal.has(verifyJob.state)) return;
+    const timer = setInterval(
+      () =>
+        api<Job>(`/jobs/${verifyJob.id}`)
+          .then(setVerifyJob)
+          .catch((err) => {
+            setVerifyJob(null);
+            setVerifyNotice({ kind: "error", text: err.message });
+          }),
+      2000,
+    );
+    return () => clearInterval(timer);
+  }, [verifyJob]);
+  useEffect(() => {
+    if (!verifyJob || !terminal.has(verifyJob.state)) return;
+    const job = verifyJob,
+      target = verifyTarget.current,
+      owner = currentProject.current;
+    setVerifyJob(null);
+    if (job.state !== "succeeded" || !target) {
+      setVerifyNotice({
+        kind: "error",
+        text: job.error_message ?? "Kiểm chứng không hoàn tất.",
+      });
+      return;
+    }
+    api<GenerationDetail>(`/generations/${target}`)
+      .then((value) => {
+        if (currentProject.current !== owner) return;
+        setGeneration((old) => (old?.id === target ? value : old));
+        setVerifyNotice({ kind: "info", text: "Đã kiểm chứng lại." });
+      })
+      .catch((err) => setVerifyNotice({ kind: "error", text: err.message }));
+  }, [verifyJob]);
   async function replaceFrame() {
     if (!generation || !asset || !frameStep || !doc || !projectId) return;
     if (dirty.current) {
@@ -654,8 +740,8 @@ export default function App() {
                 từng bước một.
               </h2>
               <p>
-                Chọn video tutorial phần mềm. Tạo bản nháp có mốc thời gian, ảnh
-                nguồn và chỗ để bạn kiểm tra, chỉnh sửa.
+                Video hướng dẫn: nấu ăn, sửa chữa, phần mềm… Tạo bản nháp có mốc
+                thời gian, ảnh nguồn và chỗ để bạn kiểm tra, chỉnh sửa.
               </p>
               <p className="muted">
                 MP4, MOV hoặc WebM. Video được lưu local; chỉ gửi đến Google sau
@@ -719,6 +805,16 @@ export default function App() {
                 Chưa xác nhận xóa {detail.cleanup_pending} file Google. Worker
                 sẽ thử cleanup có giới hạn.
               </div>
+            )}
+            {stopped && (
+              <NotTutorialNotice
+                key={stopped.id}
+                reason={notTutorialReason(stopped.warnings)}
+                busy={busy}
+                providerReady={!!cap?.provider_ready}
+                initialBudget={budget}
+                onAnalyze={(usd) => startAnalysis(true, usd)}
+              />
             )}
             <div className="work-grid">
               <section className="source-pane" aria-label="Video và bằng chứng">
@@ -792,7 +888,7 @@ export default function App() {
                       {phaseText[active.phase] ?? active.phase}
                     </strong>
                     <p>
-                      {active.total_units
+                      {active.total_units && active.state !== "not_tutorial"
                         ? `${active.completed_units}/${active.total_units} đoạn hoàn tất · `
                         : ""}
                       {active.started_at
@@ -889,73 +985,99 @@ export default function App() {
                       <h2>Các bước nguồn</h2>
                       <span>{generation.draft.steps.length} bước</span>
                     </div>
+                    <VerificationSummary
+                      generation={generation}
+                      onlyPending={onlyPending}
+                      onOnlyPending={setOnlyPending}
+                      onVerify={reverify}
+                      verifying={!!verifyJob}
+                      blocked={!!active}
+                      notice={verifyNotice}
+                    />
                     {generation.draft.steps.length === 0 && (
                       <p>
                         Video chưa có thao tác hướng dẫn quan sát được. Xem mục
                         Điểm chưa rõ trong tài liệu.
                       </p>
                     )}
-                    {generation.draft.steps.map((s, i) => (
-                      <div className="step" key={s.local_id}>
-                        <div className="step-top">
-                          <span className="step-number">
-                            {(i + 1).toString().padStart(2, "0")}
-                          </span>
+                    {onlyPending &&
+                      generation.verification &&
+                      !generation.draft.steps.some((_, i) =>
+                        pendingInStep(generation.verification, i),
+                      ) && (
+                        <p className="muted" role="status">
+                          Không có bước nào còn mục chưa kiểm chứng.
+                        </p>
+                      )}
+                    {generation.draft.steps.map((s, i) =>
+                      onlyPending &&
+                      generation.verification &&
+                      !pendingInStep(generation.verification, i) ? null : (
+                        <div className="step" key={s.local_id}>
+                          <div className="step-top">
+                            <span className="step-number">
+                              {(i + 1).toString().padStart(2, "0")}
+                            </span>
+                            <button
+                              className="timestamp"
+                              onClick={() => seek(s.start_sec)}
+                            >
+                              {stamp(s.start_sec)}
+                            </button>
+                            <StepBadge
+                              count={pendingInStep(generation.verification, i)}
+                            />
+                          </div>
+                          <h3>{s.title}</h3>
+                          {s.needs_review && (
+                            <p className="review-label">
+                              Cần kiểm tra: {s.review_reason}
+                            </p>
+                          )}
+                          <ul>
+                            {s.actions.map((a, k) => (
+                              <li key={k}>{a}</li>
+                            ))}
+                          </ul>
+                          <div className="evidence-list">
+                            {generation.evidence
+                              .filter((e) => e.step_id === s.local_id)
+                              .slice(-1)
+                              .map((e) => (
+                                <button
+                                  className="evidence-button"
+                                  key={e.id}
+                                  onClick={() => {
+                                    seek(e.actual_sec);
+                                    setImage(`/api/v1/evidence/${e.id}/image`);
+                                  }}
+                                >
+                                  <img
+                                    src={`/api/v1/evidence/${e.id}/image`}
+                                    alt={`Ảnh nguồn tại ${stamp(e.actual_sec)}`}
+                                  />
+                                  <span>
+                                    {stamp(e.actual_sec)} · Chưa kiểm tra bằng
+                                    mắt
+                                  </span>
+                                </button>
+                              ))}
+                          </div>
                           <button
-                            className="timestamp"
-                            onClick={() => seek(s.start_sec)}
+                            onClick={() => {
+                              setFrameStep(s.local_id);
+                              setFrameTime(
+                                (
+                                  video.current?.currentTime ?? s.start_sec
+                                ).toFixed(3),
+                              );
+                            }}
                           >
-                            {stamp(s.start_sec)}
+                            Chọn lại ảnh
                           </button>
                         </div>
-                        <h3>{s.title}</h3>
-                        {s.needs_review && (
-                          <p className="review-label">
-                            Cần kiểm tra: {s.review_reason}
-                          </p>
-                        )}
-                        <ul>
-                          {s.actions.map((a, k) => (
-                            <li key={k}>{a}</li>
-                          ))}
-                        </ul>
-                        <div className="evidence-list">
-                          {generation.evidence
-                            .filter((e) => e.step_id === s.local_id)
-                            .slice(-1)
-                            .map((e) => (
-                              <button
-                                className="evidence-button"
-                                key={e.id}
-                                onClick={() => {
-                                  seek(e.actual_sec);
-                                  setImage(`/api/v1/evidence/${e.id}/image`);
-                                }}
-                              >
-                                <img
-                                  src={`/api/v1/evidence/${e.id}/image`}
-                                  alt={`Ảnh nguồn tại ${stamp(e.actual_sec)}`}
-                                />
-                                <span>
-                                  {stamp(e.actual_sec)} · Chưa kiểm tra bằng mắt
-                                </span>
-                              </button>
-                            ))}
-                        </div>
-                        <button
-                          onClick={() => {
-                            setFrameStep(s.local_id);
-                            setFrameTime(
-                              (
-                                video.current?.currentTime ?? s.start_sec
-                              ).toFixed(3),
-                            );
-                          }}
-                        >
-                          Chọn lại ảnh
-                        </button>
-                      </div>
-                    ))}
+                      ),
+                    )}
                   </div>
                 )}
                 {detail.jobs.length > 0 && (
@@ -988,6 +1110,16 @@ export default function App() {
                               : "Chi phí/usage còn chưa xác định"}
                           </p>
                         )}
+                        {j.state === "not_tutorial" && (
+                          <p>
+                            Đã dừng sau đoạn đầu; không phân tích các đoạn sau.
+                          </p>
+                        )}
+                        {warningLines(j.warnings).map((line) => (
+                          <p className="muted" key={line}>
+                            {line}
+                          </p>
+                        ))}
                         {j.error_message && (
                           <p role="alert">
                             {j.error_code}: {j.error_message}
@@ -1206,9 +1338,11 @@ export default function App() {
                     </div>
                     <h2>Tài liệu bắt đầu từ video của bạn.</h2>
                     <p>
-                      {active
-                        ? "Worker đang xử lý. Bạn có thể rời trang và mở lại dự án để xem tiến độ."
-                        : "Sau khi video qua kiểm tra, xác nhận gửi phân tích và bấm Tạo tài liệu."}
+                      {stopped
+                        ? "Chưa có tài liệu vì video không được nhận là video hướng dẫn. Xem lý do ở phía trên."
+                        : active
+                          ? "Worker đang xử lý. Bạn có thể rời trang và mở lại dự án để xem tiến độ."
+                          : "Sau khi video qua kiểm tra, xác nhận gửi phân tích và bấm Tạo tài liệu."}
                     </p>
                     <p className="muted">
                       Bản nháp sẽ có các bước, mốc thời gian và ảnh thật từ
@@ -1222,7 +1356,7 @@ export default function App() {
         )}
         <footer>
           Video và bản sửa lưu local · Nội dung gửi Google khi tạo tài liệu ·
-          Luôn kiểm tra ảnh và command trước khi sử dụng
+          Luôn kiểm tra ảnh, định lượng và lệnh trước khi sử dụng
         </footer>
       </main>
       {deleteOpen && (

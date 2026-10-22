@@ -40,7 +40,8 @@ npm --prefix frontend run dev
 4. Đối chiếu từng bước, click timestamp/ảnh để xem nguồn. Markdown có preview ngay, autosave khoảng 1 giây. Hai tab sửa cùng bản sẽ báo 409 và giữ bản local để sao chép.
 5. Lịch sử revision cho phép khôi phục thành revision mới. Generation mới luôn lưu riêng; chọn áp dụng sau khi kiểm tra. Chọn lại ảnh theo số giây không gọi AI. Bỏ một ảnh bằng cách xóa dòng `![...](assets/...)` trong Markdown.
 6. Xuất MD, ZIP hoặc PDF từ revision đã lưu. MD riêng cần ảnh đi kèm; ZIP gồm `document.md`, `assets/`, manifest revision/hash/timestamp. PDF là file A4 thật với font local. Các file đã xuất còn có thể tải từ Lịch sử xử lý sau reload.
-7. Xóa dự án cần xác nhận; tombstone chặn thao tác mới, worker hủy job và dọn file. Cleanup Google có thể còn pending, không được diễn giải thành đã xóa remote.
+7. Kết quả hiện nhãn lĩnh vực, dòng "N/M mục đã kiểm chứng", huy hiệu "n mục chưa kiểm chứng" trên từng bước, bộ lọc **Chỉ hiện mục chưa kiểm chứng** và nút **Kiểm chứng lại** (chạy lại ASR/OCR local, không gọi Google). Trạng thái tài liệu lấy từ generation, không phải từ job kiểm chứng. Nếu đoạn đầu không phải video hướng dẫn, job dừng ở trạng thái "Không phải tutorial" kèm lý do; **Vẫn phân tích toàn bộ** mở hộp xác nhận chi phí rồi tạo job mới bỏ qua chặn này.
+8. Xóa dự án cần xác nhận; tombstone chặn thao tác mới, worker hủy job và dọn file. Cleanup Google có thể còn pending, không được diễn giải thành đã xóa remote.
 
 ## Phạm vi và cấu hình
 
@@ -95,10 +96,12 @@ Test mặc định không cần key, không gửi Google. Integration dùng SQLi
 E2E chạy riêng API và worker với cùng cấu hình mock và storage riêng:
 
 ```sh
-AI_PROVIDER=mock DATA_DIR=./tmp/e2e-data DATABASE_URL=sqlite:///./tmp/e2e-data/app.sqlite3 ALLOWED_ORIGINS=http://127.0.0.1:8001 PYTHONPATH=backend uv run uvicorn app.main:app --host 127.0.0.1 --port 8001
-AI_PROVIDER=mock DATA_DIR=./tmp/e2e-data DATABASE_URL=sqlite:///./tmp/e2e-data/app.sqlite3 ALLOWED_ORIGINS=http://127.0.0.1:8001 PYTHONPATH=backend uv run python -m app.workers.runner
+AI_PROVIDER=mock ASR_ENGINE=none OCR_ENGINE=none DATA_DIR=./tmp/e2e-data DATABASE_URL=sqlite:///./tmp/e2e-data/app.sqlite3 ALLOWED_ORIGINS=http://127.0.0.1:8001 PYTHONPATH=backend uv run uvicorn app.main:app --host 127.0.0.1 --port 8001
+AI_PROVIDER=mock ASR_ENGINE=none OCR_ENGINE=none DATA_DIR=./tmp/e2e-data DATABASE_URL=sqlite:///./tmp/e2e-data/app.sqlite3 ALLOWED_ORIGINS=http://127.0.0.1:8001 PYTHONPATH=backend uv run python -m app.workers.runner
 uv run python tests/e2e/browser_flow.py
 ```
+
+`ASR_ENGINE=none OCR_ENGINE=none` giữ kiểm chứng tất định: bản nháp mock luôn hiện "0/2 mục đã kiểm chứng". Mock đọc tên file upload: `mock-two-steps*` thêm một bước không có mục cần kiểm chứng (kiểm tra bộ lọc), `mock-not-tutorial*` giả lập video không phải tutorial ở đoạn đầu. E2E tự tạo các bản copy fixture với tên đó.
 
 Ảnh chụp, kết quả E2E và PDF QA ở `tmp/e2e-artifacts/`. Có thể tái tạo PDF bảng/code dài với `uv run python scripts/pdf_layout_check.py`.
 

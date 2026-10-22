@@ -130,7 +130,7 @@ def test_labels_table_matches_spec():
 
 
 def test_empty_new_sections_are_hidden():
-    text = render(build())
+    text = render(build(materials=[]))
     assert "## Nguyên liệu" not in text and "## An toàn" not in text
     treatment = text.split("## Lỗi và cách xử lý", 1)[1].split("## Điểm chưa rõ", 1)[0]
     assert "Không được nêu trong video." in treatment
