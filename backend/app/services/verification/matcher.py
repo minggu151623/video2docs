@@ -26,6 +26,7 @@ NO_VALUE = "giá trị không có trong nguyên văn"
 DIGITS_ONLY = "und"
 SIGNS, SEPARATORS = "-–−+", ".,/"
 MODIFIERS = {"rưỡi", "phẩy", "chấm", "nửa", "âm", "trừ", "half", "point", "minus", "negative", "½", "¼", "¾"}
+CONNECTORS = {"-", "–", "−", "~", "đến", "tới", "hoặc", "hay", "or", "to"}
 MIN_QUOTE_CHARS = 6
 
 
@@ -87,6 +88,27 @@ def _words(text: str) -> list[str]:
     return re.findall(r"[^\W_]+|[½¼¾]", text)
 
 
+def _beside_number(haystack: str, start: int, end: int) -> bool:
+    """A number, or a connector like '-', 'đến', 'or', right next to a number at the segment's edge.
+
+    Looks two tokens out on a side only when the segment has a number among its first (or last) two
+    tokens, so '2 - 3 phút' and 'hai hoặc ba' end a match while a later '100 gram đường' does not."""
+    folded = CONNECTORS | {_fold(c) for c in CONNECTORS}
+    tokens = haystack[start:end].split()
+    before, after = haystack[:start].split(), haystack[end:].split()
+
+    def numeric(words):
+        return any(any(c.isdigit() for c in w) for w in words)
+
+    if numeric(tokens[:2]):
+        if numeric(before[-2:]) or (before and before[-1] in folded):
+            return True
+    if numeric(tokens[-2:]):
+        if numeric(after[:2]) or (after and after[0] in folded):
+            return True
+    return False
+
+
 def _edges_ok(needle: str, haystack: str, start: int, end: int) -> bool:
     """False when the segment is cut out of a longer number or sits next to a modifier."""
     segment = haystack[start:end]
@@ -98,6 +120,8 @@ def _edges_ok(needle: str, haystack: str, start: int, end: int) -> bool:
             return False
     if not any(c.isdigit() for c in needle):
         return True
+    if _beside_number(haystack, start, end):
+        return False
     around = _words(haystack[:start])[-1:] + _words(segment) + _words(haystack[end:])[:1]
     return all(w not in MODIFIERS or w in _words(needle) for w in around)
 
@@ -107,9 +131,10 @@ def _locate(needle: str, haystack: str, threshold: int, language: str | None) ->
     found = _align(needle, haystack, threshold)
     if not found:
         return None
-    ok = _edges_ok(needle, haystack, *found) and contains_numbers(
-        needle, haystack[found[0] : found[1]], language
+    same = Counter(number_tokens(needle, language)) == Counter(
+        number_tokens(haystack[found[0] : found[1]], language)
     )
+    ok = same and _edges_ok(needle, haystack, *found)
     return (*found, ok)
 
 

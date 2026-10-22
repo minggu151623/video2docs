@@ -106,7 +106,13 @@ def verify(item, tr=None, ocr=None):
         ("mười lăm phút", "vi", ["15"]),
         ("twenty five and one hundred and five", "en", ["25", "105"]),
         ("twenty-four minutes", "en", ["24"]),
-        ("two three minutes", "en", ["2", "3"]),
+        ("two three minutes", "en", []),
+        ("four five", "en", []),
+        ("hai ba", "vi", []),
+        ("một hai", "vi", []),
+        ("một nghìn không trăm hai mươi", "vi", ["1020"]),
+        ("hai nghìn không trăm năm mươi", "vi", ["2050"]),
+        ("năm nghìn không trăm linh năm", "vi", ["5005"]),
         ("hai trăm năm mươi gram", "ko", []),
         ("1.000 gram", "vi", ["1", "0"]),
     ],
@@ -580,13 +586,124 @@ def test_unit_attached_to_the_number_is_accepted():
 def test_number_tokens_shapes():
     from app.services.verification.numbers import number_tokens
 
-    assert number_tokens("1,5 1.5 1/2 2-3 -18 007 1.000", None) == [
+    assert number_tokens("1,5 1.5 1/2 2-3 -18 007 1.000 0,05 1.05", None) == [
         "1.5",
         "1.5",
         "1/2",
         "2-3",
         "-18",
         "7",
-        "1.0",
+        "1.000",
+        "0.05",
+        "1.05",
     ]
     assert number_tokens("pt-18 và 3,", None) == ["18", "3"]
+
+
+# ---- regression: round 2 (ranges and alternatives, zero groups, decimal zeros) ---------------
+
+
+def oparam(value, unit, text, screen):
+    return ocr(parameter(value=value, unit=unit, on_screen_text=text), screen)
+
+
+def oclaim(text, screen):
+    item = claim(basis="observed", quote=None, on_screen_text=text, text="x", spans=[span(source="visual")])
+    return ocr(item, screen)
+
+
+RANGE_AND_ALTERNATIVE_CASES = [
+    lambda: oparam("3", "phút", "3 phút", "Nấu 2 - 3 phút"),
+    lambda: oparam("18", "°C", "18°C", "Tủ đông - 18°C"),
+    lambda: oparam("3", "phút", "3 phút", "Nấu 2 đến 3 phút"),
+    lambda: oparam("3", "phút", "3 phút", "Nấu 2 ~ 3 phút"),
+    lambda: oparam("3", "phút", "3 phút", "Nau 2 hoac 3 phut"),
+    lambda: oparam("3", "phút", "3 phút", "Nấu 3 phút hoặc 5 phút"),
+    lambda: oclaim("Tủ đông 18°C", "Tủ đông - 18°C"),
+    lambda: verify(
+        material(quantity="2", unit="chén", quote="cho 2 chén đường"), transcript("cho một hai chén đường")
+    ),
+    lambda: verify(stated_param("2", "chén", "cho 2 chén đường"), transcript("cho 1 2 chén đường")),
+    lambda: verify(stated_param("3", "phút", "hai ba phút"), transcript("nấu chừng hai ba phút là chín")),
+    lambda: verify(stated_param("3", "phút", "3 phút là chín"), transcript("nấu 2 hoặc 3 phút là chín")),
+    lambda: verify(stated_param("3", "phút", "3 phút"), transcript("nấu khoảng 2 - 3 phút nhé")),
+    lambda: verify(stated_param("3", "phút", "3 phút"), transcript("nấu 2 đến 3 phút nhé")),
+    lambda: verify(stated_param("3", "phút", "nấu 3 phút"), transcript("nấu khoảng hai ba phút nhé")),
+    lambda: verify(
+        stated_param("5", "minutes", "five minutes until golden"),
+        transcript("bake four or five minutes until golden", language="en"),
+    ),
+    lambda: verify(
+        stated_param("3", "minutes", "cook for 3 minutes"),
+        transcript("cook for 2 to 3 minutes", language="en"),
+    ),
+]
+
+
+@pytest.mark.parametrize("case", RANGE_AND_ALTERNATIVE_CASES)
+def test_ranges_and_alternatives_around_a_number_never_verify(case):
+    assert case().status == "unverified"
+
+
+def test_a_number_two_tokens_away_from_a_non_numeric_edge_is_fine():
+    out = verify(material(quote="cho 200 gram bột"), transcript("cho 200 gram bột và 100 gram đường"))
+    assert out.status == "verified"
+    out = verify(material(quote="cho 200 gram bột"), transcript("cho 100 gram đường và cho 200 gram bột"))
+    assert out.status == "verified"
+
+
+@pytest.mark.parametrize(
+    "item,spoken,lang",
+    [
+        (
+            stated_param("1120", "gram", "cho 1120 gram bột"),
+            "cho một nghìn không trăm hai mươi gram bột",
+            "vi",
+        ),
+        (
+            stated_param("2150", "gram", "cho 2150 gram bột"),
+            "cho hai nghìn không trăm năm mươi gram bột",
+            "vi",
+        ),
+        (
+            stated_param("5105", "gram", "cho 5105 gram bột"),
+            "cho năm nghìn không trăm linh năm gram bột",
+            "vi",
+        ),
+    ],
+)
+def test_zero_hundreds_group_is_not_counted_as_a_hundred(item, spoken, lang):
+    assert verify(item, transcript(spoken, language=lang)).status == "unverified"
+
+
+def test_zero_hundreds_group_correct_reading_verifies():
+    spoken = transcript("cho một nghìn không trăm hai mươi gram bột")
+    assert verify(stated_param("1020", "gram", "cho 1020 gram bột"), spoken).status == "verified"
+
+
+@pytest.mark.parametrize(
+    "quote,spoken",
+    [
+        ("pha loãng dung dịch 0,5%", "pha loãng dung dịch 0,05%"),
+        ("cho 1.5 kg bột vào", "cho 1.05 kg bột vào"),
+        ("cho 1.000 kg bột vào", "cho 1.0 kg bột vào"),
+    ],
+)
+def test_decimal_leading_zeros_are_significant(quote, spoken):
+    assert verify(claim(quote=quote, text="x"), transcript(spoken)).status == "unverified"
+
+
+def test_decimal_leading_zeros_equal_verifies():
+    assert (
+        verify(
+            claim(quote="pha loãng dung dịch 0,05%", text="x"), transcript("pha loãng dung dịch 0,05%")
+        ).status
+        == "verified"
+    )
+    assert oclaim("Dùng 0.05 ml thuốc", "Dùng 0.05 ml thuốc").status == "verified"
+    assert oclaim("Dùng 0.5 ml thuốc", "Dùng 0.05 ml thuốc").status == "unverified"
+
+
+def test_unit_g_is_not_found_in_gram_recall_trade_off():
+    out = verify(material(unit="g"), transcript("cho 200 gram bột vào"))
+    assert (out.status, out.reason) == ("unverified", NO_VALUE)

@@ -34,16 +34,17 @@ def vocabulary(language: str | None) -> dict:
 
 
 def _evaluate(tokens: list[tuple[str, int]]) -> list[int] | None:
-    """Numbers in a run of number words; None when a colloquial Vietnamese form is ambiguous.
+    """Numbers in a run of number words; None when the reading is ambiguous.
 
-    'một trăm năm mươi' is 150, but 'một trăm năm' (105 or 150), 'hai trăm tư', 'một nghìn hai' and
-    'hai mươi năm' are left unread so that nothing can match them by accident."""
+    'một trăm năm mươi' is 150, but 'một trăm năm' (105 or 150), 'hai trăm tư', 'một nghìn hai',
+    'hai mươi năm' and bare neighbours like 'hai ba' or 'four five' (25? 2-3?) are left unread so
+    that nothing can match them by accident."""
     out, total, cur, small = [], 0, 0, None
     scaled = linked = loose = bad = False
 
-    def flush():
+    def finish(clean=True):
         nonlocal total, cur, small, scaled, linked, loose, bad
-        out.append(None if loose or bad else total + cur + (small or 0))
+        out.append(None if loose or bad or not clean else total + cur + (small or 0))
         total, cur, small, scaled, linked, loose, bad = 0, 0, None, False, False, False, False
 
     for kind, value in tokens:
@@ -53,26 +54,28 @@ def _evaluate(tokens: list[tuple[str, int]]) -> list[int] | None:
                 bad, small = bad or kind == "n", small + value
             else:
                 if small is not None:
-                    flush()
+                    finish(False)
                 small, loose = value, scaled and not linked
         elif low == "t":
             if small is not None:
-                flush()
+                finish(False)
             small = value
         elif low == "x":
             small, loose = (small if small is not None and small < 10 else 1) * 10, False
-        elif low in "hk":
-            if low == "h" and cur >= 100:
-                flush()
-            amount = (small or 1) if low == "h" else (cur + (small or 0) or 1)
-            if low == "h":
-                cur += amount * 100
-            else:
-                total, cur = total + amount * 1000, 0
+        elif low == "h":
+            if cur >= 100:
+                finish(False)
+            cur += (1 if small is None else small) * 100
             small, loose, linked, scaled = None, False, False, scaled or kind.isupper()
-        elif low == "l":
+        elif low == "k":
+            amount = 1 if small is None and not cur else cur + (small or 0)
+            total, cur = total + amount * 1000, 0
+            small, loose, linked, scaled = None, False, False, scaled or kind.isupper()
+        elif total or cur:  # filler inside a number: 'một trăm linh năm', 'one hundred and five'
             linked = True
-    flush()
+        elif small is not None:  # filler between two numbers: 'twenty five and one hundred'
+            finish()
+    finish()
     return None if None in out else out
 
 
@@ -104,8 +107,12 @@ def spell_digits(text: str, language: str | None) -> tuple[str, list[int], list[
     return "".join(out), starts, ends
 
 
+def _ascii(run: str) -> str:
+    return "".join(str(unicodedata.digit(c)) for c in run)
+
+
 def _digits(run: str) -> str:
-    return "".join(str(unicodedata.digit(c)) for c in run).lstrip("0") or "0"
+    return _ascii(run).lstrip("0") or "0"
 
 
 def digit_runs(text: str, language: str | None) -> list[str]:
@@ -122,6 +129,9 @@ def number_tokens(text: str, language: str | None) -> list[str]:
         token = m.group().replace("–", "-").replace("−", "-")
         body = token.lstrip("-")
         parts = re.split(r"([.,/-])", body)
-        shaped = "".join(_digits(p) if p[:1].isdigit() else p.replace(",", ".") for p in parts)
+        # only the leading zeros of the whole part go: '007' is 7 but '0,05' and '1.05' keep theirs
+        shaped = _digits(parts[0]) + "".join(
+            _ascii(p) if p[:1].isdigit() else p.replace(",", ".") for p in parts[1:]
+        )
         out.append(token[: len(token) - len(body)] + shaped)
     return out
