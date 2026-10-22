@@ -135,6 +135,7 @@ class Generation(Base):
     prompt_version = Column(String, default="tutorial_v2", nullable=False)
     pipeline_version = Column(String, default="0.1.0", nullable=False)
     validated_json_path = Column(String, nullable=False)
+    verification_json_path = Column(String)
     created_at = Column(String, default=now, nullable=False)
     quality_status = Column(String, nullable=False)
 

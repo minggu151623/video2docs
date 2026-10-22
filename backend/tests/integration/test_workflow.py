@@ -743,3 +743,286 @@ def test_skip_gate_analyzes_all_clips(env, clip, monkeypatch):
     assert detail["state"] == "needs_review" and len(detail["provider_calls"]) == len(calls) == 2
     assert not any(w.get("code") == "NOT_TUTORIAL" for w in detail["warnings"] if isinstance(w, dict))
     assert client.get(f"/api/v1/projects/{project['id']}/document").json() is not None
+
+
+def grounded_payload(payload, clip_index):
+    """One stated parameter, one observed material with screen text, one stated material."""
+    payload["uncertainties"] = []
+    step = payload["steps"][0]
+    step.update(needs_review=False, review_reason=None)
+    audio = [{"start_sec": 0, "end_sec": 2, "source": "audio", "description": "Lời nói"}]
+    visual = [{"start_sec": 0, "end_sec": 2, "source": "visual", "description": "Chữ trên màn hình"}]
+    step["parameters"] = [
+        {
+            "name": "Nhiệt độ",
+            "value": "180",
+            "unit": "độ",
+            "evidence_spans": audio,
+            "basis": "stated",
+            "quote": "đặt nhiệt độ 180 độ",
+            "on_screen_text": None,
+        }
+    ]
+    payload["materials"] = [
+        {
+            "name": "Bột mì",
+            "quantity": "200",
+            "unit": "g",
+            "note": None,
+            "evidence_spans": visual,
+            "basis": "observed",
+            "quote": None,
+            "on_screen_text": "Bột mì 200 g",
+        },
+        {
+            "name": "Đường",
+            "quantity": "50",
+            "unit": "g",
+            "note": None,
+            "evidence_spans": audio,
+            "basis": "stated",
+            "quote": "thêm 50 g đường",
+            "on_screen_text": None,
+        },
+    ]
+    return payload
+
+
+class FakeASR:
+    def __init__(self, text):
+        self.text, self.calls = text, 0
+
+    def transcribe(self, audio, check_cancel):
+        from app.schemas.verification import Transcript, Word
+
+        self.calls += 1
+        assert audio.stat().st_size > 0
+        words = self.text.split()
+        return Transcript(
+            language="vi",
+            words=[Word(start=0.2 + 0.2 * i, end=0.35 + 0.2 * i, text=w) for i, w in enumerate(words)],
+        )
+
+
+class FakeOCR:
+    def __init__(self, text="Bột mì 200 g", delay=0.0):
+        self.text, self.delay, self.frames = text, delay, []
+
+    def read(self, image, language=None):
+        assert image.stat().st_size > 0
+        self.frames.append(image.name)
+        time.sleep(self.delay)
+        return self.text
+
+
+# far enough apart that the matcher does not read the two numbers as a range or an alternative
+BOTH_SAID = "đặt nhiệt độ 180 độ rồi khuấy đều tay cho bột thật mịn và sau đó thêm 50 g đường"
+
+
+def use_engines(monkeypatch, cfg, asr, ocr):
+    cfg.asr_engine, cfg.ocr_engine, cfg.chunk_seconds = "faster-whisper", "paddleocr", 60
+    monkeypatch.setattr("app.services.verification.pipeline.get_asr", lambda settings: asr)
+    monkeypatch.setattr("app.services.verification.pipeline.get_ocr", lambda settings: ocr)
+
+
+def record_phases(monkeypatch):
+    phases = []
+    original = Worker.phase
+
+    def phase(self, job_id, name, completed=None, total=None):
+        phases.append(name)
+        return original(self, job_id, name, completed, total)
+
+    monkeypatch.setattr(Worker, "phase", phase)
+    return phases
+
+
+def verified_generation(env, voiced_clip, monkeypatch, asr, ocr):
+    client, worker, cfg = env
+    use_engines(monkeypatch, cfg, asr, ocr)
+    project, asset = create_uploaded(env, voiced_clip)
+    assert asset["has_audio"] == 1
+    patch_provider(monkeypatch, grounded_payload)
+    job, _ = enqueue_analysis(env, project, asset)
+    phases = record_phases(monkeypatch)
+    worker.once()
+    detail = client.get(f"/api/v1/jobs/{job['id']}").json()
+    document = client.get(f"/api/v1/projects/{project['id']}/document").json()
+    generation = client.get(f"/api/v1/generations/{document['revision']['generation_id']}").json()
+    return project, asset, detail, document, generation, phases
+
+
+def test_pipeline_writes_verification_and_marks_review(env, voiced_clip, monkeypatch):
+    client, worker, cfg = env
+    asr = FakeASR("đặt nhiệt độ 180 độ rồi khuấy đều")
+    ocr = FakeOCR()
+    project, asset, detail, document, generation, phases = verified_generation(
+        env, voiced_clip, monkeypatch, asr, ocr
+    )
+    assert detail["state"] == "needs_review", detail
+    assert phases.index("transcribing") < phases.index("uploading")
+    assert phases.index("extracting_evidence") < phases.index("verifying") < phases.index("saving")
+    assert generation["quality_status"] == "needs_review"
+    report = generation["verification"]
+    assert report["asr_status"] == "ok" and report["ocr_status"] == "ok"
+    items = report["items"]
+    assert set(items) == {"materials/0", "materials/1", "steps/0/parameters/0"}
+    assert (items["steps/0/parameters/0"]["status"], items["steps/0/parameters/0"]["method"]) == (
+        "verified",
+        "asr",
+    )
+    assert (items["materials/0"]["status"], items["materials/0"]["method"]) == ("verified", "ocr")
+    assert items["materials/1"]["status"] == "unverified"
+    assert 1 <= len(ocr.frames) <= 3 and asr.calls == 1
+    assert generation["draft"]["schema_version"] == "2.0" and "yield" in generation["draft"]
+    assert "verification_json_path" not in generation
+    markdown = document["revision"]["markdown"]
+    assert "✓ khớp lời nói" in markdown and "? chưa kiểm chứng" in markdown
+    assert "✓ khớp chữ trên màn hình" in markdown
+    assert not any(w.get("code") == "VERIFICATION_DEGRADED" for w in detail["warnings"])
+    assert not (cfg.data_dir / "projects" / project["id"] / "derived" / detail["id"]).exists()
+
+
+def test_verify_job_reruns_without_provider(env, voiced_clip, monkeypatch):
+    client, worker, cfg = env
+    project, asset, detail, document, generation, _ = verified_generation(
+        env, voiced_clip, monkeypatch, FakeASR("đặt nhiệt độ 180 độ rồi khuấy đều"), FakeOCR()
+    )
+    assert generation["verification"]["items"]["materials/1"]["status"] == "unverified"
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("verify must not call the AI provider")
+
+    monkeypatch.setattr(MockProvider, "analyze", forbidden)
+    monkeypatch.setattr(MockProvider, "upload", forbidden)
+    monkeypatch.setattr("app.workers.runner.get_provider", forbidden)
+    asr = FakeASR(BOTH_SAID)
+    use_engines(monkeypatch, cfg, asr, FakeOCR())
+    cfg.asr_model = "medium"  # a new ASR configuration has its own transcript cache entry
+    phases = record_phases(monkeypatch)
+    response = client.post(f"/api/v1/generations/{generation['id']}/verify")
+    assert response.status_code == 202, response.text
+    job = response.json()
+    assert job["kind"] == "verify"
+    again = client.post(f"/api/v1/generations/{generation['id']}/verify")
+    assert again.status_code == 409 and again.json()["error"]["code"] == "JOB_IN_PROGRESS"
+    worker.once()
+    finished = client.get(f"/api/v1/jobs/{job['id']}").json()
+    assert finished["state"] == "succeeded", finished
+    assert "transcribing" in phases and "verifying" in phases and asr.calls == 1
+    after = client.get(f"/api/v1/generations/{generation['id']}").json()
+    assert after["verification"]["items"]["materials/1"]["status"] == "verified"
+    assert after["quality_status"] == "succeeded"
+    path = cfg.data_dir / f"projects/{project['id']}/generations/{generation['id']}/document.md"
+    assert "? chưa kiểm chứng" not in path.read_text()
+    revisions = client.get(f"/api/v1/documents/{document['id']}/revisions").json()["items"]
+    assert len(revisions) == 1  # re-verification never creates a revision by itself
+
+
+def test_verify_route_requires_csrf_and_known_generation(env, generated):
+    client, worker, cfg = env
+    project, asset, job, doc = generated
+    generation_id = doc["revision"]["generation_id"]
+    forged = client.post(f"/api/v1/generations/{generation_id}/verify", headers={"X-CSRF-Token": "bad"})
+    assert forged.status_code == 403
+    assert client.post("/api/v1/generations/missing/verify").status_code == 404
+
+
+def test_verify_job_on_v1_generation(env, generated, monkeypatch):
+    client, worker, cfg = env
+    project, asset, job, doc = generated
+    generation_id = doc["revision"]["generation_id"]
+    span = {"start_sec": 0, "end_sec": 2, "source": "visual", "description": "Màn hình"}
+    v1 = {
+        "schema_version": "1.0",
+        "title": "Tài liệu cũ",
+        "summary": "Bản v1",
+        "language": "vi",
+        "objectives": [],
+        "prerequisites": [],
+        "tools": [{"name": "Python", "version": "3.13", "evidence_spans": [span]}],
+        "steps": [
+            {
+                "local_id": "s1",
+                "title": "Mở terminal",
+                "start_sec": 0,
+                "end_sec": 2,
+                "actions": ["Mở terminal"],
+                "expected_result": None,
+                "commands": [],
+                "evidence_spans": [span],
+                "screenshot_candidates_sec": [1],
+                "needs_review": False,
+                "review_reason": None,
+            }
+        ],
+        "troubleshooting": [],
+        "uncertainties": [],
+    }
+    path = cfg.data_dir / f"projects/{project['id']}/generations/{generation_id}/draft.json"
+    path.write_text(json.dumps(v1))
+    monkeypatch.setattr("app.workers.runner.get_provider", lambda *a: (_ for _ in ()).throw(AssertionError()))
+    response = client.post(f"/api/v1/generations/{generation_id}/verify")
+    assert response.status_code == 202, response.text
+    worker.once()
+    assert client.get(f"/api/v1/jobs/{response.json()['id']}").json()["state"] == "succeeded"
+    generation = client.get(f"/api/v1/generations/{generation_id}").json()
+    assert generation["verification"]["items"] == {}
+    assert generation["draft"]["schema_version"] == "2.0" and generation["draft"]["domain"] == "software"
+    assert generation["draft"]["equipment"][0]["spec"] == "3.13"
+
+
+def test_generation_without_verification_returns_null(env, generated):
+    client, worker, cfg = env
+    project, asset, job, doc = generated
+    generation_id = doc["revision"]["generation_id"]
+    with worker.Session.begin() as s:
+        s.execute(update(Generation).values(verification_json_path=None))
+    assert client.get(f"/api/v1/generations/{generation_id}").json()["verification"] is None
+
+
+def test_ocr_budget_exhaustion_degrades_but_completes(env, voiced_clip, monkeypatch):
+    client, worker, cfg = env
+    cfg.ocr_timeout_seconds = 1
+    ocr = FakeOCR(delay=1.1)
+    project, asset, detail, document, generation, _ = verified_generation(
+        env, voiced_clip, monkeypatch, FakeASR(BOTH_SAID), ocr
+    )
+    assert detail["state"] == "needs_review", detail
+    assert len(ocr.frames) == 1
+    item = generation["verification"]["items"]["materials/0"]
+    assert item["status"] == "not_checked" and item["reason"] == "hết thời gian OCR"
+    assert generation["verification"]["ocr_status"] == "failed"
+    assert {"code": "VERIFICATION_DEGRADED", "asr": "ok", "ocr": "failed"} in detail["warnings"]
+    assert generation["quality_status"] == "needs_review"
+
+
+def test_silent_video_skips_asr_without_extracting_audio(env, clip, monkeypatch):
+    client, worker, cfg = env
+    asr = FakeASR("đặt nhiệt độ 180 độ")
+    use_engines(monkeypatch, cfg, asr, FakeOCR())
+    calls = []
+    monkeypatch.setattr("app.services.verification.pipeline.extract_audio", lambda *a, **k: calls.append(a))
+    project, asset = create_uploaded(env, clip)
+    assert asset["has_audio"] == 0
+    patch_provider(monkeypatch, grounded_payload)
+    job, _ = enqueue_analysis(env, project, asset)
+    worker.once()
+    detail = client.get(f"/api/v1/jobs/{job['id']}").json()
+    assert detail["state"] == "needs_review" and not calls and asr.calls == 0
+    document = client.get(f"/api/v1/projects/{project['id']}/document").json()
+    generation = client.get(f"/api/v1/generations/{document['revision']['generation_id']}").json()
+    assert generation["verification"]["asr_status"] == "skipped"
+    assert generation["verification"]["items"]["steps/0/parameters/0"]["status"] == "not_checked"
+
+
+def test_delete_project_removes_cached_transcript(env, voiced_clip, monkeypatch):
+    client, worker, cfg = env
+    project, asset, detail, *_ = verified_generation(
+        env, voiced_clip, monkeypatch, FakeASR(BOTH_SAID), FakeOCR()
+    )
+    cached = list((cfg.data_dir / "transcripts").glob(f"{asset['sha256']}-*.json"))
+    assert len(cached) == 1
+    assert client.delete(f"/api/v1/projects/{project['id']}").status_code == 202
+    worker.once()
+    assert not cached[0].exists()
