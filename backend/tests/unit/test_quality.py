@@ -74,7 +74,7 @@ def test_later_chunk_state_cannot_become_a_global_prerequisite(draft):
     assert merged.prerequisites[1].evidence_spans[0].start_sec == 8
     assert second.prerequisites[0].scope == "tutorial"
     text = markdown(merged)
-    preparation = text.split("## Chuẩn bị", 1)[1].split("## Công cụ", 1)[0]
+    preparation = text.split("## Chuẩn bị", 1)[1].split("## Dụng cụ", 1)[0]
     assert "Initial requirement" in preparation and "Installation already running" not in preparation
     assert "Installation already running" in text.split("## Ngữ cảnh theo đoạn", 1)[1]
     assert "Trong phạm vi đoạn nguồn [00:00:08]" in text

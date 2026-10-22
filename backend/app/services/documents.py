@@ -1,23 +1,10 @@
-import re
 from difflib import SequenceMatcher
 from app.schemas.tutorial_v2 import TutorialDraftV2
 from app.core.errors import AppError
+from app.services.rendering import escape, render_markdown, stamp, supported_claim  # noqa: F401
 from app.core.storage import sha256, uid
 from app.db.models import Document, Revision, now
 from sqlalchemy import update
-
-
-def stamp(seconds):
-    s = int(seconds)
-    return f"{s // 3600:02}:{s // 60 % 60:02}:{s % 60:02}"
-
-
-def escape(value):
-    return re.sub(r"([\\`*_{}\[\]<>#+.!|~-])", r"\\\1", str(value)).replace("\n", " ")
-
-
-def supported_claim(claim):
-    return claim.basis in ("observed", "stated")
 
 
 def has_review_claims(draft):
@@ -139,126 +126,6 @@ def assemble(parts, duration, max_steps=80):
         return TutorialDraftV2.model_validate(first, context={"duration": duration})
     except ValueError:
         raise AppError("DOCUMENT_LIMIT_EXCEEDED", "Kết quả ghép vượt schema; hãy tách video.", 422)
-
-
-def render_markdown(draft, asset, model, generation, evidence):
-    en = draft.language == "en"
-
-    def claim(text, spans):
-        return escape(text) + " " + " ".join(f"[{stamp(s.start_sec)}](#t={s.start_sec:.3f})" for s in spans)
-
-    lines = [
-        f"# {escape(draft.title)}",
-        "",
-        "> Draft: verify against the video." if en else "> Bản nháp: cần kiểm tra lại với video nguồn.",
-        "",
-        escape(draft.summary),
-        "",
-    ]
-    sections = [
-        ("Objectives" if en else "Mục tiêu", [escape(v) for v in draft.objectives]),
-        (
-            "Prerequisites" if en else "Chuẩn bị",
-            [
-                claim(p.text, p.evidence_spans)
-                for p in draft.prerequisites
-                if p.scope == "tutorial" and supported_claim(p)
-            ],
-        ),
-        (
-            "Tools" if en else "Công cụ",
-            [claim(t.name + (" " + t.spec if t.spec else ""), t.evidence_spans) for t in draft.equipment],
-        ),
-    ]
-    for title, values in sections:
-        lines += (
-            [f"## {title}", ""]
-            + (
-                ["- " + v for v in values]
-                or ["Not mentioned in the video." if en else "Không được nêu trong video."]
-            )
-            + [""]
-        )
-    context = [
-        claim(p.text, p.evidence_spans)
-        for p in draft.prerequisites
-        if p.scope == "clip" and supported_claim(p)
-    ]
-    if context:
-        lines += ["## Clip context" if en else "## Ngữ cảnh theo đoạn", ""]
-        lines += ["- " + value for value in context] + [""]
-    lines += ["## Steps" if en else "## Các bước thực hiện", ""]
-    for index, step in enumerate(draft.steps):
-        lines += [
-            f"### {index + 1}. {escape(step.title)}",
-            "",
-            f"[{stamp(step.start_sec)}](#t={step.start_sec:.3f}) · {escape(step.local_id)}",
-            "",
-        ]
-        if step.needs_review:
-            lines += ["> " + ("Needs review: " if en else "Cần kiểm tra: ") + escape(step.review_reason), ""]
-        lines += ["- " + escape(a) for a in step.actions] + [""]
-        for command in step.exact_inputs:
-            fence = "`" * max(3, max([len(m) for m in re.findall(r"`+", command.text)] or [0]) + 1)
-            language = re.sub("[^a-zA-Z0-9_+-]", "", command.language or "")
-            lines += [f"{fence}{language}", command.text, fence, "", f"*{escape(command.completeness)}*", ""]
-        if step.expected_result:
-            lines += [("Expected result: " if en else "Kết quả: ") + escape(step.expected_result), ""]
-        for span in step.evidence_spans:
-            lines += [
-                f"- {escape(span.source)} [{stamp(span.start_sec)}](#t={span.start_sec:.3f}): {escape(span.description)}"
-            ]
-        lines += [""]
-        item = evidence.get(step.local_id)
-        if item:
-            lines += [
-                f"![{escape(step.title)}](assets/{item.id}.png)",
-                "",
-                f"*{stamp(item.actual_sec)} · {escape(step.local_id)} · "
-                + ("Not visually verified" if en else "Chưa kiểm tra bằng mắt")
-                + "*",
-                "",
-            ]
-        elif not any(s.source in ("visual", "both") for s in step.evidence_spans):
-            lines += ["Audio evidence only." if en else "Chỉ có bằng chứng âm thanh.", ""]
-    lines += ["## Troubleshooting" if en else "## Lỗi và cách xử lý", ""]
-    lines += [
-        "- " + claim(c.text, c.evidence_spans) for c in draft.troubleshooting if supported_claim(c)
-    ] or ["Not mentioned in the video." if en else "Không được nêu trong video."]
-    lines += ["", "## Needs review" if en else "## Điểm chưa rõ", ""]
-    reviews = []
-    for uncertainty in draft.uncertainties:
-        scope = "Within this source segment" if en else "Trong phạm vi đoạn nguồn"
-        if uncertainty.start_sec is not None:
-            scope += (
-                f" [{stamp(uncertainty.start_sec)}](#t={uncertainty.start_sec:.3f})"
-                f" {'to' if en else 'đến'} {stamp(uncertainty.end_sec)}"
-            )
-        reviews.append(scope + ": " + escape(uncertainty.description))
-    for label, claims in (
-        ("Prerequisite" if en else "Chuẩn bị", draft.prerequisites),
-        ("Troubleshooting" if en else "Xử lý lỗi", draft.troubleshooting),
-    ):
-        for item in claims:
-            if not supported_claim(item):
-                reason = "insufficient evidence" if en else "chưa đủ bằng chứng"
-                reviews.append(f"{label}, {reason}: " + claim(item.text, item.evidence_spans))
-    lines += ["- " + value for value in reviews] or [
-        "No uncertainty reported." if en else "Không có mục được báo."
-    ]
-    lines += [
-        "",
-        "## Source" if en else "## Thông tin nguồn",
-        "",
-        f"- File: {escape(asset.original_name)}",
-        f"- Duration: {stamp(asset.duration_sec)}",
-        f"- Model: {escape(model)}",
-        f"- Generation: {generation.id}",
-        f"- Created (UTC): {generation.created_at}",
-        "- Pipeline: 0.1.0",
-        "",
-    ]
-    return "\n".join(lines)
 
 
 def create_revision(session, document, base_revision, markdown, source, generation_id=None):
