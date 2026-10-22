@@ -5,6 +5,7 @@ from app.providers.mock import MockProvider
 from app.schemas.tutorial_v2 import ExactInput, GroundedClaim, Material, Parameter, TutorialDraftV2
 from app.schemas.verification import Transcript, Word
 from app.services.verification.matcher import (
+    NO_VALUE,
     contains_numbers,
     exact_input_matches,
     fuzzy_contains,
@@ -27,7 +28,9 @@ def transcript(text, at=10.0, language="vi"):
     return Transcript(language=language, words=words)
 
 
-def material(quantity="200", quote="200 gram bột", basis="stated", on_screen_text=None, spans=None, unit="g"):
+def material(
+    quantity="200", quote="200 gram bột", basis="stated", on_screen_text=None, spans=None, unit="gram"
+):
     return Material(
         name="Bột",
         quantity=quantity,
@@ -102,6 +105,7 @@ def verify(item, tr=None, ocr=None):
         ("hai nghìn năm trăm", "vi", ["2500"]),
         ("mười lăm phút", "vi", ["15"]),
         ("twenty five and one hundred and five", "en", ["25", "105"]),
+        ("twenty-four minutes", "en", ["24"]),
         ("two three minutes", "en", ["2", "3"]),
         ("hai trăm năm mươi gram", "ko", []),
         ("1.000 gram", "vi", ["1", "0"]),
@@ -336,8 +340,253 @@ def test_iter_grounded_items_paths():
 def test_verify_settings_are_in_snapshot_and_bounded():
     snap = Settings(ai_provider="mock").snapshot()
     assert (snap["verify_window_seconds"], snap["verify_text_threshold"]) == (5, 85)
-    assert (snap["verify_input_threshold"], snap["verify_max_ocr_frames"]) == (95, 3)
+    assert snap["verify_max_ocr_frames"] == 3
+    assert "verify_input_threshold" not in snap
     with pytest.raises(ValueError):
         Settings(ai_provider="mock", verify_text_threshold=101)
-    with pytest.raises(ValueError):
-        Settings(ai_provider="mock", verify_max_ocr_frames=0)
+    for bad in ({"verify_max_ocr_frames": 0}, {"verify_max_ocr_frames": 11}, {"verify_window_seconds": 61}):
+        with pytest.raises(ValueError):
+            Settings(ai_provider="mock", **bad)
+
+
+# ---- regression: false-verified paths found in review ----------------------------------------
+
+
+def stated_exact(text, quote=None):
+    return ExactInput(
+        kind="command",
+        language="bash",
+        text=text,
+        completeness="complete",
+        evidence_spans=[span(source="audio")],
+        basis="stated",
+        quote=quote or text,
+        on_screen_text=None,
+    )
+
+
+def stated_param(value, unit, quote):
+    item = parameter(value=value, unit=unit, basis="stated", quote=quote, on_screen_text=None, spans=[span()])
+    return item
+
+
+def ocr(item, *texts):
+    return verify(item, None, [(11.0, t) for t in texts])
+
+
+SHORTER_COMMAND_CASES = [
+    ("rm -rf /", "rm -rf /tmp/build", "rm -rf /tmp/build"),
+    ("rm -rf /tmp", "rm -rf /tmp", "$ rm -rf /tmp/build"),
+    ("ls", "ls", "cat tools/install.sh"),
+    ("rm -rf /tmp/x", "rm -rf /tmp/x", "rm -rf /tmpx"),
+    ("sudo rm -rf /var/lib/docker", "sudo rm -rf /var/lib/docker", "sudo rm -rf /var/lib/dockor"),
+    ("git push --force", "git push --force", "git push --forge"),
+    ("pip install flask", "pip install flask", "x pip install flask2"),
+]
+
+
+@pytest.mark.parametrize("text,on_screen,screen", SHORTER_COMMAND_CASES)
+def test_exact_input_is_never_fuzzy_or_a_fragment(text, on_screen, screen):
+    assert ocr(exact(text=text, on_screen_text=on_screen), screen).status == "unverified"
+
+
+def test_exact_input_boundaries_are_whitespace_or_edges():
+    item = exact(text="rm -rf /tmp", on_screen_text="rm -rf /tmp")
+    assert ocr(item, "$ rm -rf /tmp").status == "verified"
+    assert ocr(item, "line one\nrm  -rf   /tmp\nline three").status == "verified"
+    assert ocr(item, "rm -rf /tmp.").status == "unverified"
+    assert not exact_input_matches("ls", "tools/install.sh")
+
+
+@pytest.mark.parametrize(
+    "spoken", ["giờ ta chạy pip install flash nhé", "ta gõ pip install flasks", "pip install flask."]
+)
+def test_spoken_exact_input_is_exact(spoken):
+    assert verify(stated_exact("pip install flask"), transcript(spoken)).status == "unverified"
+    assert verify(stated_exact("npm run build"), transcript("ta gõ npm run built")).status == "unverified"
+
+
+def test_spoken_exact_input_verifies_when_exact():
+    out = verify(stated_exact("pip install flask"), transcript("giờ ta chạy pip install flask nhé"))
+    assert (out.status, out.matched_text, out.matched_sec) == (
+        "verified",
+        "pip install flask",
+        10.0 + 3 * 0.4,
+    )
+
+
+def test_exact_input_text_must_equal_its_source_text():
+    item = exact(text="rm -rf /", on_screen_text="rm -rf /tmp/build")
+    assert ocr(item, "rm -rf /tmp/build").reason == NO_VALUE
+
+
+@pytest.mark.parametrize(
+    "item,spoken",
+    [
+        (material(quantity="두", unit="큰술", quote="설탕 두 큰술"), "설탕 세 큰술 모두 넣어주세요"),
+        (material(quantity="200", unit="ml", quote="200 gram bột"), "cho 200 gram bột và 200 ml nước"),
+        (stated_param("lửa lớn", None, "để lửa nhỏ"), "để lửa nhỏ rồi sau đó lửa lớn"),
+        (material(quantity="200", unit="gram", quote="200 gram bột"), "cho 20 gram bột và 200 muỗng nước"),
+    ],
+)
+def test_required_values_come_from_the_quote_and_the_segment(item, spoken):
+    language = "ko" if "설탕" in spoken else "vi"
+    assert verify(item, transcript(spoken, language=language)).status == "unverified"
+
+
+def test_required_value_must_sit_inside_the_matched_segment():
+    item = material(quantity="200", unit="gram", quote="cho gram bột vào tô").model_copy(
+        update={"quote": "cho 200 gram bột"}
+    )
+    assert verify(item, transcript("cho gram bột rồi 200 muỗng nước", language="vi")).status == "unverified"
+
+
+def test_ocr_required_value_comes_from_the_text_and_segment():
+    item = parameter(value="cao", unit=None, on_screen_text="nhiệt độ thấp")
+    assert ocr(item, "nhiệt độ thấp | chế độ cao").reason == NO_VALUE
+    item = parameter(value="cao", unit=None, on_screen_text="nhiệt độ cao")
+    assert ocr(item, "nhiệt độ thấp | chế độ cao").status == "unverified"
+    assert ocr(item, "Nhiệt độ cao").status == "verified"
+
+
+@pytest.mark.parametrize(
+    "spoken,quote,value,unit",
+    [
+        ("nướng ở một trăm năm độ nhé", "nướng ở 105 độ", "105", "độ"),
+        ("nướng ở một trăm năm độ nhé", "nướng ở 150 độ", "150", "độ"),
+        ("nướng hai trăm tư độ", "nướng 204 độ", "204", "độ"),
+        ("nướng hai trăm tư độ", "nướng 240 độ", "240", "độ"),
+        ("cho một trăm mốt gram", "cho 101 gram", "101", "gram"),
+        ("cho một nghìn hai gram bột", "cho 1002 gram bột", "1002", "gram"),
+        ("cho một nghìn hai gram bột", "cho 1200 gram bột", "1200", "gram"),
+        ("bảo hành hai mươi năm", "bảo hành 25 năm", "25", "năm"),
+    ],
+)
+def test_colloquial_vietnamese_numbers_are_not_read(spoken, quote, value, unit):
+    assert verify(stated_param(value, unit, quote), transcript(spoken)).status == "unverified"
+
+
+@pytest.mark.parametrize(
+    "spoken,quote,value,unit",
+    [
+        ("nướng ở một trăm năm mươi độ nhé", "nướng ở 150 độ", "150", "độ"),
+        ("nướng ở một trăm linh năm độ nhé", "nướng ở 105 độ", "105", "độ"),
+        ("cho hai trăm mười lăm gram bột", "cho 215 gram bột", "215", "gram"),
+        ("cho một nghìn hai trăm gram bột", "cho 1200 gram bột", "1200", "gram"),
+    ],
+)
+def test_formal_vietnamese_numbers_still_verify(spoken, quote, value, unit):
+    assert verify(stated_param(value, unit, quote), transcript(spoken)).status == "verified"
+
+
+@pytest.mark.parametrize(
+    "quote,spoken",
+    [
+        ("a", "hôm nay ta làm bánh"),
+        ("nóng", "cái này không nóng lắm"),
+        ("ok", "được rồi okay nhé"),
+    ],
+)
+def test_very_short_quotes_do_not_verify(quote, spoken):
+    out = verify(claim(quote=quote, text="x"), transcript(spoken))
+    assert out.status == "unverified"
+    assert out.reason == "nguyên văn quá ngắn" or "không khớp" in out.reason
+
+
+def test_short_value_quote_is_too_short():
+    out = verify(stated_param("2", None, "2"), transcript("lấy 2 cái và 5 cái"))
+    assert (out.status, out.reason) == ("unverified", "nguyên văn quá ngắn")
+    assert verify(claim(quote="nóng", text="x"), transcript("cái này nóng")).reason == "nguyên văn quá ngắn"
+
+
+def test_matches_snap_to_whole_words():
+    assert verify(claim(quote="cho đường", text="x"), transcript("cho đường nhé")).matched_text == "cho đường"
+    out = verify(claim(quote="ận nóng", text="x"), transcript("các bạn cẩn thận nóng nhé"))
+    assert out.status == "verified" and out.matched_text == "thận nóng"
+    assert out.matched_sec == pytest.approx(10.0 + 3 * 0.4)
+
+
+@pytest.mark.parametrize(
+    "quote,spoken",
+    [
+        ("cho 1/2 chén đường", "cho 1-2 chén đường"),
+        ("cho 1/2 chén đường", "cho 1 2 chén đường"),
+        ("cho 1,5 kg bột", "cho một năm kg bột"),
+        ("cho 1,5 kg bột", "cho 15 kg bột"),
+        ("cho 1.5 kg bột", "cho 1 5 kg bột"),
+        ("đếm 2 2 nhịp", "đếm 1 2 nhịp"),
+        ("cho 12 gram bột", "cho 1 2 gram bột"),
+        ("cho 12 gram bột", "cho 120 gram bột"),
+    ],
+)
+def test_claim_numbers_keep_their_shape(quote, spoken):
+    assert verify(claim(quote=quote, text="x"), transcript(spoken)).status == "unverified"
+
+
+def test_claim_numbers_equal_shape_verifies():
+    assert (
+        verify(claim(quote="cho 1,5 kg bột", text="1,5 kg"), transcript("cho 1.5 kg bột")).status
+        == "verified"
+    )
+    assert (
+        verify(claim(quote="cho 1/2 chén đường", text="1/2"), transcript("cho 1/2 chén đường")).status
+        == "verified"
+    )
+
+
+@pytest.mark.parametrize(
+    "value,unit,quote,spoken",
+    [
+        ("1", "tiếng", "nướng 1 tiếng", "nướng một tiếng rưỡi là được"),
+        ("3", "phút", "nấu 3 phút", "nấu khoảng 2-3 phút"),
+        ("3", "phút", "nấu 3 phút", "nấu 2-3 phút nhé"),
+        ("18", "độ", "cấp đông 18 độ", "để tủ cấp đông âm 18 độ"),
+        ("2", "cups", "add 2 cups of flour", "add two and a half cups of flour"),
+        ("5", "phút", "nướng 5 phút", "nướng 1.5 phút"),
+        ("5", "phút", "nướng 5 phút", "nướng 1,5 phút"),
+        ("200", "gram", "cho 200 gram bột", "cho hai trăm rưỡi gram bột"),
+    ],
+)
+def test_modifiers_and_range_edges_next_to_a_number_block_verification(value, unit, quote, spoken):
+    language = "en" if "cups" in spoken else "vi"
+    out = verify(stated_param(value, unit, quote), transcript(spoken, language=language))
+    assert out.status == "unverified"
+
+
+@pytest.mark.parametrize(
+    "value,screen",
+    [("18", "Tủ đông -18°C"), ("5", "1.5 phút"), ("5", "Nồng độ 0.5%"), ("5", "15 phút"), ("3", "2-3 phút")],
+)
+def test_ocr_number_edges_block_verification(value, screen):
+    unit = "%" if "%" in screen else None
+    text = {"18": "18°C", "5": "5%" if "%" in screen else "5 phút", "3": "3 phút"}[value]
+    assert ocr(parameter(value=value, unit=unit, on_screen_text=text), screen).status == "unverified"
+    assert ocr(parameter(value=value, unit=unit, on_screen_text=text), text).status == "verified"
+
+
+def test_two_numbers_and_ranges_verify_when_equal():
+    out = verify(stated_param("2-3", "phút", "nấu khoảng 2-3 phút"), transcript("nấu khoảng 2-3 phút nhé"))
+    assert out.status == "verified"
+    assert (
+        verify(stated_param("-18", "độ", "để ở -18 độ"), transcript("để ở -18 độ nhé")).status == "verified"
+    )
+
+
+def test_unit_attached_to_the_number_is_accepted():
+    assert ocr(parameter(value="200", unit="g", on_screen_text="200g"), "Bột 200g").status == "verified"
+    assert ocr(parameter(value="180", unit="°C", on_screen_text="180°C"), "Nướng 180°C").status == "verified"
+
+
+def test_number_tokens_shapes():
+    from app.services.verification.numbers import number_tokens
+
+    assert number_tokens("1,5 1.5 1/2 2-3 -18 007 1.000", None) == [
+        "1.5",
+        "1.5",
+        "1/2",
+        "2-3",
+        "-18",
+        "7",
+        "1.0",
+    ]
+    assert number_tokens("pt-18 và 3,", None) == ["18", "3"]
