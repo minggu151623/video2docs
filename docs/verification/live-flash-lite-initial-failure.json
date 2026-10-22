@@ -1,0 +1,169 @@
+{
+  "started_at": "2026-10-21T03:35:39.284630+00:00",
+  "source_sha256": "00c1f1ce4093a3c7c6f6965fb5277453b236785dd420ad73fdf673be11553f5d",
+  "provider": "gemini",
+  "kind": "full_video_live_test",
+  "checks": {
+    "validated_video": true
+  },
+  "retry_charge_acknowledged": true,
+  "chunk_seconds": 120.0,
+  "user_reported_limits": {
+    "input_tpm": 250000,
+    "rpm": 15,
+    "rpd": 500
+  },
+  "requested_model": "gemini-3.1-flash-lite",
+  "previous_analysis_job_id": "57af5511-6dec-4527-ba86-11f93b1ed745",
+  "project_id": "96b8a84e-2330-4233-aa68-2024e6357333",
+  "project_url": "http://127.0.0.1:8002/#96b8a84e-2330-4233-aa68-2024e6357333",
+  "asset_id": "708e11d4-8448-45f1-9552-d59a29f9131e",
+  "validation_job": {
+    "id": "61852047-0653-4abf-af7a-4a99a4e72e0e",
+    "project_id": "96b8a84e-2330-4233-aa68-2024e6357333",
+    "asset_id": "708e11d4-8448-45f1-9552-d59a29f9131e",
+    "kind": "validate_asset",
+    "state": "succeeded",
+    "phase": "succeeded",
+    "completed_units": 0,
+    "total_units": 0,
+    "idempotency_key": null,
+    "request_hash": null,
+    "retry_of": null,
+    "cancel_requested_at": null,
+    "heartbeat_at": "2026-10-20T08:35:01.983841+00:00",
+    "attempt": 1,
+    "error_code": null,
+    "error_message": null,
+    "warnings_json": "[]",
+    "created_at": "2026-10-20T08:35:01.002441+00:00",
+    "started_at": "2026-10-20T08:35:01.983817+00:00",
+    "finished_at": "2026-10-20T08:35:11.119973+00:00",
+    "warnings": [],
+    "cleanup_pending": 0,
+    "provider_calls": [],
+    "is_mock": false,
+    "export": null
+  },
+  "duration_sec": 216.642177,
+  "analysis_job_id": "bb259ae0-012c-46b0-a9f4-1e62ddff69ed",
+  "analysis_job": {
+    "id": "bb259ae0-012c-46b0-a9f4-1e62ddff69ed",
+    "project_id": "96b8a84e-2330-4233-aa68-2024e6357333",
+    "asset_id": "708e11d4-8448-45f1-9552-d59a29f9131e",
+    "kind": "analyze",
+    "state": "failed",
+    "phase": "failed",
+    "completed_units": 1,
+    "total_units": 2,
+    "idempotency_key": "ddae31ba-a004-4bf2-b7c9-c84747160a94",
+    "request_hash": "5d6adca9e70ddd1c474d0575cbf549371ccf2353bef58a7a8d5b39ad737464fc",
+    "retry_of": null,
+    "cancel_requested_at": null,
+    "heartbeat_at": "2026-10-21T03:37:40.937020+00:00",
+    "attempt": 1,
+    "error_code": "SCHEMA_INVALID",
+    "error_message": "JSON sai schema sau giới hạn repair; checkpoint còn được giữ.",
+    "warnings_json": "[{\"code\": \"SCHEMA_INVALID\", \"attempt\": 1, \"fields\": [{\"loc\": [\"steps\", \"2\"], \"type\": \"value_error\", \"message\": \"Value error, Step outside clip timeline\"}, {\"loc\": [\"steps\", \"3\"], \"type\": \"value_error\", \"message\": \"Value error, Screenshot outside step or at EOF\"}]}, {\"code\": \"SCHEMA_INVALID\", \"attempt\": 3, \"fields\": [{\"loc\": [\"steps\", \"3\"], \"type\": \"value_error\", \"message\": \"Value error, Screenshot outside step or at EOF\"}]}]",
+    "created_at": "2026-10-21T03:35:39.949394+00:00",
+    "started_at": "2026-10-21T03:35:40.870611+00:00",
+    "finished_at": "2026-10-21T03:37:41.930549+00:00",
+    "warnings": [
+      {
+        "code": "SCHEMA_INVALID",
+        "attempt": 1,
+        "fields": [
+          {
+            "loc": [
+              "steps",
+              "2"
+            ],
+            "type": "value_error",
+            "message": "Value error, Step outside clip timeline"
+          },
+          {
+            "loc": [
+              "steps",
+              "3"
+            ],
+            "type": "value_error",
+            "message": "Value error, Screenshot outside step or at EOF"
+          }
+        ]
+      },
+      {
+        "code": "SCHEMA_INVALID",
+        "attempt": 3,
+        "fields": [
+          {
+            "loc": [
+              "steps",
+              "3"
+            ],
+            "type": "value_error",
+            "message": "Value error, Screenshot outside step or at EOF"
+          }
+        ]
+      }
+    ],
+    "cleanup_pending": 0,
+    "provider_calls": [
+      {
+        "id": "75dd6188-5673-4198-9d5a-cfcef335c4c4",
+        "job_id": "bb259ae0-012c-46b0-a9f4-1e62ddff69ed",
+        "chunk_id": "62a6a1a7-1a2e-463e-9d8b-19df4b5ab614",
+        "purpose": "analyze",
+        "attempt": 1,
+        "status": "invalid",
+        "requested_model": "gemini-3.1-flash-lite",
+        "returned_model": "gemini-3.1-flash-lite",
+        "provider_request_id": "",
+        "started_at": "2026-10-21T03:36:06.763615+00:00",
+        "finished_at": "2026-10-21T03:36:26.840188+00:00",
+        "usage_json": "{\"input_tokens\": 11290, \"output_tokens\": 1775, \"thinking_tokens\": 1241, \"billable_output_tokens\": 3016, \"output_includes_thinking\": false, \"raw\": {\"input_tokens_by_modality\": [{\"modality\": \"text\", \"tokens\": 370}, {\"modality\": \"video\", \"tokens\": 10920}], \"total_cached_tokens\": 0, \"total_input_tokens\": 11290, \"total_output_tokens\": 1775, \"total_thought_tokens\": 1241, \"total_tokens\": 14306, \"total_tool_use_tokens\": 0}}",
+        "estimated_cost_usd": null,
+        "price_snapshot_id": null,
+        "error_code": "SCHEMA_INVALID"
+      },
+      {
+        "id": "608334ea-f38b-4ef7-9042-3675c75c607c",
+        "job_id": "bb259ae0-012c-46b0-a9f4-1e62ddff69ed",
+        "chunk_id": "62a6a1a7-1a2e-463e-9d8b-19df4b5ab614",
+        "purpose": "repair",
+        "attempt": 2,
+        "status": "received",
+        "requested_model": "gemini-3.1-flash-lite",
+        "returned_model": "gemini-3.1-flash-lite",
+        "provider_request_id": "",
+        "started_at": "2026-10-21T03:36:26.850199+00:00",
+        "finished_at": "2026-10-21T03:36:39.981668+00:00",
+        "usage_json": "{\"input_tokens\": 11411, \"output_tokens\": 1459, \"thinking_tokens\": 1677, \"billable_output_tokens\": 3136, \"output_includes_thinking\": false, \"raw\": {\"input_tokens_by_modality\": [{\"modality\": \"text\", \"tokens\": 491}, {\"modality\": \"video\", \"tokens\": 10920}], \"total_cached_tokens\": 0, \"total_input_tokens\": 11411, \"total_output_tokens\": 1459, \"total_thought_tokens\": 1677, \"total_tokens\": 14547, \"total_tool_use_tokens\": 0}}",
+        "estimated_cost_usd": null,
+        "price_snapshot_id": null,
+        "error_code": null
+      },
+      {
+        "id": "aae9c134-7f19-4a61-94f1-6b18a85ff8fe",
+        "job_id": "bb259ae0-012c-46b0-a9f4-1e62ddff69ed",
+        "chunk_id": "88619ce1-3491-461a-b49a-0e424ae594d9",
+        "purpose": "analyze",
+        "attempt": 3,
+        "status": "invalid",
+        "requested_model": "gemini-3.1-flash-lite",
+        "returned_model": "gemini-3.1-flash-lite",
+        "provider_request_id": "",
+        "started_at": "2026-10-21T03:37:08.599297+00:00",
+        "finished_at": "2026-10-21T03:37:39.966503+00:00",
+        "usage_json": "{\"input_tokens\": 9649, \"output_tokens\": 1854, \"thinking_tokens\": 1895, \"billable_output_tokens\": 3749, \"output_includes_thinking\": false, \"raw\": {\"input_tokens_by_modality\": [{\"modality\": \"video\", \"tokens\": 9274}, {\"modality\": \"text\", \"tokens\": 375}], \"total_cached_tokens\": 0, \"total_input_tokens\": 9649, \"total_output_tokens\": 1854, \"total_thought_tokens\": 1895, \"total_tokens\": 13398, \"total_tool_use_tokens\": 0}}",
+        "estimated_cost_usd": null,
+        "price_snapshot_id": null,
+        "error_code": "SCHEMA_INVALID"
+      }
+    ],
+    "is_mock": false,
+    "export": null
+  },
+  "result": "requires_attention",
+  "failure_type": "RuntimeError",
+  "failure": "SCHEMA_INVALID"
+}

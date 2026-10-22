@@ -1,0 +1,10 @@
+{
+  "license": "Project-generated synthetic fixture",
+  "quality_evaluation": "Not a real user tutorial and not a Gemini quality benchmark",
+  "reference": {
+    "duration_sec": 6,
+    "fps": 10,
+    "has_audio": false,
+    "content": "FFmpeg testsrc2 test pattern; contains no tutorial steps"
+  }
+}

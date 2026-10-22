@@ -1,0 +1,274 @@
+{
+  "started_at": "2026-10-21T03:38:53.783475+00:00",
+  "source_sha256": "00c1f1ce4093a3c7c6f6965fb5277453b236785dd420ad73fdf673be11553f5d",
+  "provider": "gemini",
+  "kind": "full_video_live_test",
+  "checks": {
+    "validated_video": true,
+    "schema_validated": true,
+    "remote_cleanup_complete": true,
+    "zip_integrity_and_revision": true,
+    "pdf_text_and_pages": true,
+    "source_preserved": true,
+    "pdf_all_8_pages_visually_reviewed": true,
+    "browser_no_javascript_errors": true,
+    "browser_model_and_document_visible": true
+  },
+  "retry_charge_acknowledged": true,
+  "chunk_seconds": 120.0,
+  "user_reported_limits": {
+    "input_tpm": 250000,
+    "rpm": 15,
+    "rpd": 500
+  },
+  "requested_model": "gemini-3.1-flash-lite",
+  "previous_analysis_job_id": "bb259ae0-012c-46b0-a9f4-1e62ddff69ed",
+  "project_id": "96b8a84e-2330-4233-aa68-2024e6357333",
+  "project_url": "http://127.0.0.1:8002/#96b8a84e-2330-4233-aa68-2024e6357333",
+  "asset_id": "708e11d4-8448-45f1-9552-d59a29f9131e",
+  "validation_job": {
+    "id": "61852047-0653-4abf-af7a-4a99a4e72e0e",
+    "project_id": "96b8a84e-2330-4233-aa68-2024e6357333",
+    "asset_id": "708e11d4-8448-45f1-9552-d59a29f9131e",
+    "kind": "validate_asset",
+    "state": "succeeded",
+    "phase": "succeeded",
+    "completed_units": 0,
+    "total_units": 0,
+    "idempotency_key": null,
+    "request_hash": null,
+    "retry_of": null,
+    "cancel_requested_at": null,
+    "heartbeat_at": "2026-10-20T08:35:01.983841+00:00",
+    "attempt": 1,
+    "error_code": null,
+    "error_message": null,
+    "warnings_json": "[]",
+    "created_at": "2026-10-20T08:35:01.002441+00:00",
+    "started_at": "2026-10-20T08:35:01.983817+00:00",
+    "finished_at": "2026-10-20T08:35:11.119973+00:00",
+    "warnings": [],
+    "cleanup_pending": 0,
+    "provider_calls": [],
+    "is_mock": false,
+    "export": null
+  },
+  "duration_sec": 216.642177,
+  "analysis_job_id": "e21d7161-e0a7-4315-a8c2-706cd9c5aaab",
+  "analysis_job": {
+    "id": "e21d7161-e0a7-4315-a8c2-706cd9c5aaab",
+    "project_id": "96b8a84e-2330-4233-aa68-2024e6357333",
+    "asset_id": "708e11d4-8448-45f1-9552-d59a29f9131e",
+    "kind": "analyze",
+    "state": "needs_review",
+    "phase": "needs_review",
+    "completed_units": 2,
+    "total_units": 2,
+    "idempotency_key": "d4a3bf36-9590-4f23-947a-61e26b18e14e",
+    "request_hash": "f676ca299e8a54cd204ec75484ae7db0e795d162e68f1b0ee71e1059e35eeea9",
+    "retry_of": null,
+    "cancel_requested_at": null,
+    "heartbeat_at": "2026-10-21T03:41:04.579596+00:00",
+    "attempt": 1,
+    "error_code": null,
+    "error_message": null,
+    "warnings_json": "[]",
+    "created_at": "2026-10-21T03:38:54.229530+00:00",
+    "started_at": "2026-10-21T03:38:54.492893+00:00",
+    "finished_at": "2026-10-21T03:41:12.695452+00:00",
+    "warnings": [],
+    "cleanup_pending": 0,
+    "provider_calls": [
+      {
+        "id": "3e0cda76-030f-4585-acd4-215866405783",
+        "job_id": "e21d7161-e0a7-4315-a8c2-706cd9c5aaab",
+        "chunk_id": "07f8eee9-b4f4-4062-a7ec-8e8373f8c4ac",
+        "purpose": "analyze",
+        "attempt": 1,
+        "status": "received",
+        "requested_model": "gemini-3.1-flash-lite",
+        "returned_model": "gemini-3.1-flash-lite",
+        "provider_request_id": "",
+        "started_at": "2026-10-21T03:39:22.951042+00:00",
+        "finished_at": "2026-10-21T03:40:09.020913+00:00",
+        "usage_json": "{\"input_tokens\": 11436, \"output_tokens\": 1294, \"thinking_tokens\": 131, \"billable_output_tokens\": 1425, \"output_includes_thinking\": false, \"raw\": {\"input_tokens_by_modality\": [{\"modality\": \"text\", \"tokens\": 516}, {\"modality\": \"video\", \"tokens\": 10920}], \"total_cached_tokens\": 0, \"total_input_tokens\": 11436, \"total_output_tokens\": 1294, \"total_thought_tokens\": 131, \"total_tokens\": 12861, \"total_tool_use_tokens\": 0}}",
+        "estimated_cost_usd": null,
+        "price_snapshot_id": null,
+        "error_code": null
+      },
+      {
+        "id": "78aafad8-2aa3-4642-8bd1-b9c54bd472b4",
+        "job_id": "e21d7161-e0a7-4315-a8c2-706cd9c5aaab",
+        "chunk_id": "8804f64e-8645-4e08-83fa-71a551da1507",
+        "purpose": "analyze",
+        "attempt": 2,
+        "status": "received",
+        "requested_model": "gemini-3.1-flash-lite",
+        "returned_model": "gemini-3.1-flash-lite",
+        "provider_request_id": "",
+        "started_at": "2026-10-21T03:40:39.781409+00:00",
+        "finished_at": "2026-10-21T03:40:59.007596+00:00",
+        "usage_json": "{\"input_tokens\": 9795, \"output_tokens\": 2148, \"thinking_tokens\": 1335, \"billable_output_tokens\": 3483, \"output_includes_thinking\": false, \"raw\": {\"input_tokens_by_modality\": [{\"modality\": \"video\", \"tokens\": 9274}, {\"modality\": \"text\", \"tokens\": 521}], \"total_cached_tokens\": 0, \"total_input_tokens\": 9795, \"total_output_tokens\": 2148, \"total_thought_tokens\": 1335, \"total_tokens\": 13278, \"total_tool_use_tokens\": 0}}",
+        "estimated_cost_usd": null,
+        "price_snapshot_id": null,
+        "error_code": null
+      }
+    ],
+    "is_mock": false,
+    "export": null
+  },
+  "revision_id": "e683050b-7155-4a50-a05a-e6db6d3194a0",
+  "generation_id": "b799d6af-064c-49a6-b41a-9be01dc6aa19",
+  "step_count": 7,
+  "image_count": 7,
+  "uncertainties": [
+    {
+      "description": "Các tùy chọn cài đặt chi tiết (ngoài việc thêm vào PATH) không được hiển thị chi tiết trong clip.",
+      "start_sec": 115.0,
+      "end_sec": 120.0
+    }
+  ],
+  "evidence": [
+    {
+      "id": "94f06353-b3d2-453c-8619-c3a5badfec93",
+      "project_id": "96b8a84e-2330-4233-aa68-2024e6357333",
+      "generation_id": "b799d6af-064c-49a6-b41a-9be01dc6aa19",
+      "step_id": "c1-step_1",
+      "asset_id": "708e11d4-8448-45f1-9552-d59a29f9131e",
+      "requested_sec": 21.0,
+      "actual_sec": 21.0,
+      "sha256": "287f1c83dc6edde098d6adc1de54f323a804fde3235f5c451963114b33d71a4d",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "c6defb7c-186c-4c2f-94c6-83f821a62e0c",
+      "project_id": "96b8a84e-2330-4233-aa68-2024e6357333",
+      "generation_id": "b799d6af-064c-49a6-b41a-9be01dc6aa19",
+      "step_id": "c1-step_2",
+      "asset_id": "708e11d4-8448-45f1-9552-d59a29f9131e",
+      "requested_sec": 44.0,
+      "actual_sec": 44.0,
+      "sha256": "438d1077f9a855a745043c175771d4117639b3fd576fe5aa8fdf8d26ebda3ad7",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "5ae303c3-f29e-4708-9996-3e86c22648d4",
+      "project_id": "96b8a84e-2330-4233-aa68-2024e6357333",
+      "generation_id": "b799d6af-064c-49a6-b41a-9be01dc6aa19",
+      "step_id": "c1-step_3",
+      "asset_id": "708e11d4-8448-45f1-9552-d59a29f9131e",
+      "requested_sec": 54.0,
+      "actual_sec": 54.0,
+      "sha256": "9d14cbc451e58b23e0b42edb2db8a5b4ea528123808455d2461c1aa713415333",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "33d44845-213a-4be9-a3aa-41e990d6cd46",
+      "project_id": "96b8a84e-2330-4233-aa68-2024e6357333",
+      "generation_id": "b799d6af-064c-49a6-b41a-9be01dc6aa19",
+      "step_id": "c2-step_1",
+      "asset_id": "708e11d4-8448-45f1-9552-d59a29f9131e",
+      "requested_sec": 120.0,
+      "actual_sec": 120.0,
+      "sha256": "cc835e25a039aecad12a09d8196fedecd9e1319f84b449c0f0bede3b111769e6",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "b100d7fb-e27c-406d-94c3-5562a1220eed",
+      "project_id": "96b8a84e-2330-4233-aa68-2024e6357333",
+      "generation_id": "b799d6af-064c-49a6-b41a-9be01dc6aa19",
+      "step_id": "c2-step_2",
+      "asset_id": "708e11d4-8448-45f1-9552-d59a29f9131e",
+      "requested_sec": 140.0,
+      "actual_sec": 140.0,
+      "sha256": "82ff25d8e7928ad7ca574b66d233c423658ad5237216d3521bd404b88693a5c4",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "800e93a8-2af8-4f58-a0d4-42ed9421496b",
+      "project_id": "96b8a84e-2330-4233-aa68-2024e6357333",
+      "generation_id": "b799d6af-064c-49a6-b41a-9be01dc6aa19",
+      "step_id": "c2-step_3",
+      "asset_id": "708e11d4-8448-45f1-9552-d59a29f9131e",
+      "requested_sec": 163.0,
+      "actual_sec": 163.0,
+      "sha256": "e975bf6f477c4341f73b98f1cd4fa33ee1d4b3fdb9c61d273a4fe69a7e0e46aa",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "70c41791-7163-4015-9c84-d8f10541471f",
+      "project_id": "96b8a84e-2330-4233-aa68-2024e6357333",
+      "generation_id": "b799d6af-064c-49a6-b41a-9be01dc6aa19",
+      "step_id": "c2-step_4",
+      "asset_id": "708e11d4-8448-45f1-9552-d59a29f9131e",
+      "requested_sec": 185.0,
+      "actual_sec": 185.0,
+      "sha256": "f04d1eb3824c53146c3d84ab0f80c5dcd3ede69af248fe3400138b194532d1a4",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    }
+  ],
+  "exports": {
+    "md": {
+      "export_id": "e4325097-67b8-4c1f-86b9-7f03c20ae443",
+      "job_state": "succeeded",
+      "bytes": 6706,
+      "sha256": "3d543e7a19e89f94a6d478acd0b754394d7b60c965680e2c58db94b67aaf3af4"
+    },
+    "zip": {
+      "export_id": "f7293cd0-e63c-425a-a589-896f6ddf6da1",
+      "job_state": "succeeded",
+      "bytes": 2142042,
+      "sha256": "35c326d4c8a5cf5d75b1e992ccd76b9b3d97bc65c3018ae4d82193191271725e"
+    },
+    "pdf": {
+      "export_id": "2ea68a10-85ab-45f7-8fd1-67e563369c76",
+      "job_state": "succeeded",
+      "bytes": 2919710,
+      "sha256": "53a9aae2691a66cc4503d15aeb362187aeaec6f746e16253fe72c4b515be92a3"
+    }
+  },
+  "pdf_pages": 8,
+  "finished_at": "2026-10-21T03:41:21.190724+00:00",
+  "result": "pass",
+  "quality_assessment": "pipeline_pass_content_needs_review",
+  "review_notes": [
+    {
+      "area": "cross_chunk_context",
+      "finding": "Chunk 2 prerequisites say installation has already started; this is a chunk-entry state, not a prerequisite for the whole tutorial."
+    },
+    {
+      "area": "cross_chunk_context",
+      "finding": "The uncertainty about installation options not being shown applies to chunk 2 only; chunk 1 shows installation options."
+    },
+    {
+      "area": "grounding",
+      "finding": "PATH troubleshooting is inferred; its cited visual evidence is installation progress and does not establish the troubleshooting claim."
+    },
+    {
+      "area": "evidence_selection",
+      "finding": "Some first screenshot candidates show opening an application rather than the final result. Frames can be reselected without AI."
+    }
+  ],
+  "source_sha256_after_review": "00c1f1ce4093a3c7c6f6965fb5277453b236785dd420ad73fdf673be11553f5d"
+}

@@ -1,0 +1,320 @@
+{
+  "started_at": "2026-10-21T04:06:57.512623+00:00",
+  "source_sha256": "00c1f1ce4093a3c7c6f6965fb5277453b236785dd420ad73fdf673be11553f5d",
+  "provider": "gemini",
+  "kind": "quality_improvement_live_test",
+  "checks": {
+    "validated_video": true,
+    "schema_validated": true,
+    "remote_cleanup_complete": true,
+    "zip_integrity_and_revision": true,
+    "pdf_text_and_pages": true,
+    "source_preserved": true,
+    "pdf_all_11_pages_visually_reviewed": true,
+    "browser_no_javascript_errors": true,
+    "clip_context_separated": true,
+    "unproven_path_advice_absent": true,
+    "baseline_exports_preserved": true
+  },
+  "live_test_authorized_by_user": true,
+  "baseline_generation_id": "b799d6af-064c-49a6-b41a-9be01dc6aa19",
+  "chunk_seconds": 120.0,
+  "user_reported_limits": {
+    "input_tpm": 250000,
+    "rpm": 15,
+    "rpd": 500
+  },
+  "requested_model": "gemini-3.1-flash-lite",
+  "previous_analysis_job_id": "c3377eed-4ebe-4444-a02c-109114cf0adb",
+  "project_id": "9a591044-8489-4534-b12a-7d10672c736e",
+  "project_url": "http://127.0.0.1:8002/#9a591044-8489-4534-b12a-7d10672c736e",
+  "asset_id": "8ee9b75d-5214-4c88-a98b-bc9c8599d358",
+  "validation_job": {
+    "id": "8ae9c3a3-f6a8-472c-86a9-231d623941ab",
+    "project_id": "9a591044-8489-4534-b12a-7d10672c736e",
+    "asset_id": "8ee9b75d-5214-4c88-a98b-bc9c8599d358",
+    "kind": "validate_asset",
+    "state": "succeeded",
+    "phase": "succeeded",
+    "completed_units": 0,
+    "total_units": 0,
+    "idempotency_key": null,
+    "request_hash": null,
+    "retry_of": null,
+    "cancel_requested_at": null,
+    "heartbeat_at": "2026-10-21T04:04:29.155320+00:00",
+    "attempt": 1,
+    "error_code": null,
+    "error_message": null,
+    "warnings_json": "[]",
+    "created_at": "2026-10-21T04:04:18.988828+00:00",
+    "started_at": "2026-10-21T04:04:19.149650+00:00",
+    "finished_at": "2026-10-21T04:04:30.443685+00:00",
+    "warnings": [],
+    "cleanup_pending": 0,
+    "provider_calls": [],
+    "is_mock": false,
+    "export": null
+  },
+  "duration_sec": 216.642177,
+  "reused_checkpoint_count": 1,
+  "analysis_job_id": "a97b185c-bc51-4349-8c90-150d499ece31",
+  "analysis_job": {
+    "id": "a97b185c-bc51-4349-8c90-150d499ece31",
+    "project_id": "9a591044-8489-4534-b12a-7d10672c736e",
+    "asset_id": "8ee9b75d-5214-4c88-a98b-bc9c8599d358",
+    "kind": "analyze",
+    "state": "needs_review",
+    "phase": "needs_review",
+    "completed_units": 2,
+    "total_units": 2,
+    "idempotency_key": null,
+    "request_hash": null,
+    "retry_of": "c3377eed-4ebe-4444-a02c-109114cf0adb",
+    "cancel_requested_at": null,
+    "heartbeat_at": "2026-10-21T04:07:48.851097+00:00",
+    "attempt": 1,
+    "error_code": null,
+    "error_message": null,
+    "warnings_json": "[]",
+    "created_at": "2026-10-21T04:06:58.029518+00:00",
+    "started_at": "2026-10-21T04:06:58.820211+00:00",
+    "finished_at": "2026-10-21T04:07:53.345529+00:00",
+    "warnings": [],
+    "cleanup_pending": 0,
+    "provider_calls": [
+      {
+        "id": "a37b540f-9dc4-4294-9bb9-e8a85a17988e",
+        "job_id": "a97b185c-bc51-4349-8c90-150d499ece31",
+        "chunk_id": "fe90c72b-d137-4719-9e8d-e969e969639d",
+        "purpose": "analyze",
+        "attempt": 1,
+        "status": "received",
+        "requested_model": "gemini-3.1-flash-lite",
+        "returned_model": "gemini-3.1-flash-lite",
+        "provider_request_id": "",
+        "started_at": "2026-10-21T04:07:23.997600+00:00",
+        "finished_at": "2026-10-21T04:07:35.128690+00:00",
+        "usage_json": "{\"input_tokens\": 10685, \"output_tokens\": 1772, \"thinking_tokens\": 1388, \"billable_output_tokens\": 3160, \"output_includes_thinking\": false, \"raw\": {\"input_tokens_by_modality\": [{\"modality\": \"video\", \"tokens\": 9274}, {\"modality\": \"text\", \"tokens\": 1411}], \"total_cached_tokens\": 0, \"total_input_tokens\": 10685, \"total_output_tokens\": 1772, \"total_thought_tokens\": 1388, \"total_tokens\": 13845, \"total_tool_use_tokens\": 0}}",
+        "estimated_cost_usd": null,
+        "price_snapshot_id": null,
+        "error_code": null
+      }
+    ],
+    "is_mock": false,
+    "export": null
+  },
+  "revision_id": "4574d773-2846-4e7f-afa3-c5a68ff8cc22",
+  "generation_id": "01abf369-34c2-40a8-a0f0-e464dd80dd65",
+  "step_count": 10,
+  "image_count": 10,
+  "uncertainties": [
+    {
+      "description": "Video kết thúc khi quá trình cài đặt vừa bắt đầu, không thể xác nhận toàn bộ quy trình cài đặt hoàn tất thành công trong đoạn clip này.",
+      "start_sec": 119.0,
+      "end_sec": 120.0
+    }
+  ],
+  "evidence": [
+    {
+      "id": "0c79def0-d6b6-4731-aef2-444899396d13",
+      "project_id": "9a591044-8489-4534-b12a-7d10672c736e",
+      "generation_id": "01abf369-34c2-40a8-a0f0-e464dd80dd65",
+      "step_id": "c1-step_1",
+      "asset_id": "8ee9b75d-5214-4c88-a98b-bc9c8599d358",
+      "requested_sec": 22.0,
+      "actual_sec": 22.0,
+      "sha256": "2e2c0dfec99fdae50c8f2a218b165d209eaf0129ff7ce296901980a99c465453",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "fd835509-4c5a-4855-8484-286446252b92",
+      "project_id": "9a591044-8489-4534-b12a-7d10672c736e",
+      "generation_id": "01abf369-34c2-40a8-a0f0-e464dd80dd65",
+      "step_id": "c1-step_2",
+      "asset_id": "8ee9b75d-5214-4c88-a98b-bc9c8599d358",
+      "requested_sec": 29.0,
+      "actual_sec": 29.0,
+      "sha256": "72b2ba256f80865812d392bd8f432367378bba091db1086aa1713fc649b60bdc",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "c400732f-ec00-40a7-8d25-a2369d6ebeb7",
+      "project_id": "9a591044-8489-4534-b12a-7d10672c736e",
+      "generation_id": "01abf369-34c2-40a8-a0f0-e464dd80dd65",
+      "step_id": "c1-step_3",
+      "asset_id": "8ee9b75d-5214-4c88-a98b-bc9c8599d358",
+      "requested_sec": 45.0,
+      "actual_sec": 45.0,
+      "sha256": "5868fa409874330d1537f5c38bfb748713adeba167e62c30ffe996520aafca32",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "a910a309-60bd-493a-8791-b05b57bf26f5",
+      "project_id": "9a591044-8489-4534-b12a-7d10672c736e",
+      "generation_id": "01abf369-34c2-40a8-a0f0-e464dd80dd65",
+      "step_id": "c1-step_4",
+      "asset_id": "8ee9b75d-5214-4c88-a98b-bc9c8599d358",
+      "requested_sec": 59.0,
+      "actual_sec": 59.0,
+      "sha256": "5558f56787fcefa7547c97abf6811b051fd43e6d5ef511b308b891be94e52916",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "b5d7a289-9f4c-4ece-a6cc-364f0b662791",
+      "project_id": "9a591044-8489-4534-b12a-7d10672c736e",
+      "generation_id": "01abf369-34c2-40a8-a0f0-e464dd80dd65",
+      "step_id": "c1-step_5",
+      "asset_id": "8ee9b75d-5214-4c88-a98b-bc9c8599d358",
+      "requested_sec": 117.0,
+      "actual_sec": 117.0,
+      "sha256": "ed024c820e8c4bbd1ebbd512ca48beb1096b55e86dda219d4cfd4afd0d3132ec",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "ecd586f8-bfcd-471a-9e85-493bc186bb27",
+      "project_id": "9a591044-8489-4534-b12a-7d10672c736e",
+      "generation_id": "01abf369-34c2-40a8-a0f0-e464dd80dd65",
+      "step_id": "c2-step_1",
+      "asset_id": "8ee9b75d-5214-4c88-a98b-bc9c8599d358",
+      "requested_sec": 134.0,
+      "actual_sec": 134.0,
+      "sha256": "a10f218449c8f0eb463c263ab129a23067fff5659b43626249bf3cfa082374ad",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "c3f1d631-4e0b-4f9b-8188-aadcdbccd882",
+      "project_id": "9a591044-8489-4534-b12a-7d10672c736e",
+      "generation_id": "01abf369-34c2-40a8-a0f0-e464dd80dd65",
+      "step_id": "c1-step_6",
+      "asset_id": "8ee9b75d-5214-4c88-a98b-bc9c8599d358",
+      "requested_sec": 119.0,
+      "actual_sec": 119.0,
+      "sha256": "f2c4fbd61f1f0e6ed6765a07e02ad10cd010f4a4eebe16f3bd251563c6e8a022",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "3db9847f-96d7-4b14-bb36-9fc2a2263167",
+      "project_id": "9a591044-8489-4534-b12a-7d10672c736e",
+      "generation_id": "01abf369-34c2-40a8-a0f0-e464dd80dd65",
+      "step_id": "c2-step_2",
+      "asset_id": "8ee9b75d-5214-4c88-a98b-bc9c8599d358",
+      "requested_sec": 151.0,
+      "actual_sec": 151.0,
+      "sha256": "6d2acc3e206ba3516b364c50fc69b4dae82705635107485537ba612780438651",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "1eef4e1e-0770-4bea-91cc-f76c1ba2f1f2",
+      "project_id": "9a591044-8489-4534-b12a-7d10672c736e",
+      "generation_id": "01abf369-34c2-40a8-a0f0-e464dd80dd65",
+      "step_id": "c2-step_3",
+      "asset_id": "8ee9b75d-5214-4c88-a98b-bc9c8599d358",
+      "requested_sec": 180.0,
+      "actual_sec": 180.0,
+      "sha256": "e5952f7373ce5f28da6622cf14855fe7c3fbbe9898d2a3b79163dc028b8c46c8",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "866bb4ae-bd1a-4899-9a69-3a082ee535aa",
+      "project_id": "9a591044-8489-4534-b12a-7d10672c736e",
+      "generation_id": "01abf369-34c2-40a8-a0f0-e464dd80dd65",
+      "step_id": "c2-step_4",
+      "asset_id": "8ee9b75d-5214-4c88-a98b-bc9c8599d358",
+      "requested_sec": 197.0,
+      "actual_sec": 197.0,
+      "sha256": "63e838fed97e6aa0c695b1a0c6a7606007acd98d5b6b0da43dac9b4d58709697",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    }
+  ],
+  "exports": {
+    "md": {
+      "export_id": "aa772b2d-0a29-4137-ac6d-a237d372344f",
+      "job_state": "succeeded",
+      "bytes": 7670,
+      "sha256": "c3e80881e52be9e9a66934b25db42790ba8f0895f1b4e3c5875b2e3eac4b38cd"
+    },
+    "zip": {
+      "export_id": "d77f6dcf-73ce-47b8-9159-d1ebbcbb9f7a",
+      "job_state": "succeeded",
+      "bytes": 2910565,
+      "sha256": "e4c424f2d3ba7e22d07db759693bb1e610a2cd0edb4983c2915e490db2fd90d0"
+    },
+    "pdf": {
+      "export_id": "d11865d9-d220-46b7-91f4-be9488c4d541",
+      "job_state": "succeeded",
+      "bytes": 4044242,
+      "sha256": "7bbb1372974a190f95cd09c4051a25dd00f44f8db6feafbe9c378bc847e9dabb"
+    }
+  },
+  "pdf_pages": 11,
+  "finished_at": "2026-10-21T04:08:02.578477+00:00",
+  "result": "pass",
+  "quality_assessment": "improved_draft_pipeline_pass_after_explicit_checkpoint_retry_not_rubric_acceptance",
+  "manual_image_spot_checks": [
+    {
+      "sec": 134,
+      "finding": "Setup was successful visible"
+    },
+    {
+      "sec": 151,
+      "finding": "python --version result Python 3.13.0 visible"
+    },
+    {
+      "sec": 180,
+      "finding": "print statement and Amit Diwan output visible"
+    },
+    {
+      "sec": 197,
+      "finding": "Save As dialog with Demo visible"
+    }
+  ],
+  "review_notes": [
+    {
+      "area": "timing_and_order",
+      "finding": "First-chunk Optional Features and Advanced Options timing is inaccurate. The advanced-options step sorts after completion due to model timestamps. Review step order before following the instructions."
+    },
+    {
+      "area": "evidence_selection",
+      "finding": "The four result screenshots checked are more informative than baseline. Some installation-option screenshots still show progress, so image selection remains a draft."
+    },
+    {
+      "area": "clip_uncertainty",
+      "finding": "The first chunk reports that installation completion is not visible in that chunk. It is now explicitly scoped and timestamped; the second chunk shows completion."
+    },
+    {
+      "area": "evaluation_scope",
+      "finding": "One known video, no independent semantic verifier and no five-video rubric. Counts of steps/images are not accuracy scores."
+    }
+  ]
+}

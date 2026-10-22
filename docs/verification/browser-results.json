@@ -1,0 +1,21 @@
+{
+  "passed": [
+    "create project, upload, FFmpeg validation, playback",
+    "consent gating, analysis, reload persists job and document",
+    "timestamp seek, evidence image, Escape dialog",
+    "live preview, autosave and reload",
+    "two-tab revision conflict preserves local draft",
+    "restore creates a new revision",
+    "editor toggles and real MD/ZIP/PDF downloads",
+    "manual timestamp frame creates revision without LLM",
+    "project rename",
+    "375px no horizontal overflow and keyboard focus",
+    "explicit provider metadata check",
+    "regeneration preserves edits until explicit apply",
+    "cancel queued job and explicit retry from UI",
+    "Markdown XSS and external-image error state",
+    "delete confirmation and return to library",
+    "no browser JavaScript errors"
+  ],
+  "page_errors": []
+}

@@ -1,0 +1,28 @@
+{
+  "file": "HowtoinstallPythonWindows11.mp4",
+  "sha256": "00c1f1ce4093a3c7c6f6965fb5277453b236785dd420ad73fdf673be11553f5d",
+  "bytes": 5585933,
+  "scope": "Sparse visual spot checks, written before running full-video generation; not a five-video rubric score.",
+  "observations": [
+    {
+      "sec": 25,
+      "observation": "Chrome displays python.org home page."
+    },
+    {
+      "sec": 60,
+      "observation": "Python 3.13.0 (64-bit) setup; Add python.exe to PATH selected; Customize installation visible."
+    },
+    {
+      "sec": 100,
+      "observation": "Advanced Options; all-users, environment variables and precompile selected; install location C:\\Program Files\\Python313."
+    },
+    {
+      "sec": 150,
+      "observation": "Command Prompt: python --version returns Python 3.13.0."
+    },
+    {
+      "sec": 200,
+      "observation": "IDLE Shell 3.13.0 shows execution of a print statement and its output."
+    }
+  ]
+}

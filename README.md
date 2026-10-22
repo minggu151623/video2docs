@@ -1,0 +1,129 @@
+# Video2docs
+
+Ứng dụng local chuyển video tutorial phần mềm thành bản nháp tài liệu có timestamp và ảnh bằng chứng. Theo `PROJECT_SPEC.md`; giao diện tiếng Việt, tài liệu có thể chọn tiếng Việt hoặc tiếng Anh.
+
+**Trạng thái:** ngày 22/10/2026 đổi contract timestamp sang `MM:SS` để sửa lỗi model viết 01:04 thành 104 giây (xem `docs/quality-improvements.md`, contract v8; 104 tests pass). Lượt live v8 pass sau 2 lần Google 503: thứ tự Optional Features/Advanced Options đã đúng với video, 9 bước, 6 ảnh, PDF 8 trang; mốc ảnh lệch bằng chứng nay dùng frame cuối của khoảng bằng chứng kèm cảnh báo review, 106 tests pass. Ngày 21/10/2026 đã cải tiến ngữ cảnh giữa các đoạn, phân loại claim theo bằng chứng, sửa JSON có response gốc và chọn ảnh minh chứng. Kiểm tra toàn video thật bằng `gemini-3.1-flash-lite` pass sau retry checkpoint: 10 bước, 10 ảnh, MD/ZIP/PDF 11 trang. 84 tests pass và frontend build pass. Nội dung vẫn cần rà soát timestamp/thứ tự một số bước cấu hình, chưa nghiệm thu chất lượng trên bộ 5 tutorial. Xem `docs/quality-improvements.md`, `docs/live-verification.md` và `docs/validation.md`.
+
+## Cài và chạy trên macOS Apple Silicon
+
+Cần `uv`, Node.js LTS 24 (>=22.12), npm và FFmpeg/ffprobe. Môi trường đã chạy kiểm thử: Python 3.12.13, Node 25.8.1. Dependency Python/JS được khóa bằng `uv.lock` và `frontend/package-lock.json`. Font DejaVu Sans hỗ trợ tiếng Việt được đóng gói kèm license.
+
+```sh
+brew install uv node@24 ffmpeg
+cp .env.example .env
+./scripts/setup.sh
+```
+
+Bỏ qua lệnh `cp` nếu `.env` đã có. Điền `GEMINI_API_KEY` trong `.env` bằng editor local; không đưa key vào chat, mã frontend hoặc Git.
+
+```sh
+uv run python scripts/dev.py
+```
+
+Mở [http://127.0.0.1:5173](http://127.0.0.1:5173). Lệnh trên khởi động API, worker và Vite; Ctrl-C dừng cả ba. Worker là tiến trình riêng, không phải FastAPI BackgroundTasks. Khởi động lại API và worker khi đổi `.env`.
+
+Có thể chạy ba terminal riêng từ thư mục gốc:
+
+```sh
+PYTHONPATH=backend uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+PYTHONPATH=backend uv run python -m app.workers.runner
+npm --prefix frontend run dev
+```
+
+Để dùng frontend đã build, chạy `npm --prefix frontend run build`, sau đó chỉ cần API + worker và mở [http://127.0.0.1:8000](http://127.0.0.1:8000). Health: `/api/v1/health`; OpenAPI: `/openapi.json`; tài liệu API: `/api/docs`. Health/readiness không gọi Google.
+
+## Sử dụng
+
+1. Nhập tên dự án, chọn ngôn ngữ, chọn MP4/MOV/WebM rồi **Lưu video vào dự án**. Upload chỉ vào máy này. Worker kiểm tra container, thời lượng, độ phân giải, tạo playback/thumbnail; giữ nguyên nguồn và hash.
+2. Đọc thông báo gửi dữ liệu và điều khoản, xác nhận video/provider. Chi phí và quota chưa đo được phải được chủ động chấp nhận; không hiển thị số lượt miễn phí giả.
+3. **Tạo tài liệu**. Theo dõi giai đoạn/số đoạn/thời gian thật; có thể reload hoặc hủy. Request đã gửi tới Google có thể vẫn phát sinh phí khi hủy local.
+4. Đối chiếu từng bước, click timestamp/ảnh để xem nguồn. Markdown có preview ngay, autosave khoảng 1 giây. Hai tab sửa cùng bản sẽ báo 409 và giữ bản local để sao chép.
+5. Lịch sử revision cho phép khôi phục thành revision mới. Generation mới luôn lưu riêng; chọn áp dụng sau khi kiểm tra. Chọn lại ảnh theo số giây không gọi AI. Bỏ một ảnh bằng cách xóa dòng `![...](assets/...)` trong Markdown.
+6. Xuất MD, ZIP hoặc PDF từ revision đã lưu. MD riêng cần ảnh đi kèm; ZIP gồm `document.md`, `assets/`, manifest revision/hash/timestamp. PDF là file A4 thật với font local. Các file đã xuất còn có thể tải từ Lịch sử xử lý sau reload.
+7. Xóa dự án cần xác nhận; tombstone chặn thao tác mới, worker hủy job và dọn file. Cleanup Google có thể còn pending, không được diễn giải thành đã xóa remote.
+
+## Phạm vi và cấu hình
+
+| Mục | Mặc định |
+| --- | --- |
+| Phạm vi | Tutorial IDE, terminal, web/desktop; một người dùng localhost |
+| Đầu vào | File local MP4/MOV/WebM, một video/dự án; chưa có connector URL |
+| Provider/model | Gemini Developer API, `gemini-3.1-flash-lite` theo yêu cầu đổi model ngày 21/10/2026; đổi bằng `GEMINI_MODEL` |
+| Mode | Static, `store=false`, không tools, không background của provider |
+| Stack | React + TypeScript + Vite; FastAPI + SQLAlchemy/Alembic; SQLite và file local |
+| Biên tập/xuất | Markdown + preview; MD/ZIP/PDF; ảnh FFmpeg |
+| Ngôn ngữ | UI tiếng Việt; output vi/en |
+| Tài nguyên | 500 MiB, 1200 giây, 8.294.400 pixel/video; 5000 MiB/project |
+| Worker/chunk | Một job media/AI tại một thời điểm; clip 300 giây, overlap 5 giây |
+| Output | 80 bước, 40 ảnh, cạnh ảnh tối đa 1920 px, không upscale |
+| Budget | 12 attempts/job, tối đa 1 JSON repair/job; ngân sách mềm 1 USD |
+| Timeout | Job 2700 giây; generate 300 giây; media encode 600 giây; PDF 60 giây |
+
+Đây là giới hạn thiết kế của app, không phải quota Google. Không tự suy ra subscription Google AI Pro bao gồm quota API. Không có YouTube, OCR/Whisper riêng, LLM local, agent điều khiển máy, multi-user hoặc public deployment. App không thực thi code/command trong tài liệu.
+
+Cấu hình local hiện dùng `CHUNK_SECONDS=120`, overlap 5 giây cho video thử. Hạn mức Flash Lite do người dùng cung cấp là 15 RPM, 250.000 input TPM và 500 RPD; app chưa truy vấn quota tài khoản hay lượng đã dùng bởi các ứng dụng khác. Worker gửi các request tuần tự, không coi các số này là quota còn lại được bảo đảm.
+
+Trong phiên kiểm tra hiện tại, `.env` dùng `APP_PORT=8002` vì cổng 8000 đang có ứng dụng khác. Frontend đã build mở tại [http://127.0.0.1:8002](http://127.0.0.1:8002); `scripts/dev.py` đọc cổng từ `.env`.
+
+## Cấu hình
+
+`.env.example` liệt kê toàn bộ cấu hình. Biến môi trường ghi đè file `.env`.
+
+- `DATA_DIR` chứa cả DB và file; `DATABASE_URL` bắt buộc trỏ SQLite ngay trong root đó. Khi đổi thư mục, đổi cả hai. Không đặt root vào symlink không tin cậy.
+- `APP_HOST` chỉ nhận localhost/127.0.0.1. Nếu đổi `APP_PORT`, thêm origin tương ứng vào `ALLOWED_ORIGINS`; Vite đọc `APP_PORT` cho proxy. Không hỗ trợ LAN/public bằng cấu hình hiện tại.
+- `GEMINI_API_KEY` chỉ được backend/worker đọc. `GEMINI_MODEL` không fallback âm thầm; sai key/model sẽ báo lỗi.
+- `CHUNK_SECONDS`, `CHUNK_OVERLAP_SECONDS`, `VIDEO_FPS`, `MAX_OUTPUT_TOKENS` và các `MAX_*` trong example điều khiển tài nguyên. Overlap phải nhỏ hơn chunk; schema v1 giới hạn tối đa 80 bước/40 ảnh.
+- `ENABLE_AGENTIC_VIDEO=true`, `GEMINI_STORE_INTERACTIONS=true`, provider background, concurrency >1 và raw debug retention đều bị từ chối vì chưa triển khai.
+- `AI_PROVIDER=mock` bật dữ liệu tổng hợp được ghi nhãn trong UI/tài liệu. Mặc định là `gemini`; thiếu key không tự chuyển mock.
+
+Giá/điều khoản được kiểm tra lại ngày **20/10/2026**. Có snapshot Standard có hiệu lực đến 31/12/2026 để đối chiếu usage sau request; không tự xác nhận tier của key hay đưa ước tính video chưa đo như hóa đơn. Usage thiếu là `null`, không phải 0. Interactions trả output/thinking riêng; adapter tính billable output đúng một lần. Ngân sách app là soft cap, không bảo đảm chặn toàn bộ hóa đơn. Xem quyết định và nguồn trong `docs/decisions.md`.
+
+## Kiểm thử
+
+```sh
+uv sync --locked
+uv run pytest -q
+uv run ruff check --select F backend scripts tests/e2e
+npm --prefix frontend ci
+npm --prefix frontend run build
+uv run python scripts/generate_fixtures.py
+```
+
+Test mặc định không cần key, không gửi Google. Integration dùng SQLite tạm, provider fake và FFmpeg/Chromium thật. Fixture tổng hợp không thay thế bộ đánh giá chất lượng tutorial.
+
+E2E chạy riêng API và worker với cùng cấu hình mock và storage riêng:
+
+```sh
+AI_PROVIDER=mock DATA_DIR=./tmp/e2e-data DATABASE_URL=sqlite:///./tmp/e2e-data/app.sqlite3 ALLOWED_ORIGINS=http://127.0.0.1:8001 PYTHONPATH=backend uv run uvicorn app.main:app --host 127.0.0.1 --port 8001
+AI_PROVIDER=mock DATA_DIR=./tmp/e2e-data DATABASE_URL=sqlite:///./tmp/e2e-data/app.sqlite3 ALLOWED_ORIGINS=http://127.0.0.1:8001 PYTHONPATH=backend uv run python -m app.workers.runner
+uv run python tests/e2e/browser_flow.py
+```
+
+Ảnh chụp, kết quả E2E và PDF QA ở `tmp/e2e-artifacts/`. Có thể tái tạo PDF bảng/code dài với `uv run python scripts/pdf_layout_check.py`.
+
+Pydantic là schema chuẩn. Khi đổi schema, chạy `uv run python scripts/generate_schema.py` rồi `npm --prefix frontend run types`; không tự sửa TypeScript generated types.
+
+Live smoke chủ động, có thể phát sinh phí: chạy app với Gemini/key thật, chuẩn bị clip không nhạy cảm 10–30 giây, rồi:
+
+```sh
+uv run python scripts/provider_smoke.py --video /path/to/clip.mp4 --confirm-google-upload --accept-unknown-cost
+```
+
+Báo cáo ghi `docs/live-smoke.json`, model/SDK/usage/cleanup; không ghi key. Nút **Kiểm tra kết nối** chỉ kiểm tra metadata model, không xác nhận khả năng hiểu video. Báo cáo hiện tại là lượt smoke thật đã pass; bộ rubric 5 video vẫn cần đánh giá riêng.
+
+## Backup, xóa và xử lý lỗi
+
+Dừng API/worker trước khi backup. Sao chép toàn bộ `DATA_DIR` (gồm SQLite/WAL nếu có và các project), không chỉ file DB; giữ manifest/hash cùng artifacts. `.env` là secret riêng, không nằm trong ZIP xuất tài liệu. Khôi phục backup vào root mới rồi cập nhật hai biến data/DB và chạy setup migration. Không downgrade phá dữ liệu; giữ backup trước khi nâng schema.
+
+Xóa dự án trong UI dọn nguồn, ảnh, generation, export và nội dung revision; giữ metadata tối thiểu cho audit/cleanup. Video và tài liệu local không được mã hóa at rest bởi ứng dụng. Kiểm tra screenshot để tránh xuất secret; prompt redact không làm sạch video gốc.
+
+- Thiếu FFmpeg/ffprobe: `brew install ffmpeg`. Video giả hoặc vượt duration/resolution sẽ bị chặn trước AI.
+- PDF dependency: `uv run playwright install chromium`. Markdown vẫn còn khi PDF lỗi. Font/license nằm ở `backend/app/static/fonts/`.
+- Job queued mãi: kiểm tra worker chạy cùng `.env`, DB/storage; app báo giai đoạn queued, không giả phần trăm AI.
+- Worker restart: đợi lease tối đa 60 giây. Job bị gián đoạn cần retry chủ động; checkpoint validated được tái dùng chỉ với cấu hình/hash/prompt trùng. Không tự gửi lại request ambiguous.
+- 429/5xx/network: app dừng có mã lỗi; không tự retry request có nguy cơ bị tính phí trùng. Retry chủ động có xác nhận cho outcome unknown. Google Files upload gián đoạn trước khi có file name có thể cần kiểm tra AI Studio.
+- Cleanup remote: thử lại tối đa 5 lần với backoff; pending vẫn hiển thị. Kiểm tra Files trong AI Studio nếu hết retries. Không khẳng định đã xóa remote khi chưa xác nhận.
+- 409 revision: sao chép bản local rồi tải revision mới; không tự ghi đè.
+- Full disk/storage cap: dọn dữ liệu hoặc chỉnh limit có kiểm soát, thử lại; `.partial` được dọn, nguồn không bị sửa.
+
+Xem `docs/validation.md` để biết bằng chứng chạy, coverage và các gate chưa đủ dữ liệu nghiệm thu.

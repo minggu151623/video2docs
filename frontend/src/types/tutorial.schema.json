@@ -1,0 +1,411 @@
+{
+  "$defs": {
+    "Command": {
+      "additionalProperties": false,
+      "properties": {
+        "language": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Language",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 12000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "completeness": {
+          "enum": [
+            "complete",
+            "partial",
+            "unclear"
+          ],
+          "title": "Completeness",
+          "type": "string"
+        },
+        "evidence_spans": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "maxItems": 5,
+          "minItems": 1,
+          "title": "Evidence Spans",
+          "type": "array"
+        }
+      },
+      "required": [
+        "language",
+        "text",
+        "completeness",
+        "evidence_spans"
+      ],
+      "title": "Command",
+      "type": "object"
+    },
+    "SourceClaim": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "evidence_spans": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "maxItems": 5,
+          "minItems": 1,
+          "title": "Evidence Spans",
+          "type": "array"
+        },
+        "basis": {
+          "default": "unclear",
+          "enum": [
+            "observed",
+            "stated",
+            "inferred",
+            "unclear"
+          ],
+          "title": "Basis",
+          "type": "string"
+        },
+        "scope": {
+          "default": "clip",
+          "enum": [
+            "tutorial",
+            "clip"
+          ],
+          "title": "Scope",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "evidence_spans"
+      ],
+      "title": "SourceClaim",
+      "type": "object"
+    },
+    "Span": {
+      "additionalProperties": false,
+      "properties": {
+        "start_sec": {
+          "minimum": 0,
+          "title": "Start Sec",
+          "type": "number"
+        },
+        "end_sec": {
+          "minimum": 0,
+          "title": "End Sec",
+          "type": "number"
+        },
+        "source": {
+          "enum": [
+            "visual",
+            "audio",
+            "both"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start_sec",
+        "end_sec",
+        "source",
+        "description"
+      ],
+      "title": "Span",
+      "type": "object"
+    },
+    "Step": {
+      "additionalProperties": false,
+      "properties": {
+        "local_id": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Local Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "start_sec": {
+          "minimum": 0,
+          "title": "Start Sec",
+          "type": "number"
+        },
+        "end_sec": {
+          "minimum": 0,
+          "title": "End Sec",
+          "type": "number"
+        },
+        "actions": {
+          "items": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Actions",
+          "type": "array"
+        },
+        "expected_result": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Expected Result"
+        },
+        "commands": {
+          "items": {
+            "$ref": "#/$defs/Command"
+          },
+          "maxItems": 10,
+          "title": "Commands",
+          "type": "array"
+        },
+        "evidence_spans": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "maxItems": 5,
+          "minItems": 1,
+          "title": "Evidence Spans",
+          "type": "array"
+        },
+        "screenshot_candidates_sec": {
+          "items": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "maxItems": 2,
+          "title": "Screenshot Candidates Sec",
+          "type": "array"
+        },
+        "needs_review": {
+          "title": "Needs Review",
+          "type": "boolean"
+        },
+        "review_reason": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Review Reason"
+        }
+      },
+      "required": [
+        "local_id",
+        "title",
+        "start_sec",
+        "end_sec",
+        "actions",
+        "expected_result",
+        "commands",
+        "evidence_spans",
+        "screenshot_candidates_sec",
+        "needs_review",
+        "review_reason"
+      ],
+      "title": "Step",
+      "type": "object"
+    },
+    "ToolMention": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Version"
+        },
+        "evidence_spans": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "maxItems": 5,
+          "minItems": 1,
+          "title": "Evidence Spans",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "evidence_spans"
+      ],
+      "title": "ToolMention",
+      "type": "object"
+    },
+    "Uncertainty": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "start_sec": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Start Sec"
+        },
+        "end_sec": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "End Sec"
+        }
+      },
+      "required": [
+        "description",
+        "start_sec",
+        "end_sec"
+      ],
+      "title": "Uncertainty",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "title": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "summary": {
+      "maxLength": 3000,
+      "title": "Summary",
+      "type": "string"
+    },
+    "language": {
+      "enum": [
+        "vi",
+        "en"
+      ],
+      "title": "Language",
+      "type": "string"
+    },
+    "objectives": {
+      "items": {
+        "maxLength": 2000,
+        "type": "string"
+      },
+      "maxItems": 20,
+      "title": "Objectives",
+      "type": "array"
+    },
+    "prerequisites": {
+      "items": {
+        "$ref": "#/$defs/SourceClaim"
+      },
+      "maxItems": 30,
+      "title": "Prerequisites",
+      "type": "array"
+    },
+    "tools": {
+      "items": {
+        "$ref": "#/$defs/ToolMention"
+      },
+      "maxItems": 30,
+      "title": "Tools",
+      "type": "array"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/Step"
+      },
+      "maxItems": 80,
+      "title": "Steps",
+      "type": "array"
+    },
+    "troubleshooting": {
+      "items": {
+        "$ref": "#/$defs/SourceClaim"
+      },
+      "maxItems": 30,
+      "title": "Troubleshooting",
+      "type": "array"
+    },
+    "uncertainties": {
+      "items": {
+        "$ref": "#/$defs/Uncertainty"
+      },
+      "maxItems": 50,
+      "title": "Uncertainties",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "title",
+    "summary",
+    "language",
+    "objectives",
+    "prerequisites",
+    "tools",
+    "steps",
+    "troubleshooting",
+    "uncertainties"
+  ],
+  "title": "TutorialDraftV1",
+  "type": "object"
+}

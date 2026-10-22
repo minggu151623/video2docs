@@ -1,0 +1,298 @@
+{
+  "started_at": "2026-10-21T03:58:53.433092+00:00",
+  "source_sha256": "00c1f1ce4093a3c7c6f6965fb5277453b236785dd420ad73fdf673be11553f5d",
+  "provider": "gemini",
+  "kind": "quality_improvement_live_test",
+  "checks": {
+    "validated_video": true,
+    "schema_validated": true,
+    "remote_cleanup_complete": true,
+    "zip_integrity_and_revision": true,
+    "pdf_text_and_pages": true,
+    "source_preserved": true
+  },
+  "live_test_authorized_by_user": true,
+  "baseline_generation_id": "b799d6af-064c-49a6-b41a-9be01dc6aa19",
+  "chunk_seconds": 120.0,
+  "user_reported_limits": {
+    "input_tpm": 250000,
+    "rpm": 15,
+    "rpd": 500
+  },
+  "requested_model": "gemini-3.1-flash-lite",
+  "previous_analysis_job_id": "5a14049f-f4ad-4de9-b79f-a534f788e05d",
+  "project_id": "601c7509-b1c5-408a-888b-7fd91e662e1d",
+  "project_url": "http://127.0.0.1:8002/#601c7509-b1c5-408a-888b-7fd91e662e1d",
+  "asset_id": "47d04285-98aa-4f25-8321-dd24383f8e13",
+  "validation_job": {
+    "id": "c5b5e8fc-72db-45e5-8f12-b0beefe26b05",
+    "project_id": "601c7509-b1c5-408a-888b-7fd91e662e1d",
+    "asset_id": "47d04285-98aa-4f25-8321-dd24383f8e13",
+    "kind": "validate_asset",
+    "state": "succeeded",
+    "phase": "succeeded",
+    "completed_units": 0,
+    "total_units": 0,
+    "idempotency_key": null,
+    "request_hash": null,
+    "retry_of": null,
+    "cancel_requested_at": null,
+    "heartbeat_at": "2026-10-21T03:55:03.073865+00:00",
+    "attempt": 1,
+    "error_code": null,
+    "error_message": null,
+    "warnings_json": "[]",
+    "created_at": "2026-10-21T03:54:52.570208+00:00",
+    "started_at": "2026-10-21T03:54:53.065484+00:00",
+    "finished_at": "2026-10-21T03:55:04.171994+00:00",
+    "warnings": [],
+    "cleanup_pending": 0,
+    "provider_calls": [],
+    "is_mock": false,
+    "export": null
+  },
+  "duration_sec": 216.642177,
+  "analysis_job_id": "b769d16b-7bbf-4cf2-8782-c6be886abda2",
+  "analysis_job": {
+    "id": "b769d16b-7bbf-4cf2-8782-c6be886abda2",
+    "project_id": "601c7509-b1c5-408a-888b-7fd91e662e1d",
+    "asset_id": "47d04285-98aa-4f25-8321-dd24383f8e13",
+    "kind": "analyze",
+    "state": "needs_review",
+    "phase": "needs_review",
+    "completed_units": 2,
+    "total_units": 2,
+    "idempotency_key": "ccd63c51-3f60-4147-a23b-f035f653e793",
+    "request_hash": "dece1e76b04b5d7e5a2793dc2a9a0c8dded841f54cbf9988dd2beecdbb133b1c",
+    "retry_of": null,
+    "cancel_requested_at": null,
+    "heartbeat_at": "2026-10-21T04:00:34.371583+00:00",
+    "attempt": 1,
+    "error_code": null,
+    "error_message": null,
+    "warnings_json": "[{\"code\": \"SCHEMA_INVALID\", \"attempt\": 1, \"fields\": [{\"loc\": [\"steps\", \"2\"], \"type\": \"value_error\", \"message\": \"Value error, Screenshot outside step or at EOF\"}]}]",
+    "created_at": "2026-10-21T03:58:54.063446+00:00",
+    "started_at": "2026-10-21T03:58:54.303576+00:00",
+    "finished_at": "2026-10-21T04:00:37.986786+00:00",
+    "warnings": [
+      {
+        "code": "SCHEMA_INVALID",
+        "attempt": 1,
+        "fields": [
+          {
+            "loc": [
+              "steps",
+              "2"
+            ],
+            "type": "value_error",
+            "message": "Value error, Screenshot outside step or at EOF"
+          }
+        ]
+      }
+    ],
+    "cleanup_pending": 0,
+    "provider_calls": [
+      {
+        "id": "fc38de26-79e7-404a-8811-974cf2a33de7",
+        "job_id": "b769d16b-7bbf-4cf2-8782-c6be886abda2",
+        "chunk_id": "b0fd7bfe-3263-430d-9266-55c174a21487",
+        "purpose": "analyze",
+        "attempt": 1,
+        "status": "invalid",
+        "requested_model": "gemini-3.1-flash-lite",
+        "returned_model": "gemini-3.1-flash-lite",
+        "provider_request_id": "",
+        "started_at": "2026-10-21T03:59:19.203305+00:00",
+        "finished_at": "2026-10-21T03:59:30.553056+00:00",
+        "usage_json": "{\"input_tokens\": 12075, \"output_tokens\": 1424, \"thinking_tokens\": 106, \"billable_output_tokens\": 1530, \"output_includes_thinking\": false, \"raw\": {\"input_tokens_by_modality\": [{\"modality\": \"text\", \"tokens\": 1155}, {\"modality\": \"video\", \"tokens\": 10920}], \"total_cached_tokens\": 0, \"total_input_tokens\": 12075, \"total_output_tokens\": 1424, \"total_thought_tokens\": 106, \"total_tokens\": 13605, \"total_tool_use_tokens\": 0}}",
+        "estimated_cost_usd": null,
+        "price_snapshot_id": null,
+        "error_code": "SCHEMA_INVALID"
+      },
+      {
+        "id": "6489dfd7-bf37-4e05-a727-09cd4ff42614",
+        "job_id": "b769d16b-7bbf-4cf2-8782-c6be886abda2",
+        "chunk_id": "b0fd7bfe-3263-430d-9266-55c174a21487",
+        "purpose": "repair",
+        "attempt": 2,
+        "status": "received",
+        "requested_model": "gemini-3.1-flash-lite",
+        "returned_model": "gemini-3.1-flash-lite",
+        "provider_request_id": "",
+        "started_at": "2026-10-21T03:59:30.562739+00:00",
+        "finished_at": "2026-10-21T03:59:40.788069+00:00",
+        "usage_json": "{\"input_tokens\": 13721, \"output_tokens\": 1426, \"thinking_tokens\": 988, \"billable_output_tokens\": 2414, \"output_includes_thinking\": false, \"raw\": {\"cached_tokens_by_modality\": [{\"modality\": \"text\", \"tokens\": 2179}, {\"modality\": \"video\", \"tokens\": 8496}], \"input_tokens_by_modality\": [{\"modality\": \"video\", \"tokens\": 10920}, {\"modality\": \"text\", \"tokens\": 2801}], \"total_cached_tokens\": 10675, \"total_input_tokens\": 13721, \"total_output_tokens\": 1426, \"total_thought_tokens\": 988, \"total_tokens\": 16135, \"total_tool_use_tokens\": 0}}",
+        "estimated_cost_usd": null,
+        "price_snapshot_id": null,
+        "error_code": null
+      },
+      {
+        "id": "51fca69a-5ad7-42fb-8484-35fd10f8fc6f",
+        "job_id": "b769d16b-7bbf-4cf2-8782-c6be886abda2",
+        "chunk_id": "c01e1d50-1812-4dc2-a26c-4c02941ddf24",
+        "purpose": "analyze",
+        "attempt": 3,
+        "status": "received",
+        "requested_model": "gemini-3.1-flash-lite",
+        "returned_model": "gemini-3.1-flash-lite",
+        "provider_request_id": "",
+        "started_at": "2026-10-21T04:00:07.059598+00:00",
+        "finished_at": "2026-10-21T04:00:20.585049+00:00",
+        "usage_json": "{\"input_tokens\": 10609, \"output_tokens\": 1846, \"thinking_tokens\": 2378, \"billable_output_tokens\": 4224, \"output_includes_thinking\": false, \"raw\": {\"input_tokens_by_modality\": [{\"modality\": \"text\", \"tokens\": 1335}, {\"modality\": \"video\", \"tokens\": 9274}], \"total_cached_tokens\": 0, \"total_input_tokens\": 10609, \"total_output_tokens\": 1846, \"total_thought_tokens\": 2378, \"total_tokens\": 14833, \"total_tool_use_tokens\": 0}}",
+        "estimated_cost_usd": null,
+        "price_snapshot_id": null,
+        "error_code": null
+      }
+    ],
+    "is_mock": false,
+    "export": null
+  },
+  "revision_id": "111ea4e6-a165-46be-87a7-080af987050e",
+  "generation_id": "40e4dc33-6804-42d9-9bba-15a8d6171b8b",
+  "step_count": 8,
+  "image_count": 8,
+  "uncertainties": [
+    {
+      "description": "Video bị cắt ngay sau khi quá trình cài đặt bắt đầu ở giây 120, chưa thấy kết quả hoàn tất.",
+      "start_sec": 120.0,
+      "end_sec": 120.0
+    }
+  ],
+  "evidence": [
+    {
+      "id": "b940daf1-a385-4fe7-8185-29a81afbdce4",
+      "project_id": "601c7509-b1c5-408a-888b-7fd91e662e1d",
+      "generation_id": "40e4dc33-6804-42d9-9bba-15a8d6171b8b",
+      "step_id": "c1-download_python",
+      "asset_id": "47d04285-98aa-4f25-8321-dd24383f8e13",
+      "requested_sec": 30.0,
+      "actual_sec": 30.0,
+      "sha256": "d811864c35ae207983db9a2761fa3b7c1bdcaad5ab62dbb564886ea61397613e",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "366c178c-3bac-4be0-8eff-d32eb433ee16",
+      "project_id": "601c7509-b1c5-408a-888b-7fd91e662e1d",
+      "generation_id": "40e4dc33-6804-42d9-9bba-15a8d6171b8b",
+      "step_id": "c1-launch_installer",
+      "asset_id": "47d04285-98aa-4f25-8321-dd24383f8e13",
+      "requested_sec": 45.0,
+      "actual_sec": 45.0,
+      "sha256": "5868fa409874330d1537f5c38bfb748713adeba167e62c30ffe996520aafca32",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "b2646228-dbf0-44f6-b144-ec212087ccb8",
+      "project_id": "601c7509-b1c5-408a-888b-7fd91e662e1d",
+      "generation_id": "40e4dc33-6804-42d9-9bba-15a8d6171b8b",
+      "step_id": "c1-configure_installation",
+      "asset_id": "47d04285-98aa-4f25-8321-dd24383f8e13",
+      "requested_sec": 115.0,
+      "actual_sec": 115.0,
+      "sha256": "10b9fe0c86994af5fb267455ad32cbe9a1e632e82562843b6828e37e7daec8f7",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "8b3c1470-514f-46bf-afd8-3474ca9eee87",
+      "project_id": "601c7509-b1c5-408a-888b-7fd91e662e1d",
+      "generation_id": "40e4dc33-6804-42d9-9bba-15a8d6171b8b",
+      "step_id": "c2-step_1",
+      "asset_id": "47d04285-98aa-4f25-8321-dd24383f8e13",
+      "requested_sec": 133.0,
+      "actual_sec": 133.0,
+      "sha256": "97c0831993a9e08813fef356a68b758b44cb95348c8fc84e7476b28b87ed8858",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "9486ff52-aacf-4a47-857e-d8fb1916dad3",
+      "project_id": "601c7509-b1c5-408a-888b-7fd91e662e1d",
+      "generation_id": "40e4dc33-6804-42d9-9bba-15a8d6171b8b",
+      "step_id": "c2-step_2",
+      "asset_id": "47d04285-98aa-4f25-8321-dd24383f8e13",
+      "requested_sec": 149.0,
+      "actual_sec": 149.0,
+      "sha256": "e01adb40a22142237e3a016a531878b965abb1d0d7712e7af68ebd31a4843027",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "75a606d4-c483-4102-9ec4-563772723d87",
+      "project_id": "601c7509-b1c5-408a-888b-7fd91e662e1d",
+      "generation_id": "40e4dc33-6804-42d9-9bba-15a8d6171b8b",
+      "step_id": "c2-step_3",
+      "asset_id": "47d04285-98aa-4f25-8321-dd24383f8e13",
+      "requested_sec": 161.0,
+      "actual_sec": 161.0,
+      "sha256": "8a193bd6f37968fbf810034a06f9a368cb272e90151afba266c2bd0e20380fda",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "d8265f8b-7308-4a47-bcec-c4fe2be16f3a",
+      "project_id": "601c7509-b1c5-408a-888b-7fd91e662e1d",
+      "generation_id": "40e4dc33-6804-42d9-9bba-15a8d6171b8b",
+      "step_id": "c2-step_4",
+      "asset_id": "47d04285-98aa-4f25-8321-dd24383f8e13",
+      "requested_sec": 179.0,
+      "actual_sec": 179.0,
+      "sha256": "e956fcc8b65d5ed85c1ad0c528c8470407170cff1c949c0a69d71b51ed20cb0b",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    },
+    {
+      "id": "1c57d4ed-92ec-451d-88cc-b1b95f578355",
+      "project_id": "601c7509-b1c5-408a-888b-7fd91e662e1d",
+      "generation_id": "40e4dc33-6804-42d9-9bba-15a8d6171b8b",
+      "step_id": "c2-step_5",
+      "asset_id": "47d04285-98aa-4f25-8321-dd24383f8e13",
+      "requested_sec": 215.5,
+      "actual_sec": 215.5,
+      "sha256": "1f6f21d5f710070e03bd54fe115b75d799b7f786919d915ceca1661fcc279ace",
+      "width": 1280,
+      "height": 720,
+      "status": "unverified",
+      "human_verified_at": null
+    }
+  ],
+  "exports": {
+    "md": {
+      "export_id": "344234bc-1681-454a-82f6-64aae08e5fe7",
+      "job_state": "succeeded",
+      "bytes": 6831,
+      "sha256": "982bae80359712a928e079d130e22d5c8fcb3efe95b13245d75371ccd3b7aa24"
+    },
+    "zip": {
+      "export_id": "eeca21a8-00d2-4fc1-8db7-d12efd291d25",
+      "job_state": "succeeded",
+      "bytes": 2215779,
+      "sha256": "3bc353eda969d5cb56258aa7c49291d3b1070818c2eca4019fadb34a1dce91ff"
+    },
+    "pdf": {
+      "export_id": "4c9387a8-fb74-449b-a213-512d7f160773",
+      "job_state": "succeeded",
+      "bytes": 3039421,
+      "sha256": "cf1261db420b4329d7b63230f6d62cd6e67102605b7c66bdeea2c6fe1aeba83d"
+    }
+  },
+  "pdf_pages": 9,
+  "finished_at": "2026-10-21T04:00:46.871415+00:00",
+  "result": "pass"
+}
