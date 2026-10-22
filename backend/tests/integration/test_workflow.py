@@ -4,8 +4,8 @@ import time
 import zipfile
 import pytest
 from pypdf import PdfReader
-from sqlalchemy import select, update
-from app.db.models import Job, Chunk, ProviderCall, RemoteFile, Asset, Evidence
+from sqlalchemy import func, select, update
+from app.db.models import Job, Chunk, ProviderCall, RemoteFile, Asset, Evidence, Generation
 from app.core.storage import file_hash
 from app.workers.runner import Worker
 from app.providers.mock import MockProvider
@@ -655,3 +655,91 @@ def test_chunk_context_claim_review_and_result_evidence_in_pipeline(env, clip, m
     assert "chưa đủ bằng chứng: Unproven remedy" in text
     generation = client.get(f"/api/v1/generations/{document['revision']['generation_id']}").json()
     assert sorted(e["requested_sec"] for e in generation["evidence"]) == [1.5, 3.5]
+
+
+def non_tutorial_payload(payload, reason="Vlog"):
+    payload.update(is_tutorial=False, not_tutorial_reason=reason, steps=[], troubleshooting=[])
+    return payload
+
+
+def patch_provider(monkeypatch, edit):
+    original = MockProvider.analyze
+    calls = []
+
+    def analyze(self, reference, duration, language, metadata, repair=None):
+        calls.append(metadata)
+        result = original(self, reference, duration, language, metadata, repair)
+        result["text"] = json.dumps(edit(json.loads(result["text"]), metadata["clip_index"]))
+        return result
+
+    monkeypatch.setattr(MockProvider, "analyze", analyze)
+    return calls
+
+
+def test_not_tutorial_stops_after_first_clip(env, clip, monkeypatch):
+    client, worker, cfg = env
+    project, asset = create_uploaded(env, clip)
+    patch_provider(monkeypatch, lambda payload, clip_index: non_tutorial_payload(payload))
+    job, _ = enqueue_analysis(env, project, asset)
+    worker.once()
+    detail = client.get(f"/api/v1/jobs/{job['id']}").json()
+    with worker.Session() as s:
+        assert s.scalar(select(func.count()).select_from(Chunk).where(Chunk.job_id == job["id"])) == 2
+    assert detail["state"] == "not_tutorial" and detail["phase"] == "not_tutorial"
+    assert len(detail["provider_calls"]) == 1
+    assert {"code": "NOT_TUTORIAL", "reason": "Vlog"} in detail["warnings"]
+    assert client.get(f"/api/v1/projects/{project['id']}/document").json() is None
+    with worker.Session() as s:
+        assert not s.scalars(select(Generation)).all()
+        chunks = s.scalars(select(Chunk).where(Chunk.job_id == job["id"]).order_by(Chunk.index)).all()
+        assert [c.state for c in chunks] == ["validated", "queued"]
+    again, _ = enqueue_analysis(env, project, asset, "again", skip_tutorial_gate=True)
+    assert again["id"] != job["id"] and again["state"] == "queued"
+    retried = client.post(f"/api/v1/jobs/{job['id']}/retry", json={"reason": "again"})
+    assert retried.status_code == 409 and retried.json()["error"]["code"] == "RETRY_NOT_ALLOWED"
+
+
+def test_single_clip_video_is_also_gated(env, clip, monkeypatch):
+    client, worker, cfg = env
+    cfg.chunk_seconds, cfg.chunk_overlap_seconds = 60, 1
+    project, asset = create_uploaded(env, clip)
+    patch_provider(monkeypatch, lambda payload, clip_index: non_tutorial_payload(payload, "Quảng cáo"))
+    job, _ = enqueue_analysis(env, project, asset)
+    worker.once()
+    detail = client.get(f"/api/v1/jobs/{job['id']}").json()
+    with worker.Session() as s:
+        assert s.scalar(select(func.count()).select_from(Chunk).where(Chunk.job_id == job["id"])) == 1
+    assert detail["state"] == "not_tutorial" and len(detail["provider_calls"]) == 1
+    assert {"code": "NOT_TUTORIAL", "reason": "Quảng cáo"} in detail["warnings"]
+    assert client.get(f"/api/v1/projects/{project['id']}/document").json() is None
+
+
+def test_later_clip_not_tutorial_is_only_recorded(env, clip, monkeypatch):
+    client, worker, cfg = env
+    project, asset = create_uploaded(env, clip)
+
+    def edit(payload, clip_index):
+        return non_tutorial_payload(payload, "Lời kết") if clip_index == 2 else payload
+
+    calls = patch_provider(monkeypatch, edit)
+    job, _ = enqueue_analysis(env, project, asset)
+    worker.once()
+    detail = client.get(f"/api/v1/jobs/{job['id']}").json()
+    assert detail["state"] in ("needs_review", "succeeded") and len(calls) == 2
+    assert {"code": "LATER_CLIP_NOT_TUTORIAL", "clip_index": 2} in detail["warnings"]
+    assert not any(w.get("code") == "NOT_TUTORIAL" for w in detail["warnings"] if isinstance(w, dict))
+    assert client.get(f"/api/v1/projects/{project['id']}/document").json() is not None
+
+
+def test_skip_gate_analyzes_all_clips(env, clip, monkeypatch):
+    client, worker, cfg = env
+    project, asset = create_uploaded(env, clip)
+    calls = patch_provider(
+        monkeypatch, lambda payload, clip_index: non_tutorial_payload(payload) if clip_index == 1 else payload
+    )
+    job, _ = enqueue_analysis(env, project, asset, skip_tutorial_gate=True)
+    worker.once()
+    detail = client.get(f"/api/v1/jobs/{job['id']}").json()
+    assert detail["state"] == "needs_review" and len(detail["provider_calls"]) == len(calls) == 2
+    assert not any(w.get("code") == "NOT_TUTORIAL" for w in detail["warnings"] if isinstance(w, dict))
+    assert client.get(f"/api/v1/projects/{project['id']}/document").json() is not None

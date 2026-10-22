@@ -71,7 +71,7 @@ def create_uploaded(env, clip):
     return project, detail
 
 
-def enqueue_analysis(env, project, asset, key="test-key"):
+def enqueue_analysis(env, project, asset, key="test-key", **extra):
     client, _, _ = env
     consent = client.post(
         f"/api/v1/projects/{project['id']}/consents",
@@ -83,6 +83,7 @@ def enqueue_analysis(env, project, asset, key="test-key"):
         "allow_unknown_cost": True,
         "output_language": "vi",
         "budget_usd": 1,
+        **extra,
     }
     response = client.post(
         f"/api/v1/projects/{project['id']}/jobs", json=body, headers={"Idempotency-Key": key}

@@ -111,6 +111,7 @@ class AnalyzeInput(Input):
     consent_id: str
     allow_unknown_cost: bool = False
     budget_usd: float = Field(default=1, gt=0, le=100)
+    skip_tutorial_gate: bool = False
 
 
 class EstimateInput(Input):

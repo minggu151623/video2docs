@@ -37,7 +37,7 @@ from app.providers.timecodes import TimecodeError
 from app.services.exports import build_export
 from app.services.budget import check_budget, cost
 
-TERMINAL = {"succeeded", "needs_review", "failed", "cancelled", "interrupted"}
+TERMINAL = {"succeeded", "needs_review", "not_tutorial", "failed", "cancelled", "interrupted"}
 LOG = logging.getLogger("video2docs.worker")
 
 
@@ -281,6 +281,26 @@ class Worker:
             if owned:
                 provider.close()
 
+    def not_tutorial_gate(self, job, snapshot, index, draft):
+        """Record non-tutorial clips; True when the job must stop after the first clip."""
+        if draft.is_tutorial:
+            return False
+        stop = index == 0 and not snapshot.get("skip_tutorial_gate")
+        warning = (
+            {"code": "NOT_TUTORIAL", "reason": draft.not_tutorial_reason}
+            if stop
+            else {"code": "LATER_CLIP_NOT_TUTORIAL", "clip_index": index + 1}
+            if index > 0
+            else None
+        )
+        if warning:
+            with self.Session.begin() as s:
+                current_job = s.get(Job, job.id)
+                warnings = json.loads(current_job.warnings_json)
+                if warning not in warnings:
+                    current_job.warnings_json = json.dumps(warnings + [warning])
+        return stop
+
     def analyze(self, job):
         cfg = Settings(**{**self.settings.model_dump(), **json.loads(job.settings_snapshot_json)["config"]})
         snapshot = json.loads(job.settings_snapshot_json)
@@ -307,6 +327,8 @@ class Worker:
                         raise AppError("CHECKPOINT_CHANGED", "Checkpoint không khớp hash.", 422)
                     draft = load_draft(path.read_bytes(), chunk.duration_sec)
                     parts.append((chunk.start_sec, draft))
+                    if self.not_tutorial_gate(job, snapshot, index, draft):
+                        return "not_tutorial"
                     continue
                 clip_rel = f"projects/{job.project_id}/derived/{job.id}/{chunk.id}.mp4"
                 clip = safe_path(cfg.data_dir, clip_rel)
@@ -499,6 +521,8 @@ class Worker:
                 self.cleanup(job.id, provider)
                 clip.unlink(missing_ok=True)
                 self.phase(job.id, "analyzing", index + 1, len(chunks))
+                if self.not_tutorial_gate(job, snapshot, index, draft):
+                    return "not_tutorial"
             self.phase(job.id, "assembling")
             draft = assemble(parts, asset.duration_sec, cfg.max_steps)
             generation_id = uid()
