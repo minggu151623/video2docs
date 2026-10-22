@@ -21,7 +21,23 @@ def supported_claim(claim):
 
 
 def has_review_claims(draft):
-    return any(not supported_claim(c) for c in [*draft.prerequisites, *draft.troubleshooting])
+    claims = [*draft.prerequisites, *draft.safety, *draft.troubleshooting, *draft.materials]
+    for step in draft.steps:
+        claims += [*step.warnings, *step.tips, *step.parameters]
+    return any(not supported_claim(c) for c in claims)
+
+
+def material_key(item):
+    return (
+        item["name"].casefold().strip(),
+        (item["quantity"] or "").strip(),
+        (item["unit"] or "").casefold().strip(),
+    )
+
+
+def merge_evidence(target, extra):
+    spans = [s for s in extra["evidence_spans"] if s not in target["evidence_spans"]]
+    target["evidence_spans"] = (target["evidence_spans"] + spans)[:5]
 
 
 def assemble(parts, duration, max_steps=80):
@@ -38,6 +54,7 @@ def assemble(parts, duration, max_steps=80):
         summary="",
     )
     summaries = []
+    has_steps = False
     for chunk_index, (offset, draft) in enumerate(parts):
         data = draft.model_dump(by_alias=True)
 
@@ -56,21 +73,30 @@ def assemble(parts, duration, max_steps=80):
 
         shift(data)
         if chunk_index > 0:
-            for prerequisite in data["prerequisites"]:
-                prerequisite["scope"] = "clip"
+            for claim in (*data["prerequisites"], *data["safety"]):
+                claim["scope"] = "clip"
+        if first["yield"] is None:
+            first["yield"] = data["yield"]
+        if data["steps"]:
+            has_steps = True
         if data["summary"] and data["summary"] not in summaries:
             summaries.append(data["summary"])
         for field in (
             "objectives",
             "prerequisites",
             "safety",
-            "materials",
             "troubleshooting",
             "uncertainties",
         ):
             for value in data[field]:
                 if value not in first[field]:
                     first[field].append(value)
+        for item in data["materials"]:
+            same = next((m for m in first["materials"] if material_key(m) == material_key(item)), None)
+            if same is None:
+                first["materials"].append(item)
+            else:
+                merge_evidence(same, item)
         for tool in data["equipment"]:
             key = (tool["name"].casefold().strip(), (tool["spec"] or "").casefold().strip())
             same = next(
@@ -84,8 +110,7 @@ def assemble(parts, duration, max_steps=80):
             if same is None:
                 first["equipment"].append(tool)
             else:
-                spans = [s for s in tool["evidence_spans"] if s not in same["evidence_spans"]]
-                same["evidence_spans"] = (same["evidence_spans"] + spans)[:5]
+                merge_evidence(same, tool)
         for step in data["steps"]:
             step["local_id"] = f"c{chunk_index + 1}-{step['local_id']}"
             normalized = lambda s: " ".join((s["title"] + " " + " ".join(s["actions"])).lower().split())
@@ -106,6 +131,8 @@ def assemble(parts, duration, max_steps=80):
                 first["steps"].append(step)
     first["steps"].sort(key=lambda s: (s["start_sec"], s["end_sec"]))
     first["summary"] = "\n".join(summaries)
+    if has_steps:
+        first["is_tutorial"], first["not_tutorial_reason"] = True, None
     if len(first["steps"]) > max_steps:
         raise AppError("DOCUMENT_LIMIT_EXCEEDED", "Tài liệu vượt giới hạn số bước; hãy tách video.", 422)
     try:

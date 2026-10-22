@@ -246,3 +246,174 @@ def test_exact_input_without_language_renders_plain_fence(draft):
     lines = markdown(draft).splitlines()
     index = lines.index("pinch of salt")
     assert lines[index - 1] == "```" and lines[index + 1] == "```"
+
+
+def sized_material(name, quantity, unit, start=0):
+    item = material(name, start)
+    item.quantity, item.unit = quantity, unit
+    item.on_screen_text = f"{quantity} {unit}"
+    return item
+
+
+def parts_pair(draft):
+    return draft.model_copy(deep=True), draft.model_copy(deep=True)
+
+
+def test_assemble_takes_domain_and_gate_from_first_clip(draft):
+    first, second = parts_pair(draft)
+    first.domain, second.domain = "cooking", "other"
+    merged = assemble([(0, first), (8, second)], 20)
+    assert merged.domain == "cooking" and merged.is_tutorial and merged.not_tutorial_reason is None
+
+
+def test_later_clip_steps_override_a_first_clip_that_is_not_a_tutorial(draft):
+    first, second = parts_pair(draft)
+    first.is_tutorial, first.not_tutorial_reason = False, "Intro only"
+    first.steps = []
+    merged = assemble([(0, first), (8, second)], 20)
+    assert merged.is_tutorial and merged.not_tutorial_reason is None and merged.steps
+
+
+def test_no_steps_anywhere_keeps_first_clip_gate(draft):
+    first, second = parts_pair(draft)
+    for part in (first, second):
+        part.is_tutorial, part.not_tutorial_reason, part.steps = False, "Not a tutorial", []
+    second.not_tutorial_reason = "Other reason"
+    merged = assemble([(0, first), (8, second)], 20)
+    assert not merged.is_tutorial and merged.not_tutorial_reason == "Not a tutorial" and not merged.steps
+
+
+def test_materials_merge_by_name_and_quantity(draft):
+    first, second = parts_pair(draft)
+    first.materials = [sized_material("Bột mì", "200", "g", 0)]
+    second.materials = [
+        sized_material(" bột mì", "200", "G", 1),
+        sized_material("Bột mì", "100", "g", 3),
+    ]
+    merged = assemble([(0, first), (8, second)], 20)
+    assert [(m.name, m.quantity, m.unit) for m in merged.materials] == [
+        ("Bột mì", "200", "g"),
+        ("Bột mì", "100", "g"),
+    ]
+    assert [s.start_sec for s in merged.materials[0].evidence_spans] == [0, 9]
+    assert merged.materials[1].evidence_spans[0].start_sec == 11
+
+
+def test_merged_material_evidence_is_capped_and_not_duplicated(draft):
+    first, second = parts_pair(draft)
+    first.materials = [sized_material("Flour", "1", "kg", 0)]
+    first.materials[0].evidence_spans *= 4
+    second.materials = [
+        sized_material(n, "1", "kg", start) for n, start in (("Flour", 0), ("Flour", 5), ("flour", 7))
+    ]
+    merged = assemble([(0, first), (0, second)], 20)
+    assert len(merged.materials) == 1
+    spans = merged.materials[0].evidence_spans
+    assert len(spans) == 5 and [s.start_sec for s in spans].count(0) == 4 and spans[-1].start_sec == 5
+
+
+def test_safety_from_later_clip_is_clip_scoped(draft):
+    first, second = parts_pair(draft)
+    first.safety = [grounded("Unplug first")]
+    second.safety = [grounded("Wear gloves")]
+    merged = assemble([(0, first), (8, second)], 20)
+    assert [(c.text, c.scope) for c in merged.safety] == [
+        ("Unplug first", "tutorial"),
+        ("Wear gloves", "clip"),
+    ]
+    assert second.safety[0].scope == "tutorial"
+
+
+def test_inferred_parameter_marks_review(draft):
+    from app.schemas.tutorial_v2 import Parameter
+
+    def parameter(basis):
+        return Parameter.model_validate(
+            {
+                "name": "Temperature",
+                "value": "180",
+                "unit": "C",
+                "evidence_spans": [{"start_sec": 0, "end_sec": 1, "source": "visual", "description": "Dial"}],
+                "basis": basis,
+                "quote": None,
+                "on_screen_text": "180 C" if basis == "observed" else None,
+            }
+        )
+
+    draft.steps[0].parameters = [parameter("observed")]
+    assert not has_review_claims(draft)
+    draft.steps[0].parameters = [parameter("inferred")]
+    assert has_review_claims(draft)
+
+
+@pytest.mark.parametrize("field", ["safety", "prerequisites", "troubleshooting"])
+def test_unsupported_claim_lists_mark_review(draft, field):
+    setattr(draft, field, [claim("Guess", basis="unclear")])
+    assert has_review_claims(draft)
+
+
+@pytest.mark.parametrize("field", ["warnings", "tips"])
+def test_unsupported_step_claims_mark_review(draft, field):
+    setattr(draft.steps[0], field, [claim("Guess", basis="inferred")])
+    assert has_review_claims(draft)
+    setattr(draft.steps[0], field, [claim("Seen", basis="observed")])
+    assert not has_review_claims(draft)
+
+
+def test_unsupported_material_marks_review(draft):
+    item = material("Salt")
+    item.basis = "unclear"
+    draft.materials = [item]
+    assert has_review_claims(draft)
+
+
+def test_shift_moves_spans_inside_step_parameters_inputs_warnings_and_tips(draft):
+    from app.schemas.tutorial_v2 import ExactInput, Parameter
+
+    span = {"start_sec": 1, "end_sec": 2, "source": "visual", "description": "Shown"}
+    step = draft.steps[0]
+    step.parameters = [
+        Parameter.model_validate(
+            {
+                "name": "n",
+                "value": "v",
+                "unit": None,
+                "evidence_spans": [span],
+                "basis": "observed",
+                "quote": None,
+                "on_screen_text": "v",
+            }
+        )
+    ]
+    step.exact_inputs = [
+        ExactInput.model_validate(
+            {
+                "kind": "text",
+                "language": None,
+                "text": "x",
+                "completeness": "complete",
+                "evidence_spans": [span],
+                "basis": "observed",
+                "quote": None,
+                "on_screen_text": "x",
+            }
+        )
+    ]
+    step.warnings = [claim("Careful")]
+    step.tips = [claim("Handy")]
+    first = draft.model_copy(deep=True)
+    first.steps = []
+    first.uncertainties = draft.uncertainties
+    merged = assemble([(0, first), (8, draft)], 30)
+    shifted = merged.steps[0]
+    for items in (shifted.parameters, shifted.exact_inputs, shifted.warnings, shifted.tips):
+        assert items[0].evidence_spans[0].start_sec >= 8
+    assert shifted.parameters[0].evidence_spans[0].start_sec == 9
+
+
+def test_yield_first_non_null_wins(draft):
+    first, second = parts_pair(draft)
+    first.yield_, second.yield_ = None, "6 phần"
+    assert assemble([(0, first), (8, second)], 20).yield_ == "6 phần"
+    first.yield_ = "4 phần"
+    assert assemble([(0, first), (8, second)], 20).yield_ == "4 phần"

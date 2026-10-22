@@ -48,6 +48,8 @@ Nguyên văn và nguồn gốc cho prerequisites, safety, materials, parameters,
 - basis=observed với chữ hoặc số hiện trên màn hình (định lượng, thông số, lệnh, code):
   on_screen_text là chữ đó chép nguyên văn; cần evidence_spans có source visual hoặc both.
 - basis=observed chỉ là hành động nhìn thấy, không có chữ hay số để chép: quote và on_screen_text là null.
+- Với parameters, exact_inputs và materials có quantity: basis=observed bắt buộc chép chữ trên màn hình vào
+  on_screen_text; nếu không có chữ đọc được thì dùng basis=unclear.
 - basis=inferred hoặc unclear: quote và on_screen_text là null; mục này chỉ là điểm cần kiểm tra.
 - Với mọi mục khác, quote và on_screen_text vẫn bắt buộc có mặt trong JSON, là null khi không áp dụng.
 - Không bịa quote hay on_screen_text. Không nghe hoặc đọc chắc chắn thì dùng basis=unclear và quote=null.
