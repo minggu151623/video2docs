@@ -646,12 +646,11 @@ def test_ranges_and_alternatives_around_a_number_never_verify(case):
 
 
 def test_a_number_two_tokens_away_from_a_non_numeric_edge_is_fine():
-    out = verify(material(quote="cho 200 gram bột"), transcript("cho 200 gram bột và 100 gram đường"))
-    assert out.status == "verified"
-    out = verify(
-        material(quote="cho 200 gram bột"), transcript("cho 100 gram đường rồi sau đó cho 200 gram bột")
-    )
-    assert out.status == "verified"
+    # round 4: another quantity must be more than 8 tokens from the quote's edge number (was 2-4)
+    spoken = "cho 200 gram bột rồi khuấy đều cho thật kỹ xong thêm 100 gram đường"
+    assert verify(material(quote="cho 200 gram bột"), transcript(spoken)).status == "verified"
+    spoken = "cho 100 gram đường rồi khuấy đều cho thật kỹ sau đó cho 200 gram bột"
+    assert verify(material(quote="cho 200 gram bột"), transcript(spoken)).status == "verified"
 
 
 @pytest.mark.parametrize(
@@ -806,10 +805,8 @@ def test_range_in_ocr_with_filler_words():
 
 def test_vietnamese_words_that_fold_to_number_words_do_not_block_speech():
     # "sau" (after) is the diacritic-free form of "sáu" (six) but is a plain word in speech
-    out = verify(
-        material(quote="cho 200 gram bột"), transcript("cho 100 gram đường rồi sau đó cho 200 gram bột")
-    )
-    assert out.status == "verified"
+    spoken = "cho 100 gram đường rồi khuấy đều cho thật kỹ sau đó cho 200 gram bột"
+    assert verify(material(quote="cho 200 gram bột"), transcript(spoken)).status == "verified"
 
 
 def test_bare_leading_separator_numbers_are_kept_verbatim():
@@ -826,3 +823,133 @@ def test_valid_compounds_verify_end_to_end():
     ]:
         item = stated_param(value, "gram", f"cho {value} gram bột")
         assert verify(item, transcript(spoken)).status == "verified", spoken
+
+
+# ---- regression: round 4 (number-token distance, bare scales, separator after a letter) --------
+
+
+@pytest.mark.parametrize(
+    "text,lang,expected",
+    [
+        ("vài chục gram", "vi", ["~chục"]),
+        ("mấy chục", "vi", ["~chục"]),
+        ("hàng chục", "vi", ["~chục"]),
+        ("vài triệu đồng", "vi", ["~triệu"]),
+        ("vài trăm gram", "vi", ["~trăm"]),
+        ("mấy nghìn đồng", "vi", ["~nghìn"]),
+        ("mươi phút", "vi", ["~mươi"]),
+        ("hai nghìn trăm", "vi", ["~hai nghìn trăm"]),
+        ("a few million dollars", "en", ["~million"]),
+        ("a few hundred grams", "en", ["~hundred"]),
+        ("hundred thousand", "en", ["~hundred thousand"]),
+        ("a hundred grams", "en", ["100"]),
+        ("a thousand dollars", "en", ["1000"]),
+        ("an hundred", "en", ["100"]),
+        ("a million", "en", ["1000000"]),
+        ("hai chục", "vi", ["20"]),
+        ("một trăm nghìn", "vi", ["100000"]),
+        ("ba trăm hai nghìn", "vi", ["~ba trăm hai nghìn"]),
+        ("một triệu hai nghìn", "vi", ["~một triệu hai nghìn"]),
+        ("ba trăm linh hai nghìn", "vi", ["302000"]),
+        ("một triệu hai trăm nghìn", "vi", ["1200000"]),
+        ("hai mươi lăm nghìn", "vi", ["25000"]),
+        ("dùng.05", None, [".05"]),
+        ("muối,5 phút", None, [".5"]),
+    ],
+)
+def test_bare_scales_are_unread_and_separators_after_letters_start_numbers(text, lang, expected):
+    from app.services.verification.numbers import number_tokens
+
+    assert number_tokens(text, lang) == expected
+
+
+def vi_mat(quantity, unit, quote):
+    return material(quantity=quantity, unit=unit, quote=quote)
+
+
+ROUND_4_NEGATIVES = [
+    # bare scale words after a vague quantifier are not exact numbers
+    lambda: verify(vi_mat("10", "gram", "cho 10 gram muối"), transcript("cho vài chục gram muối")),
+    lambda: verify(vi_mat("10", "gram", "cho vài chục gram muối"), transcript("cho vài chục gram muối")),
+    lambda: verify(vi_mat("10", "gram", "cho mấy chục gram muối"), transcript("cho mấy chục gram muối")),
+    lambda: verify(vi_mat("10", "gram", "cho hàng chục gram muối"), transcript("cho hàng chục gram muối")),
+    lambda: verify(
+        vi_mat("1000000", "đồng", "tốn vài triệu đồng thôi"), transcript("tốn vài triệu đồng thôi")
+    ),
+    lambda: verify(vi_mat("100", "gram", "cho vài trăm gram muối"), transcript("cho vài trăm gram muối")),
+    lambda: verify(
+        stated_param("1000000", "dollars", "a few million dollars total"),
+        transcript("it cost a few million dollars total", language="en"),
+    ),
+    lambda: verify(vi_mat("302000", "đồng", "giá 302000 đồng"), transcript("giá ba trăm hai nghìn đồng")),
+    # connectors with three or more filler words
+    lambda: verify(stated_param("3", "phút", "3 phút nhé"), transcript("nấu 2 hoặc có thể là 3 phút nhé")),
+    lambda: verify(stated_param("3", "phút", "3 phút nhé"), transcript("nấu 2 phút hoặc có thể 3 phút nhé")),
+    lambda: verify(
+        stated_param("3", "phút", "3 phút nhé"), transcript("nấu 2 phút hoặc là khoảng 3 phút nhé")
+    ),
+    lambda: verify(
+        stated_param("3", "minutes", "3 minutes until golden"),
+        transcript("bake 2 minutes or maybe about 3 minutes until golden", language="en"),
+    ),
+    lambda: verify(
+        stated_param("3", "minutes", "three minutes until golden"),
+        transcript("bake two, or if you like, three minutes until golden", language="en"),
+    ),
+    lambda: oparam("3", "phút", "3 phút", "Nấu 2 hoặc có thể là 3 phút"),
+    lambda: verify(stated_param("2", "phút", "nấu 2 phút"), transcript("nấu 2 phút hay là tầm 3 phút")),
+    # quotes with words before their number
+    lambda: verify(stated_param("3", "phút", "khoảng tầm 3 phút"), transcript("nấu 2 hay khoảng tầm 3 phút")),
+    lambda: verify(stated_param("3", "phút", "hoặc là 3 phút nhé"), transcript("nấu 2 hoặc là 3 phút nhé")),
+    lambda: verify(
+        stated_param("3", "minutes", "or maybe 3 minutes"),
+        transcript("bake 2 or maybe 3 minutes", language="en"),
+    ),
+    lambda: oparam("3", "phút", "hoặc là 3 phút", "Nấu 2 hoặc là 3 phút"),
+    # a separator right after a letter starts a number
+    lambda: oclaim("Dùng 5 ml thuốc", "Dùng.05 ml thuốc"),
+    lambda: oparam("5", "ml", "Dùng 5 ml", "Dùng.05 ml thuốc"),
+]
+
+
+@pytest.mark.parametrize("case", ROUND_4_NEGATIVES)
+def test_round_4_false_verified_inputs_are_unverified(case):
+    assert case().status == "unverified"
+
+
+ROUND_4_POSITIVES = [
+    lambda: verify(material(quote="cho 200 gram bột"), transcript("nhớ cho 200 gram bột vào tô nhé")),
+    lambda: verify(
+        stated_param("100", "grams", "add a hundred grams of flour"),
+        transcript("now add a hundred grams of flour", language="en"),
+    ),
+    lambda: verify(
+        stated_param("100", "grams", "add 100 grams of flour"),
+        transcript("now add a hundred grams of flour", language="en"),
+    ),
+    lambda: verify(
+        stated_param("1020", "gram", "cho 1020 gram bột"),
+        transcript("cho một nghìn không trăm hai mươi gram bột"),
+    ),
+    lambda: verify(
+        claim(quote="pha loãng dung dịch 0,05%", text="x"), transcript("pha loãng dung dịch 0,05%")
+    ),
+    lambda: oclaim("Dùng.05 ml thuốc", "Dùng.05 ml thuốc"),
+    lambda: verify(vi_mat("20", "gram", "cho hai chục gram muối"), transcript("cho hai chục gram muối")),
+]
+
+
+@pytest.mark.parametrize("case", ROUND_4_POSITIVES)
+def test_round_4_correct_readings_still_verify(case):
+    assert case().status == "verified"
+
+
+def test_numbers_within_eight_tokens_block_a_correct_quote_recall_trade_off():
+    # ruling (a): safety over recall. A second quantity, or any number word such as the article
+    # "một" (a/one), within 8 tokens of the quote's edge number makes a correct quote unverified.
+    for spoken in [
+        "cho 200 gram bột và 100 gram đường",
+        "cho 100 gram đường rồi sau đó cho 200 gram bột",
+        "cho 200 gram bột vào một cái tô",
+    ]:
+        assert verify(material(quote="cho 200 gram bột"), transcript(spoken)).status == "unverified", spoken

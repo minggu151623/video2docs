@@ -4,7 +4,7 @@ import re
 import unicodedata
 
 TOKEN = re.compile(r"\d+|[^\W\d_]+")
-NUMBER = re.compile(r"(?:(?<!\w)[-–−])?(?:(?<![\w.,/])[.,]\d+|\d+)(?:[.,/\-–−]\d+)*")
+NUMBER = re.compile(r"(?:(?<!\w)[-–−])?(?:(?<![\d.,/])[.,]\d+|\d+)(?:[.,/\-–−]\d+)*")
 
 
 def _table(spec):
@@ -39,14 +39,15 @@ def vocabulary(language: str | None) -> dict:
     return {"vi": VI, "en": EN}.get(code, {} if code else VI | EN)
 
 
-def _evaluate(tokens: list[tuple[str, int]]) -> list[int] | None:
+def _evaluate(tokens: list[tuple[str, int]], article: bool = False) -> list[int] | None:
     """Numbers in a run of number words; None when the reading is ambiguous.
 
     'một trăm năm mươi' is 150, but 'một trăm năm' (105 or 150), 'hai trăm tư', 'một nghìn hai',
-    'hai mươi năm', neighbours like 'hai ba' or 'four five' (25? 2-3?) and a scale repeated at the
-    same magnitude without a higher one between ('hai mươi ba mươi', 'hai nghìn ba nghìn') are left
-    unread, so nothing can match them by accident."""
-    out, total, cur, small, seen = [], 0, 0, None, set()
+    'hai mươi năm', neighbours like 'hai ba' or 'four five' (25? 2-3?), a scale repeated at the
+    same magnitude without a higher one between ('hai mươi ba mươi', 'hai nghìn ba nghìn') and a
+    scale with nothing to multiply ('vài chục', 'mấy trăm', 'a few million') are left unread, so
+    nothing can match them by accident. `article`: English 'a'/'an' right before is the multiplier 1."""
+    out, total, cur, small, seen = [], 0, 0, 1 if article else None, set()
     scaled = linked = loose = bad = False
 
     def finish(clean=True):
@@ -77,14 +78,16 @@ def _evaluate(tokens: list[tuple[str, int]]) -> list[int] | None:
                 scale("x")
         elif low == "x":
             scale("x")
+            bad = bad or small is None or small >= 10  # bare 'chục', 'mươi'
             small, loose = (small if small is not None and small < 10 else 1) * 10, False
         elif low in "hkm":
             scale(low)
+            bad = bad or small is None and (low == "h" or not cur)  # bare 'trăm', 'thousand'
+            bad = bad or loose and low != "h"  # 'ba trăm hai nghìn': 302 or 320 thousand
             if low == "h":
-                cur += (1 if small is None else small) * 100
+                cur += (small or 0) * 100
             else:
-                amount = 1 if small is None and not cur else cur + (small or 0)
-                total, cur = total + amount * SCALES[low], 0
+                total, cur = total + (cur + (small or 0)) * SCALES[low], 0
             small, loose, linked, scaled = None, False, False, scaled or kind.isupper()
         elif total or cur:  # filler inside a number: 'một trăm linh năm', 'one hundred and five'
             linked = True
@@ -107,7 +110,9 @@ def _runs(text: str, vocab: dict) -> list[tuple[int, int, list[int] | None]]:
         while group and group[0][1][0] == "l":
             group.pop(0)
         if group:
-            runs.append((group[0][0].start(), group[-1][0].end(), _evaluate([e for _, e in group])))
+            begin = group[0][0].start()
+            article = group[0][1][0] in "hkm" and re.search(r"(?<!\w)an?\s+$", text[:begin]) is not None
+            runs.append((begin, group[-1][0].end(), _evaluate([e for _, e in group], article)))
         group = [(m, entry)] if entry else []
     return runs
 

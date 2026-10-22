@@ -28,7 +28,7 @@ DIGITS_ONLY = "und"
 SIGNS, SEPARATORS = "-–−+", ".,/"
 MODIFIERS = {"rưỡi", "phẩy", "chấm", "nửa", "âm", "trừ", "half", "point", "minus", "negative", "½", "¼", "¾"}
 DASHES = {"-", "–", "−", "~"}
-NEIGHBOURHOOD = 4
+NEIGHBOURHOOD = 8
 MIN_QUOTE_CHARS = 6
 
 
@@ -102,22 +102,23 @@ def _has_number(token: str, folded: bool = False) -> bool:
 
 
 def _beside_number(haystack: str, start: int, end: int, folded: bool) -> bool:
-    """Another number, or a dash, near a number at the segment's edge: ranges and alternatives.
+    """Another number, or a dash, near the first or last number of the segment: ranges and alternatives.
 
-    A side is checked only when the segment has a number among its first (last) two tokens; then any
-    number or number word within NEIGHBOURHOOD tokens beyond it, or a bare dash right next to it, ends
-    the match ('2 - 3 phút', 'hai đến tầm ba', 'or maybe 3'). A later '100 gram đường' does not."""
+    Distance is counted in whitespace tokens from that edge number, so words between it and the segment
+    edge use up the window: any number or number word (read or not) within NEIGHBOURHOOD tokens of it
+    outside the segment, or a bare dash right next to the segment within reach, ends the match
+    ('2 - 3 phút', 'nấu 2 hay khoảng tầm 3 phút', 'two, or if you like, three')."""
     tokens = haystack[start:end].split()
-    before, after = haystack[:start].split(), haystack[end:].split()
+    marks = [i for i, w in enumerate(tokens) if _has_number(w, folded)]
+    if not marks:
+        return False
 
-    def near(words):  # words nearest the segment first
-        return any(_has_number(w, folded) for w in words[:NEIGHBOURHOOD]) or (
-            bool(words) and words[0] in DASHES
-        )
+    def near(words: list[str], gap: int) -> bool:  # words nearest the segment first
+        reach = words[: max(0, NEIGHBOURHOOD - gap)]
+        return any(_has_number(w, folded) for w in reach) or (bool(reach) and reach[0] in DASHES)
 
-    return (any(_has_number(w, folded) for w in tokens[:2]) and near(before[::-1])) or (
-        any(_has_number(w, folded) for w in tokens[-2:]) and near(after)
-    )
+    before, after = haystack[:start].split()[::-1], haystack[end:].split()
+    return near(before, marks[0]) or near(after, len(tokens) - 1 - marks[-1])
 
 
 def _edges_ok(needle: str, haystack: str, start: int, end: int, language: str | None, folded: bool) -> bool:
