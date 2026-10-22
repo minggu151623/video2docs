@@ -32,7 +32,7 @@ def stamp(seconds):
 
 
 def escape(value):
-    return re.sub(r"([\\`*_{}\[\]<>#+.!|~-])", r"\\\1", str(value)).replace("\n", " ")
+    return re.sub(r"([\\`*_{}\[\]<>#+.!|~-])", r"\\\1", str(value)).replace("\r", " ").replace("\n", " ")
 
 
 def supported_claim(claim):

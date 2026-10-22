@@ -57,7 +57,7 @@ def warning(text):
     }
 
 
-def step(title, start, parameters=(), warnings=()):
+def step(title, start, parameters=(), warnings=(), tips=(), exact_inputs=()):
     return {
         "local_id": f"s{start}",
         "title": title,
@@ -66,9 +66,9 @@ def step(title, start, parameters=(), warnings=()):
         "actions": [title],
         "expected_result": None,
         "parameters": list(parameters),
-        "exact_inputs": [],
+        "exact_inputs": list(exact_inputs),
         "warnings": list(warnings),
-        "tips": [],
+        "tips": list(tips),
         "evidence_spans": [span(start, start + 20)],
         "screenshot_candidates_sec": [],
         "needs_review": False,
@@ -309,3 +309,70 @@ def test_main_rejects_missing_draft(tmp_path):
     truth = write(tmp_path, "truth.json", annotation())
     with pytest.raises(SystemExit):
         evaluate.main(["--generation-dir", str(tmp_path), "--annotation", str(truth)])
+
+
+def command(text):
+    return {
+        "kind": "command",
+        "language": "bash",
+        "text": text,
+        "completeness": "complete",
+        "evidence_spans": [span()],
+        "basis": "stated",
+        "quote": text,
+        "on_screen_text": None,
+    }
+
+
+def test_names_match_fuzzily_so_a_wrong_value_counts():
+    draft = make_draft([material("Bột mì", "300")])
+    truth = annotation(materials=[{"name": "Bột mì đa dụng", "quantity": "200", "unit": "g"}])
+    result = run(draft, make_report(**{"materials/0": "verified"}), truth)
+    assert result["wrong_verified_quantities"] == 1
+    assert result["verified_unmatched"] == {"count": 0, "paths": []}
+
+
+def test_verified_items_without_an_annotation_are_listed():
+    steps = [step("Nướng", 0, [parameter("Nhiệt độ", "180")])]
+    draft = make_draft([material("Muối", "5")], steps=steps)
+    report = make_report(**{"materials/0": "verified", "steps/0/parameters/0": "verified"})
+    result = run(draft, report, annotation(materials=[{"name": "Bột", "quantity": "200", "unit": "g"}]))
+    assert result["verified_unmatched"] == {"count": 2, "paths": ["materials/0", "steps/0/parameters/0"]}
+    assert result["verified_precision"] == 0.0
+
+
+def test_numeric_claims_are_scored_against_annotated_claims():
+    tips = [warning("Nấu 3 phút cho mềm"), warning("Nghỉ 10 phút"), warning("Khuấy đều tay")]
+    draft = make_draft(steps=[step("Nấu", 0, tips=tips)])
+    report = make_report(
+        **{"steps/0/tips/0": "verified", "steps/0/tips/1": "verified", "steps/0/tips/2": "verified"}
+    )
+    truth = annotation(claims=[{"text": "Nấu 5 phút cho mềm", "numbers": ["5"]}])
+    result = run(draft, report, truth)
+    assert result["wrong_verified_quantities"] == 1
+    assert result["verified_unmatched"] == {"count": 1, "paths": ["steps/0/tips/1"]}
+    truth = annotation(claims=[{"text": "Nấu 3 phút cho mềm", "numbers": ["3"]}])
+    result = run(draft, report, truth)
+    assert result["wrong_verified_quantities"] == 0
+    assert result["verified_precision"] == 0.5
+
+
+def test_numeric_warnings_compare_their_numbers():
+    draft = make_draft(steps=[step("Nướng", 0, warnings=[warning("Không để ngoài quá 2 giờ")])])
+    truth = annotation(warnings=["Không để thức ăn ngoài quá 2 giờ"])
+    result = run(draft, make_report(**{"steps/0/warnings/0": "verified"}), truth)
+    assert result["verified_precision"] == 1.0
+    truth = annotation(warnings=["Không để ngoài quá 3 giờ"])
+    result = run(draft, make_report(**{"steps/0/warnings/0": "verified"}), truth)
+    assert result["wrong_verified_quantities"] == 1
+
+
+def test_exact_inputs_are_scored_against_annotated_inputs():
+    inputs = [command("npm run build"), command("npm install foo"), command("ls")]
+    draft = make_draft(steps=[step("Build", 0, exact_inputs=inputs)])
+    report = make_report(**{f"steps/0/exact_inputs/{i}": "verified" for i in range(3)})
+    truth = annotation(exact_inputs=["npm  run build", "npm install bar"])
+    result = run(draft, report, truth)
+    assert result["wrong_verified_exact_inputs"] == 1
+    assert result["verified_unmatched"] == {"count": 1, "paths": ["steps/0/exact_inputs/2"]}
+    assert result["verified_precision"] == pytest.approx(1 / 3)

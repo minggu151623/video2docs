@@ -29,8 +29,8 @@ SCALES = {"x": 10, "h": 100, "k": 1000, "m": 10**6}
 
 
 def number_words() -> set[str]:
-    """Every Vietnamese and English number word except fillers."""
-    return {w for table in (VI, EN) for w, (kind, _) in table.items() if kind != "l"}
+    """Every Vietnamese and English number word except fillers and 'không', which is mostly 'not'."""
+    return {w for table in (VI, EN) for w, (kind, _) in table.items() if kind != "l"} - {"không"}
 
 
 def vocabulary(language: str | None) -> dict:
@@ -97,12 +97,20 @@ def _evaluate(tokens: list[tuple[str, int]], article: bool = False) -> list[int]
     return None if None in out else out
 
 
+def _joined(text: str, left, right) -> bool:
+    return not text[left.end() : right.start()].strip(" -")
+
+
 def _runs(text: str, vocab: dict) -> list[tuple[int, int, list[int] | None]]:
     """(begin, end, values) per run of number words; values is None when the run is not read."""
     runs, group = [], []
     tokens = [(m, vocab.get(m.group())) for m in TOKEN.finditer(text)]
+    for i, (m, entry) in enumerate(tokens):  # 'không' is 0 only before a number word ('không trăm')
+        nxt = tokens[i + 1] if i + 1 < len(tokens) else (None, None)
+        if m.group() == "không" and not (nxt[1] and nxt[1][0] != "l" and _joined(text, m, nxt[0])):
+            tokens[i] = (m, None)
     for m, entry in tokens + [(None, None)]:
-        if entry and (not group or not text[group[-1][0].end() : m.start()].strip(" -")):
+        if entry and (not group or _joined(text, group[-1][0], m)):
             group.append((m, entry))
             continue
         while group and group[-1][1][0] == "l":

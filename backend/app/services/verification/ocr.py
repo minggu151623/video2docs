@@ -18,7 +18,10 @@ def recognition_model(language):
 
 
 def reading_order(texts, boxes):
-    """Top-to-bottom rows, left-to-right inside a row; boxes are (x1, y1, x2, y2)."""
+    """One line per row, top to bottom; boxes in a row joined left to right by single spaces.
+
+    Boxes are (x1, y1, x2, y2). A row is one screen line, so a command split over two boxes of the same
+    line ('$ npm run build' + '--prod') reads as one line and cannot verify a shorter command."""
     items = []
     for text, box in zip(texts, boxes):
         text = str(text).strip()
@@ -35,7 +38,7 @@ def reading_order(texts, boxes):
             row["height"] = min(row["height"], item[3])
         else:
             rows.append({"items": [item], "y": item[2], "height": item[3]})
-    return [item[0] for row in rows for item in sorted(row["items"], key=lambda i: i[1])]
+    return [" ".join(item[0] for item in sorted(row["items"], key=lambda i: i[1])) for row in rows]
 
 
 class OCR:

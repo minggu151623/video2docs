@@ -73,10 +73,12 @@ def parameter(
     quote=None,
     spans=None,
     unit="°C",
-    name="Nhiệt độ",
+    name=None,
 ):
+    # ruling I2: an OCR item's name must be in its own on-screen text, so by default the helper names the
+    # parameter after that text; tests of the name check pass a name explicitly
     return Parameter(
-        name=name,
+        name=name or on_screen_text or quote or "Nhiệt độ",
         value=value,
         unit=unit,
         evidence_spans=spans or [span(source="visual")],
@@ -413,12 +415,19 @@ def test_spoken_exact_input_is_exact(spoken):
 
 
 def test_spoken_exact_input_verifies_when_exact():
-    out = verify(stated_exact("pip install flask"), transcript("giờ ta chạy pip install flask nhé"))
-    assert (out.status, out.matched_text, out.matched_sec) == (
-        "verified",
-        "pip install flask",
-        10.0 + 3 * 0.4,
-    )
+    # ruling C4: the command must be its own stretch of speech, so pauses (>= 0.7 s) surround it here
+    words = [
+        Word(start=10.0 + i * 0.4, end=10.3 + i * 0.4, text=w) for i, w in enumerate("giờ ta chạy".split())
+    ]
+    words += [
+        Word(start=12.0 + i * 0.4, end=12.3 + i * 0.4, text=w)
+        for i, w in enumerate("pip install flask".split())
+    ]
+    words += [Word(start=14.0, end=14.3, text="nhé")]
+    out = verify(stated_exact("pip install flask"), Transcript(language="vi", words=words))
+    assert (out.status, out.matched_text, out.matched_sec) == ("verified", "pip install flask", 12.0)
+    tight = verify(stated_exact("pip install flask"), transcript("giờ ta chạy pip install flask nhé"))
+    assert tight.status == "unverified"
 
 
 def test_exact_input_text_must_equal_its_source_text():

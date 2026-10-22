@@ -337,7 +337,7 @@ def test_ocr_joins_lines_in_reading_order(monkeypatch, tmp_path):
     result = FakeOCRResult(rec_texts=texts, rec_boxes=array(*boxes))
     install_fake_paddle(monkeypatch, result)
     out = OCR(Settings()).read(tmp_path / "f.png")
-    assert out == "one-left\none-right\ntwo-left\ntwo-right\nthree"
+    assert out == "one-left one-right\ntwo-left two-right\nthree"  # ruling C4: one line per screen row
 
 
 def test_ocr_skips_blank_lines_and_handles_empty(monkeypatch, tmp_path):

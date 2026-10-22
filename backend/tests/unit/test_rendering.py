@@ -335,3 +335,8 @@ def test_markdown_metacharacters_are_escaped(field, payload):
     assert payload not in text
     assert escape(payload) in text
     assert escape(payload) != payload
+
+
+def test_escape_flattens_carriage_returns():
+    assert escape("a\r\nb\rc\nd") == "a  b c d"
+    assert "\r" not in escape("x\r# heading")

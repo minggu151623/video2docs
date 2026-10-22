@@ -42,7 +42,14 @@ with httpx.Client(base_url=args.url + "/api/v1", headers={"Origin": args.url}, t
         deadline = time.monotonic() + 2800
         while time.monotonic() < deadline:
             job = request("GET", f"/jobs/{job_id}")
-            if job["state"] in ("succeeded", "needs_review", "failed", "interrupted", "cancelled"):
+            if job["state"] in (
+                "succeeded",
+                "needs_review",
+                "not_tutorial",
+                "failed",
+                "interrupted",
+                "cancelled",
+            ):
                 return job
             time.sleep(2)
         raise RuntimeError("Local wait timed out; job remains visible in the app.")

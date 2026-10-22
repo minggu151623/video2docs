@@ -23,7 +23,7 @@ from app.services.verification.numbers import number_tokens
 
 STEP_WINDOW_SEC = 10
 TITLE_SCORE = 60
-SCOPE = {"materials", "parameters", "warnings", "safety"}
+NAME_SCORE = 80
 EMPTY_REPORT = VerificationReport(items={}, asr_status="skipped", ocr_status="skipped")
 
 
@@ -58,37 +58,53 @@ def match_steps(draft_steps, truth_steps) -> dict[int, int]:
     return matched
 
 
-def _counterparts(collection, item, path, truth, steps, language):
-    """(found, [annotation keys whose value the item matches]) for one in-scope item.
+def _numbers(text: str, language) -> Counter:
+    return Counter(number_tokens(text or "", language))
 
-    `found` means the annotation has something of this name (or, for warnings, this wording)."""
+
+def _counterparts(collection, item, path, truth, steps, language):
+    """(kind, found, [annotation keys the item matches]) for one scored item; kind None = not scored.
+
+    `found` means the annotation has something of this name (or wording, or command); kind tells which
+    error counter a found-but-wrong verified item goes to."""
     if collection == "materials":
         pool = [(("m", i), m) for i, m in enumerate(truth.get("materials", [])) if m.get("name")]
-        named = [(k, m) for k, m in pool if normalize(m["name"]) == normalize(item.name)]
+        named = [(k, m) for k, m in pool if _ratio(m["name"], item.name) >= NAME_SCORE]
         right = [
             k
             for k, m in named
             if _same_value(item.quantity, item.unit, m.get("quantity"), m.get("unit"), language)
         ]
-    elif collection == "parameters":
+        return "quantity", bool(named), right
+    if collection == "parameters":
         si = int(path.split("/")[1])
         pool = [(("p", i), p) for i, p in enumerate(truth.get("parameters", []))]
         named = [
             (k, p)
             for k, p in pool
-            if steps.get(p.get("step_index")) == si and normalize(p["name"]) == normalize(item.name)
+            if steps.get(p.get("step_index")) == si and _ratio(p["name"], item.name) >= NAME_SCORE
         ]
         right = [
             k for k, p in named if _same_value(item.value, item.unit, p.get("value"), p.get("unit"), language)
         ]
-    else:
-        named = [
-            (("w", i), w)
-            for i, w in enumerate(truth.get("warnings", []))
-            if _ratio(item.text, w) >= TITLE_SCORE
-        ]
-        right = [k for k, _ in named]
-    return bool(named), right
+        return "quantity", bool(named), right
+    if collection == "exact_inputs":
+        pool = [(("x", i), x) for i, x in enumerate(truth.get("exact_inputs", []))]
+        right = [k for k, x in pool if "".join(x.split()) == "".join(item.text.split())]
+        found = bool(right) or any(_ratio(x, item.text) >= NAME_SCORE for _, x in pool)
+        return "input", found, right
+    numbers = _numbers(item.text, language)
+    pool = [
+        (("c", i), c["text"], _numbers(" ".join(c.get("numbers", [])), language))
+        for i, c in enumerate(truth.get("claims", []))
+    ]
+    if collection in ("warnings", "safety"):
+        pool += [(("w", i), w, _numbers(w, language)) for i, w in enumerate(truth.get("warnings", []))]
+    elif not numbers:
+        return None, False, []  # tips, prerequisites, troubleshooting without numbers have no annotation
+    named = [(k, n) for k, text, n in pool if _ratio(item.text, text) >= TITLE_SCORE]
+    right = [k for k, n in named if n == numbers]
+    return ("quantity" if numbers else "claim"), bool(named), right
 
 
 def _ratio_or_none(num: int, den: int) -> float | None:
@@ -101,6 +117,8 @@ def evaluate(draft, report: VerificationReport | dict, truth: dict) -> dict:
     result = {
         "verified_precision": None,
         "wrong_verified_quantities": 0,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {"count": 0, "paths": []},
         "verified_false_negative_rate": None,
         "step_coverage": None,
         "not_tutorial_correct": draft.is_tutorial == truth["is_tutorial"],
@@ -109,23 +127,30 @@ def evaluate(draft, report: VerificationReport | dict, truth: dict) -> dict:
     matched = match_steps(draft.steps, truth_steps)
     result["step_coverage"] = _ratio_or_none(len(matched), len(truth_steps))
 
-    verified_total = verified_correct = wrong = 0
+    verified_total = verified_correct = wrong = wrong_inputs = 0
+    unmatched: list[str] = []
     reached: dict[tuple, bool] = {}  # annotated quantity -> some matching draft item is verified
     for path, collection, item in iter_grounded_items(draft):
-        if collection not in SCOPE:
+        kind, found, right = _counterparts(collection, item, path, truth, matched, draft.language)
+        if kind is None:
             continue
-        found, right = _counterparts(collection, item, path, truth, matched, draft.language)
         verified = path in report.items and report.items[path].status == "verified"
         for key in right:
-            if key[0] != "w":
+            if key[0] in "mp":
                 reached[key] = reached.get(key, False) or verified
         if not verified:
             continue
         verified_total += 1
         verified_correct += bool(right)
-        wrong += int(found and not right and collection in ("materials", "parameters"))
+        if not found:
+            unmatched.append(path)
+        elif not right:
+            wrong += kind == "quantity"
+            wrong_inputs += kind == "input"
     result["verified_precision"] = _ratio_or_none(verified_correct, verified_total)
     result["wrong_verified_quantities"] = wrong
+    result["wrong_verified_exact_inputs"] = wrong_inputs
+    result["verified_unmatched"] = {"count": len(unmatched), "paths": unmatched}
     expected = {("m", i) for i, m in enumerate(truth.get("materials", [])) if m.get("quantity")}
     expected |= {("p", i) for i in range(len(truth.get("parameters", [])))}
     present = [k for k in reached if k in expected]
@@ -148,6 +173,8 @@ def blocked_result(truth: dict) -> dict:
     return {
         "verified_precision": None,
         "wrong_verified_quantities": 0,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {"count": 0, "paths": []},
         "verified_false_negative_rate": None,
         "step_coverage": None,
         "not_tutorial_correct": truth["is_tutorial"] is False,

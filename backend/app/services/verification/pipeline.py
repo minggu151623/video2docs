@@ -137,7 +137,11 @@ def run_verification(
     asr_error: str | None = None,
 ) -> VerificationReport:
     items = list(iter_grounded_items(draft))
-    results = {path: verify_item(path, item, transcript, None, settings) for path, _, item in items}
+    lang = draft.language
+    results = {
+        path: verify_item(path, item, transcript, None, settings, text_language=lang)
+        for path, _, item in items
+    }
     if transcript is None:
         reason = no_transcript_reason(settings, asset, asr_status, asr_error)
         for path, result in results.items():
@@ -166,7 +170,7 @@ def run_verification(
         for path, item in pending:
             seconds = ocr_seconds(item, asset.duration_sec, settings.verify_max_ocr_frames)
             if not seconds:  # no visual span: the matcher gives the precise `unverified` reason
-                results[path] = verify_item(path, item, transcript, [], settings)
+                results[path] = verify_item(path, item, transcript, [], settings, text_language=lang)
                 continue
             if failure is None:
                 try:
@@ -203,7 +207,7 @@ def run_verification(
                 continue
             read = [texts[s] for s in seconds if texts.get(s) is not None]
             if read:
-                results[path] = verify_item(path, item, transcript, read, settings)
+                results[path] = verify_item(path, item, transcript, read, settings, text_language=lang)
             else:
                 missing = True
                 results[path] = ItemVerification(status="not_checked", method="ocr", reason=NO_FRAME)

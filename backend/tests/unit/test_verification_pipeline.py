@@ -269,7 +269,7 @@ def test_ocr_samples_at_most_three_frames_inside_evidence(tmp_path, monkeypatch,
     use(monkeypatch, ocr=ocr)
     cfg = settings(tmp_path)
     same_span = material("Bơ", "200", "observed", screen="Bột mì 200 g")
-    at_end = material("Sữa", "200", "observed", screen="Bột mì 200 g", spans=[span("both", 6, 10)])
+    at_end = material("Bột mì", "200", "observed", screen="Bột mì 200 g", spans=[span("both", 6, 10)])
     report = pipeline.run_verification(
         cfg, asset(), draft(SCREEN, same_span, at_end), TRANSCRIPT, "ok", tmp_path / "work", lambda: None
     )
@@ -434,3 +434,15 @@ def test_report_review_and_degraded_rules(tmp_path, monkeypatch, media):
         "asr_error": None,
         "ocr_error": None,
     }
+
+
+def test_draft_language_reaches_the_matcher(tmp_path, monkeypatch, media):
+    # ruling I2/C3a: the name check runs because the draft and the transcript are both Vietnamese
+    use(monkeypatch)
+    cfg = settings(tmp_path, ocr_engine="none")
+    wrong = material("Muối", "50", "stated", quote="thêm 50 g đường vào bát")
+    report = pipeline.run_verification(
+        cfg, asset(), draft(SPOKEN, wrong), TRANSCRIPT, "ok", tmp_path, lambda: None
+    )
+    assert report.items["materials/0"].status == "verified"
+    assert report.items["materials/1"].status == "unverified"
