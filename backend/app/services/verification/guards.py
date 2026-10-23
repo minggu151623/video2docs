@@ -151,19 +151,18 @@ def spelled_agree(needle: str, segment: str, number_words: frozenset[str]) -> bo
     return count(needle) == count(segment)
 
 
-def negation_count(text: str, number_words: frozenset[str], ocr: bool = False) -> int:
+def negation_count(text: str, number_words: frozenset[str]) -> int:
     """R12f: how many negations a text holds, each with the word it negates ('ne pas X' is one)."""
-    return len(lexicon.negation_pairs(text, number_words, ocr=ocr))
+    return len(lexicon.negation_pairs(text, number_words))
 
 
-def claim_negations_agree(
-    text: str, source: str, mode: str, number_words: frozenset[str], ocr: bool = False
-) -> bool:
+def claim_negations_agree(text: str, source: str, mode: str, number_words: frozenset[str]) -> bool:
     """R12f: one language: the same (negation, next word) pairs; otherwise the same number of them.
-    `ocr` (R15): the source is on-screen text, so a misread 'Kh0ng' in it still counts, on both sides."""
+    Both are the model's own words (R16a), so no misread negation is looked for here; the frame check
+    in the matcher compares them with what OCR read."""
     if mode == "same":
         return lexicon.negation_pairs(text, number_words) == lexicon.negation_pairs(source, number_words)
-    return negation_count(text, number_words, ocr) == negation_count(source, number_words, ocr)
+    return negation_count(text, number_words) == negation_count(source, number_words)
 
 
 def _locked(word: str, number_words: frozenset[str]) -> bool:
@@ -198,15 +197,16 @@ def negations_agree(
     end: int,
     number_words: frozenset[str],
     decimals: bool = False,
-    ocr: bool = False,
+    frame: frozenset[str] | None = None,
 ) -> bool:
     """I1 + R12f: the same (negation, next word) pairs in the needle as in the matched segment plus one
     word on each side. `decimals`: a quantity, where 'không phẩy năm' is a number, not a negation.
-    `ocr` (R15): on-screen text, where 'Kh0ng' and 'Khóng' still negate and next words are folded."""
+    `frame` (R15, R16a): the haystack is OCR frame text; next words are folded on both sides, and in the
+    frame only, 'Kh0ng' and 'Khóng' still negate unless the model wrote that word as shown (`frame`)."""
     before, after = haystack[:start].split()[-1:], haystack[end:].split()[:1]
     wider = " ".join(before + [haystack[start:end]] + after)
-    pairs = lexicon.negation_pairs
-    return pairs(needle, number_words, decimals, ocr) == pairs(wider, number_words, decimals, ocr)
+    pairs, ocr = lexicon.negation_pairs, frame is not None
+    return pairs(needle, number_words, decimals, ocr) == pairs(wider, number_words, decimals, ocr, frame)
 
 
 def name_in_source(name: str, source: str, fold) -> bool:

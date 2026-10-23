@@ -113,6 +113,8 @@ def _words(text: str) -> list[str]:
 # negates: any token one edit from 'không'/'khong', or a token with a mark one edit from 'đừng'/'dung'.
 # Common words one edit away by a letter OCR does not confuse, plus 'dùng'/'dụng' ('use', the usual word
 # behind folded 'dung'), are left out; a negation misread into exactly one of them stays unseen.
+# R16a: only the frame text read by OCR is read this way, never the model's own words, so 'đúng',
+# 'thông' or 'dừng' written by the model cannot stand in for a real 'đừng'/'không' on screen.
 OCR_NOT, OCR_DONT = ("không", "khong"), ("đừng", "dung")
 OCR_WORDS = set(
     "khoảng khoang khung khùng phong chong thong hong khang khôn dùng dụng đang đông đồng đóng đăng "
@@ -132,7 +134,7 @@ def _ocr_negation(word: str) -> bool:
     return fold(word) != word and any(_edits(word, w) <= 1 for w in OCR_DONT)
 
 
-def _negation(words: list[str], i: int, number_words, decimals: bool, ocr: bool = False) -> bool:
+def _negation(words: list[str], i: int, number_words, decimals: bool, misread: bool = False) -> bool:
     word = "không" if words[i] == "khong" else words[i]  # OCR without diacritics; no other reading
     nxt, then = (words[i + 1 : i + 3] + ["", ""])[:2]
     if word == "không" and (nxt in number_words or nxt[:1].isdigit()):
@@ -141,19 +143,31 @@ def _negation(words: list[str], i: int, number_words, decimals: bool, ocr: bool 
         return False  # R12e: for a quantity, 'không phẩy năm' is 0.5; for a claim it still negates
     if word.endswith("n't") or word in NOT_FORMS or word in NEGATIONS:
         return True
-    return ocr and _ocr_negation(word)
+    return misread and _ocr_negation(word)
+
+
+def written_words(text: str) -> frozenset[str]:
+    """The words of a text as negation_pairs reads them (casefolded, marks kept)."""
+    return frozenset(_words(text))
 
 
 def negation_pairs(
-    text: str, number_words, decimals: bool = False, ocr: bool = False
+    text: str,
+    number_words,
+    decimals: bool = False,
+    ocr: bool = False,
+    frame: frozenset[str] | None = None,
 ) -> set[tuple[str, str]]:
     """Each negation with the next word that is not a negation, all negations as one class:
     'không chạm' and 'đừng chạm' agree, 'không chấm' and 'không ướp' do not ('ne pas X' is one).
 
     R15: the next word is compared as written ('không chạm' is not 'không chấm'); `ocr` text loses its
-    marks, so there it is folded, and misread negations count."""
+    marks, so there it is folded. R16a: `frame` is given only when `text` is the OCR frame itself; then a
+    misread negation ('Kh0ng', 'Khóng', 'Dừng') counts too, except a word in `frame`, the words the model
+    wrote exactly as the frame shows them ('Đúng 5 phút' on screen and in the claim text)."""
     words = _words(text)
-    marks = [_negation(words, i, number_words, decimals, ocr) for i in range(len(words))]
+    misread = [frame is not None and w not in frame for w in words]
+    marks = [_negation(words, i, number_words, decimals, misread[i]) for i in range(len(words))]
     out = set()
     for i, neg in enumerate(marks):
         if neg:

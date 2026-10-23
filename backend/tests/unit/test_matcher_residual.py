@@ -892,3 +892,141 @@ def test_round4_recall_cost_folded_dung_is_not_a_negation():
 def test_round4_recall_cost_superscript_units_are_not_plain_digits():
     # R15: 'm²' is 'm^2', so a claim that writes 'm2' no longer meets it
     assert ocr_vi(cl("Lát 10 m2", ost="10 m²"), "10 m²").status == "unverified"
+
+
+# ---- round 5: R16 ----------------------------------------------------------------------------------
+# R16a: misread-negation tolerance reads only the OCR frame text, never the model's claim text or the
+# on_screen_text needle, so a real word one edit from 'không'/'đừng' there cannot stand in for one.
+R16_NEGATION_CASES = [
+    lambda: ocr_vi(cl("Mở nắp đúng 10 phút", ost="Đúng mở nắp 10 phút"), "Đừng mở nắp 10 phút"),
+    lambda: ocr_vi(cl("Đúng mở nắp 10 phút", ost="Đúng mở nắp 10 phút"), "Đừng mở nắp 10 phút"),
+    lambda: ocr_vi(cl("Đúng 5 phút", ost="Đúng 5 phút"), "Đừng 5 phút"),
+    lambda: ocr_vi(par("5", "phút", ost="Đúng 5 phút", name="phút"), "Đừng 5 phút"),
+    lambda: ocr_vi(cl("Đứng khuấy 5 phút", ost="Đứng khuấy 5 phút"), "Đừng khuấy 5 phút"),
+    lambda: ocr_vi(cl("Dừng khuấy 5 phút", ost="Dừng khuấy 5 phút"), "Đừng khuấy 5 phút"),
+    lambda: ocr_vi(cl("Thông gió 5 phút", ost="Thông gió 5 phút"), "Không gió 5 phút"),
+    lambda: ocr_vi(cl("Nấu đúng 5 phút", ost="Không nấu 5 phút"), "Không nấu 5 phút"),
+    lambda: ocr_vi(cl("Đậy nắp đúng 5 phút", ost="Không đậy nắp 5 phút"), "Không đậy nắp 5 phút"),
+    lambda: ocr_vi(cl("Mở nắp, đứng chờ 5 phút", ost="Đừng mở nắp 5 phút"), "Đừng mở nắp 5 phút"),
+    lambda: ocr_vi(cl("Đúng lúc thì chấm nước mắm", ost="Không chấm nước mắm"), "Không chấm nước mắm"),
+    # siblings: every real word one edit from 'không' / a marked word one edit from 'đừng'
+    *[
+        lambda w=w: ocr_vi(cl(f"{w} gió 5 phút", ost=f"{w} gió 5 phút"), "Không gió 5 phút")
+        for w in ["Hông", "Khống", "Khổng", "Phông", "Nhông", "Chông"]
+    ],
+    *[
+        lambda w=w: ocr_vi(cl(f"Nấu {w} 5 phút", ost="Không nấu 5 phút"), "Không nấu 5 phút")
+        for w in ["thông", "hông", "phông", "đựng", "dừng", "đứng"]
+    ],
+    lambda: ocr_vi(cl("Đựng khuấy 5 phút", ost="Đựng khuấy 5 phút"), "Đừng khuấy 5 phút"),
+    lambda: ocr_vi(cl("Đúng giờ tắt bếp", ost="Đúng giờ tắt bếp"), "Đừng giờ tắt bếp"),
+]
+
+
+@pytest.mark.parametrize("case", R16_NEGATION_CASES)
+def test_r16_model_text_words_never_stand_in_for_a_negation(case):
+    assert case().status == "unverified"
+
+
+def test_r16_misread_negations_on_the_frame_still_count():
+    # the frame's misread 'Khóng' is a negation: it must be in the needle, and then it agrees
+    assert ocr_vi(cl("Chấm nước mắm", ost="Chấm nước mắm"), "Khóng chấm nước mắm").status == "unverified"
+    item = cl("Không chấm nước mắm", ost="Không chấm nước mắm")
+    assert ocr_vi(item, "Khóng chấm nước mắm").status == "verified"
+    assert ocr_vi(item, "Khônq chấm nước mắm").status == "verified"
+    # a misread copied into on_screen_text but left out of the claim text still counts
+    assert ocr_vi(cl("Chấm nước mắm", ost="Kh0ng chấm nước mắm"), "Kh0ng chấm nước mắm").status == (
+        "unverified"
+    )
+
+
+def test_r16_positives_words_the_model_wrote_as_shown():
+    assert ocr_vi(cl("Đúng 5 phút", ost="Đúng 5 phút"), "Đúng 5 phút").status == "verified"
+    assert ocr_vi(par("5", "phút", ost="Đúng 5 phút", name="phút"), "Đúng 5 phút").status == "verified"
+    assert ocr_vi(cl("Dừng khuấy 5 phút", ost="Dừng khuấy 5 phút"), "Dừng khuấy 5 phút").status == "verified"
+    assert ocr_vi(cl("Thông gió 5 phút", ost="Thông gió 5 phút"), "Thông gió 5 phút").status == "verified"
+    item = cl("Đổ vào hộp đựng 2 lít", ost="Hộp đựng 2 lít")
+    assert ocr_vi(item, "Hộp đựng 2 lít").status == "verified"
+    assert ocr_vi(cl("Không nấu 5 phút", ost="Không nấu 5 phút"), "Không nấu 5 phút").status == "verified"
+
+
+def test_r16_recall_cost_frame_word_the_claim_text_leaves_out():
+    # 'đúng' on screen may be a misread 'đừng'; a claim text without it cannot rule that out
+    assert ocr_vi(cl("Nấu 5 phút", ost="Đúng 5 phút"), "Đúng 5 phút").status == "unverified"
+
+
+# R16b: the R13 gate needs speech, not only a detected language (Whisper names one for silent audio)
+SILENT = [
+    lambda: mat("2", "컵", ost="물 2 컵 또는 서너 컵", name="물"),
+    lambda: mat("2", "컵", ost="물 2~서너 컵", name="물"),
+    lambda: mat("2", "cuillères", ost="Farine 2 ou zéro cuillères", name="Farine"),
+    lambda: mat("2", "cucharas", ost="Harina 2 o cero cucharas", name="Harina"),
+    lambda: mat("2", "Löffel", ost="Mehl 2 oder null Löffel", name="Mehl"),
+    lambda: mat("1", "Löffel", ost="Mehl 1 oder eine Löffel", name="Mehl"),
+]
+
+
+def ocr_silent(item, screen, language):
+    t = Transcript(language=language, words=[])
+    return verify_item("p", item, t, [(11.0, screen)], SETTINGS, text_language="vi")
+
+
+@pytest.mark.parametrize("case", SILENT)
+def test_r16_silent_audio_with_a_language_does_not_open_the_gate(case):
+    item = case()
+    result = ocr_silent(item, item.on_screen_text, "en")
+    assert (result.status, result.reason) == ("unverified", NO_LANGUAGE)
+
+
+def test_r16_gate_needs_words_for_every_numeric_item():
+    item = par("180", "°C", ost="Nướng ở 180°C", name="Nướng")
+    for language in ("vi", "en"):
+        assert ocr_silent(item, "Nướng ở 180°C", language).reason == NO_LANGUAGE
+        assert ocr_lang(item, "Nướng ở 180°C", language).status == "verified"
+    # text without numbers still verifies on a silent video
+    assert ocr_silent(cl("Bấm nút Lưu", ost="Bấm nút Lưu"), "Bấm nút Lưu", "en").status == "verified"
+
+
+# R16c: the symbol-only tokens (and a standalone x) within 3 tokens before each number must agree
+R16_SYMBOL_SCREENS = [
+    ("Bake ≤ about 5 min", "5", "min", "Bake about 5 min"),
+    ("Bake ≤ approx. 5 min", "5", "min", "Bake approx. 5 min"),
+    ("Scale x about 2 cups", "2", "cups", "Scale about 2 cups"),
+    ("Freezer - about 18 °C", "18", "°C", "Freezer about 18 °C"),
+    ("Price $ about 5", "5", None, "Price about 5"),
+    # siblings: the symbol glued to a word two tokens back, or to the front of the hedge word
+    ("Bake≤ about 5 min", "5", "min", "Bake about 5 min"),
+    ("Bake ≤about 5 min", "5", "min", "Bake about 5 min"),
+    ("Bake ≤ for about 5 min", "5", "min", "Bake for about 5 min"),
+]
+R16_SYMBOL_CASES = [
+    *[
+        lambda s=s, v=v, u=u: ocr_vi(par(v, u, ost=s, name=s.split()[0].rstrip("≤")), s)
+        for s, v, u, _ in R16_SYMBOL_SCREENS
+    ],
+    *[lambda s=s, c=c: ocr_vi(cl(c, ost=s), s) for s, _, _, c in R16_SYMBOL_SCREENS],
+    *[lambda s=s, c=c: ocr_vi(cl(c, ost=c), s) for s, _, _, c in R16_SYMBOL_SCREENS],
+    *[
+        lambda s=s, v=v, u=u: say(
+            par(v, u, s.lower(), name=s.split()[0].rstrip("≤").lower()), f"ok {s.lower()} ok", "en", "en"
+        )
+        for s, v, u, _ in R16_SYMBOL_SCREENS
+    ],
+]
+
+
+@pytest.mark.parametrize("case", R16_SYMBOL_CASES)
+def test_r16_symbols_a_few_words_before_a_number_never_verify(case):
+    assert case().status == "unverified"
+
+
+def test_r16_symbol_positives():
+    for screen in ("Bake ≤ about 5 min", "Price $ about 5", "Scale x about 2 cups", "Bake about 5 min"):
+        assert ocr_vi(cl(screen, ost=screen), screen).status == "verified", screen
+    assert ocr_vi(cl("Giá $5", ost="Giá $ 5"), "Giá $ 5").status == "verified"
+    assert ocr_vi(cl("Bột 200 g", ost="Bột (200 g)"), "Bột (200 g)").status == "verified"
+    assert ocr_vi(cl("Lưu ý: nướng 5 phút", ost="Lưu ý: nướng 5 phút"), "Lưu ý: nướng 5 phút").status == (
+        "verified"
+    )
+    item = par("5", "phút", ost="Nướng (khoảng) 5 phút", name="Nướng")
+    assert ocr_vi(item, "Nướng (khoảng) 5 phút").status == "verified"

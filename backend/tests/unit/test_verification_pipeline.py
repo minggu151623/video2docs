@@ -451,7 +451,13 @@ def test_draft_language_reaches_the_matcher(tmp_path, monkeypatch, media):
 def test_ocr_numbers_without_a_vietnamese_or_english_transcript_are_not_read(tmp_path, monkeypatch, media):
     # ruling R13: a silent video (or one in another language) gets no on-screen number verification
     use(monkeypatch, ocr=FakeOCR())
-    for transcript, status in ((None, "skipped"), (TRANSCRIPT.model_copy(update={"language": None}), "ok")):
+    # R16b: Whisper names a language even for silent audio, so a transcript without words opens nothing
+    cases = (
+        (None, "skipped"),
+        (TRANSCRIPT.model_copy(update={"language": None}), "ok"),
+        (TRANSCRIPT.model_copy(update={"language": "en", "words": []}), "ok"),
+    )
+    for transcript, status in cases:
         report = pipeline.run_verification(
             settings(tmp_path), asset(), draft(SCREEN), transcript, status, tmp_path, lambda: None
         )

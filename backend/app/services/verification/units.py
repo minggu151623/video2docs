@@ -12,6 +12,8 @@ PUNCT = ".,;:!?()[]{}\"'"
 OPENERS = "([{\"'“‘«‹「"  # brackets and quotes before a number do not change it ('(200 g)')
 SENTENCE = ".,;:!?)]}\"'”’»›」…"  # a token ending in these ends a sentence or clause, not a symbol
 POSTFIX = "%°‰′″"  # unit marks written after a number ('10% 5')
+BRACKETS = OPENERS + ")]}”’»›」"
+LOOKBACK = 3  # R16c: tokens before a number whose symbols must agree ('Bake ≤ about 5')
 # canonical unit -> spellings, '|' between spellings. Only unambiguous ones: 'cân' (also 'scale'),
 # 'lạng' (100 g), 'phân' (cm or manure), 'ly' and 'in' are left out, so they compare only as written.
 _TABLE = {
@@ -78,16 +80,58 @@ def prefix_at(text: str, start: int) -> str:
     return "".join(c for c in word[k:] if c not in SENTENCE + OPENERS + POSTFIX)
 
 
+def _edges(word: str) -> list[str]:
+    """The non-empty runs of symbols at the front and at the end of a word with a letter or digit."""
+    k, n = 0, len(word)
+    while not word[k].isalnum():
+        k += 1
+    while not word[n - 1].isalnum():
+        n -= 1
+    return [run for run in (word[:k], word[n:]) if run]
+
+
+def _symbols(token: str) -> list[str]:
+    """R16c: the symbols one token before a number holds, brackets and quotes left out: the whole token
+    when it has no letter or digit ('≤', '$', '-', '<='), a standalone 'x'/'×', else the symbols glued to
+    its front ('≤about') or its end ('Bake≤'). Sentence punctuation and unit marks are not symbols."""
+    word = "".join(c for c in token if c not in BRACKETS)
+    if word in ("x", "×"):
+        return [word]
+    runs = [word] if not any(c.isalnum() for c in word) else _edges(word)
+    runs = ["".join(c for c in run if c not in SENTENCE + POSTFIX) for run in runs]
+    return [run for run in runs if run]
+
+
+def symbols_before(text: str, start: int) -> tuple[str, ...]:
+    """R16c: the symbols before a number, sorted (a multiset): those glued to it in its own token ('$' of
+    '$5', '≤' of '≤(5)', 'x' of 'x2') and those of the LOOKBACK tokens before it, so a word in between
+    ('Bake ≤ about 5', 'Price $ approx. 5') does not hide one."""
+    head = text[:start]
+    cut = len(head) if not head[-1:] or head[-1].isspace() else len(head) - len(head.split()[-1])
+    own = "".join(c for c in head[cut:] if c not in BRACKETS)
+    if own in ("x", "×") or not any(c.isalnum() for c in own):
+        found = [own] if own else []
+    else:
+        found = _edges(own)  # '≤about5', 'giá$5'
+    for token in head[:cut].split()[-LOOKBACK:]:
+        found += _symbols(token)
+    return tuple(sorted(found))
+
+
 def value_prefixes_agree(value: str, source: str, language: str | None) -> bool:
     """R12c for a Material/Parameter: a symbol before a number in the quote ('- 18', '<=5', '~5', '+5')
-    must be before the number in the value itself."""
+    must be before the number in the value itself; R16c: so must one a few words before it
+    ('≤ about 5')."""
 
     def symbols(raw: str, lang):
         spelled = spell_digits(" ".join(clean(raw).casefold().split()), lang)[0]
-        return [prefix_at(spelled, m.start()) for m in NUMBER.finditer(spelled)]
+        return [
+            (prefix_at(spelled, m.start()), symbols_before(spelled, m.start()))
+            for m in NUMBER.finditer(spelled)
+        ]
 
     ours = set(symbols(value, None))
-    return all(not p or p in ours for p in symbols(source, language))
+    return all(p == ("", ()) or p in ours for p in symbols(source, language))
 
 
 def unit_at(text: str, end: int) -> tuple[str, str | None]:
@@ -108,9 +152,11 @@ def unit_at(text: str, end: int) -> tuple[str, str | None]:
     return word, UNITS.get(word)
 
 
-def around(text: str, spans: list[tuple[int, int]], shape) -> list[tuple[str, str, tuple[str, str | None]]]:
-    """(symbol before, number shape, unit after) per number span."""
-    return [(prefix_at(text, a), shape(text[a:b]), unit_at(text, b)) for a, b in spans]
+def around(text: str, spans: list[tuple[int, int]], shape) -> list[tuple]:
+    """((symbol right before, symbols a few tokens before), number shape, unit after) per number span."""
+    return [
+        ((prefix_at(text, a), symbols_before(text, a)), shape(text[a:b]), unit_at(text, b)) for a, b in spans
+    ]
 
 
 def _same(ours: tuple[str, str | None], theirs: tuple[str, str | None], mode: str) -> bool:

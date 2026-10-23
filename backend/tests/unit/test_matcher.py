@@ -88,9 +88,9 @@ def parameter(
     )
 
 
-# ruling R13: on-screen numbers are only checked while a Vietnamese or English transcript exists, so OCR
-# tests run with one (no words; only its language matters to an on-screen item)
-SCREEN_ONLY = Transcript(language="vi", words=[])
+# rulings R13 + R16b: on-screen numbers are only checked while a Vietnamese or English transcript with
+# words exists, so OCR tests run with one (only its language and that it has words matter on screen)
+SCREEN_ONLY = Transcript(language="vi", words=[Word(start=0.0, end=0.3, text="chào")])
 
 
 def verify(item, tr=None, ocr=None):

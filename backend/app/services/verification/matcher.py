@@ -15,7 +15,8 @@ Safety rules, every doubt ends as `unverified`:
 - follow-up rulings R1-R5: ordinal fractions, spoken decimals ('không phẩy năm' is 0.5), '1:30' as one
   token, the symbol before a number ($, €, x, ÷...), claim units against their quote (units.py), digits
   in a language without number words never verify, OCR text without numbers must match word for word;
-- ruling R13: an on-screen number is only checked while a Vietnamese or English transcript exists."""
+- ruling R13: an on-screen number is only checked while a Vietnamese or English transcript with words
+  exists (R16b)."""
 
 import re
 import unicodedata
@@ -176,11 +177,14 @@ def _locate(
     folded: bool = False,
     exact: bool = False,
     plain: tuple[str, str] | None = None,
+    written: frozenset[str] = frozenset(),
 ) -> tuple[int, int, bool] | None:
     """(start, end, numbers_ok) of the best alignment on canonical text, None when the words differ.
 
     `exact`: the segment holds exactly the needle's words (no number words to compare, rulings C3c, R2).
-    `plain`: the same two texts with diacritics, index for index, for the negation check on OCR text."""
+    `plain`: the same two texts with diacritics, index for index, for the negation check on OCR text.
+    `written` (R16a): words the model wrote that a frame word may equal without being read as a misread
+    negation."""
     found = _align(needle, haystack, threshold)
     if not found or exact and not guards.same_words(haystack[found[0] : found[1]], needle):
         return None
@@ -192,7 +196,11 @@ def _locate(
         and _edges_ok(needle, haystack, start, end, language, folded)
         and guards.units_agree(needle, haystack, start, end, words if folded else frozenset())
         and guards.negations_agree(
-            *(plain or (needle, haystack)), start, end, _number_words(False), ocr=folded
+            *(plain or (needle, haystack)),
+            start,
+            end,
+            _number_words(False),
+            frame=written if folded else None,
         )
         and (not folded or guards.spelled_agree(needle, segment, words))
         and not lexicon.digits_with_foreign_words(segment)  # R12d
@@ -266,15 +274,22 @@ def _canonical(text: str, spoken: bool, language: str | None) -> str:
 
 
 def _match_screen(
-    expected: str, ocr_text: str, threshold: int, required: tuple[str, ...] = (), exact: bool = False
+    expected: str,
+    ocr_text: str,
+    threshold: int,
+    required: tuple[str, ...] = (),
+    exact: bool = False,
+    written: str | None = None,
 ) -> tuple[str, bool] | None:
     """PaddleOCR drops stacked Vietnamese diacritics, so both sides lose them; numbers stay exact.
 
     Ruling R7: the aligned segment holds the needle's words in order after folding; only a word written
-    with a Vietnamese mark may be misread a little."""
+    with a Vietnamese mark may be misread a little. R16a: a frame word that looks like a misread negation
+    only reads as written when `written` (the claim text, else the needle) holds that exact word."""
     needle, haystack = _fold(expected), _fold(ocr_text)
     plain = normalize(expected), normalize(ocr_text)
-    found = _locate(needle, haystack, threshold, DIGITS_ONLY, folded=True, exact=exact, plain=plain)
+    seen = lexicon.written_words(expected if written is None else written)
+    found = _locate(needle, haystack, threshold, DIGITS_ONLY, True, exact, plain, seen)
     if not found:
         return None
     segment = haystack[found[0] : found[1]]
@@ -394,7 +409,7 @@ def _inconsistent(item, source: str, spoken: bool, language: str | None, text_la
             return NO_VALUE
         if claimed and not units.claim_units_agree(item.text, source, source_language, mode):
             return NO_VALUE
-        if not guards.claim_negations_agree(item.text, source, mode, _number_words(False), not spoken):
+        if not guards.claim_negations_agree(item.text, source, mode, _number_words(False)):
             return NO_VALUE  # R12f: 'Chấm nước mắm' from 'không chấm nước mắm'
 
     numeric = number_tokens(_value(item) or "", None)
@@ -434,7 +449,10 @@ def _frame_hit(item, source: str, sec: float, ocr_text: str, settings, exact: bo
     if isinstance(item, ExactInput):
         found = guards.exact_rows(source, ocr_text)
         return (found, sec, True) if found else None
-    found = _match_screen(source, ocr_text, settings.verify_text_threshold, _required(item), exact)
+    # R16a: a claim's own text decides which frame words are as the model meant them; on_screen_text
+    # may copy a misread 'Kh0ng' that the claim text then leaves out
+    written = None if isinstance(item, (Material, Parameter)) else item.text
+    found = _match_screen(source, ocr_text, settings.verify_text_threshold, _required(item), exact, written)
     return (found[0], sec, found[1]) if found else None
 
 
@@ -461,12 +479,10 @@ def verify_item(
     fields = (_value(item), getattr(item, "text", None), item.quote, item.on_screen_text)
     if transcript is not None and not guards.has_vocabulary(transcript.language) and units.has_digit(*fields):
         return _result("unverified", "none", NO_DIGITS)  # ruling R2a: digits we cannot tie to speech
-    if (
-        not spoken
-        and _states_number(item)
-        and _code(transcript.language if transcript else None) not in VI_EN
-    ):
-        return _result("unverified", "none", NO_LANGUAGE)  # ruling R13: no vi/en speech to read the screen by
+    # rulings R13 + R16b: no vi/en speech to read the screen by (Whisper names a language for silence too)
+    heard = transcript is not None and bool(transcript.words) and _code(transcript.language) in VI_EN
+    if not spoken and _states_number(item) and not heard:
+        return _result("unverified", "none", NO_LANGUAGE)
     reason = _inconsistent(item, source, spoken, language, text_language)
     if reason:
         return _result("unverified", "none", reason)
