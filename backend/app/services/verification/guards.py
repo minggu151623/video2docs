@@ -1,4 +1,4 @@
-"""Extra checks the matcher runs before it may say `verified` (final review rulings C1-C4, I1, I2).
+"""Extra checks the matcher runs before it may say `verified` (final review rulings C1-C4, I1, I2, R1-R11).
 
 Each check only ever turns a match into `unverified`; none of them can make a match succeed."""
 
@@ -20,7 +20,23 @@ FOREIGN_FRACTIONS = {"demi", "demie", "quart", "medio", "media", "cuarto", "halb
 FOREIGN_FRACTIONS |= {"mezzo", "mezza", "quarto", "meio", "meia"}
 NEAR_FRACTIONS = FRACTION_WORDS | FOREIGN_FRACTIONS
 FOLDED_FRACTIONS = {units.fold(w) for w in NEAR_FRACTIONS}  # OCR text has no diacritics ('nửa' -> 'nua')
+FOLDED_VI_EN = {units.fold(w) for w in FRACTION_WORDS}
 FRACTION_PAIRS = {("phần", "tư"), ("phần", "ba")}
+FOLDED_PAIRS = {(units.fold(a), units.fold(b)) for a, b in FRACTION_PAIRS}
+# number words of languages numbers.py cannot read; next to digits they hide a second number ('2 ou trois').
+# Left out: 'tre' (Vietnamese 'bamboo'). Korean words count only as whole tokens; Chinese/Japanese numerals
+# inside a short token ('三杯', '两'); '一' and '十' are left out, they start many plain words.
+FOREIGN_NUMBERS = set(
+    "un une deux trois quatre cinq sept huit neuf dix onze douze vingt cent mille "
+    "uno una dos tres cuatro cinco seis siete ocho nueve diez cien "
+    "eins zwei drei vier fünf sechs sieben acht neun zehn elf zwölf hundert tausend "
+    "due quattro cinque sei sette otto nove dieci cento "
+    "dois duas três quatro cinco seis sete oito nove dez cem".split()
+)
+KOREAN_NUMBERS = set(
+    "하나 둘 셋 넷 다섯 여섯 일곱 여덟 아홉 열 한 두 세 네 스무 일 이 삼 사 오 육 칠 팔 구 십 백 천".split()
+)
+CJK_NUMERALS = "二三四五六七八九两"
 DECIMAL_WORDS = {"phẩy", "chấm"}
 FRACTION_SYMBOLS = "½¼¾⅓⅔⁄"  # NFKC turns '½' into '1⁄2', so the fraction slash counts too
 RANGE_WORDS = {"-", "–", "−", "~", "đến", "tới", "hoặc", "hay", "or", "to", "through", "till", "until"}
@@ -41,9 +57,11 @@ NEGATIONS = {
     "khỏi",
     "chả",
 }
+NEGATIONS |= {"ne", "pas", "jamais", "nunca", "nicht", "kein", "keine", "non", "não"}  # R11: fr es de it pt
 NOT_FORMS = {"cannot", "dont", "doesnt", "didnt", "cant", "wont", "shouldnt", "isnt", "arent"}
 STOP_WORDS = {"và", "của", "cho", "các", "những", "với", "loại", "the", "of", "and", "for", "to", "with"}
 NAME_SCORE = 80
+OCR_WORD_SCORE = 80
 PROMPT = re.compile(r"^\s*(?:[$#>](?=\s)|PS\s[^>\n]*>)")
 PUNCT = ".,;:!?()[]{}\"'"
 SPEECH_GAP_SEC = 0.7  # Transcript has no segments: a pause this long between words is a boundary
@@ -63,16 +81,22 @@ def _tokens(text: str) -> list[str]:
     return [w.strip(PUNCT) for w in text.replace("’", "'").split() if w.strip(PUNCT)]
 
 
-def fraction_or_range(text: str, language: str | None) -> bool:
-    """C1: the quote holds a fraction or a range of two numbers, so no single value can be read from it."""
+def fraction_or_range(text: str, language: str | None, folded: bool = False) -> bool:
+    """C1: the quote holds a fraction or a range of two numbers, so no single value can be read from it.
+
+    `folded` (on-screen text, ruling R10): fraction words are also looked up without diacritics
+    ('Ham 2 tieng ruoi', 'Bot 2 chen nua'; 'nữa' then reads as 'nửa')."""
+    if folded:
+        bare = units.fold(" ".join(unicodedata.normalize("NFKC", text).casefold().split()))
+        if _fraction_words(bare, True):
+            return True
+        if number_tokens(bare, None) and any(half_word(w, True) for w in bare.split()):
+            return True
     raw = unicodedata.normalize("NFC", text).casefold()
     if any(s in raw for s in FRACTION_SYMBOLS):
         return True
     norm = " ".join(unicodedata.normalize("NFKC", text).casefold().split())
-    words = re.findall(r"[^\W\d_]+", norm)
-    if FRACTION_WORDS & set(words) or FRACTION_PAIRS & set(zip(words, words[1:])):
-        return True
-    if _phan_fraction(re.findall(r"\d+|[^\W\d_]+", norm)):
+    if _fraction_words(norm, False):
         return True
     if number_tokens(norm, language) and any(half_word(w) for w in norm.split()):
         return True  # R6: "Cuire 2 minutes et demie", "설탕 2 큰술 반"
@@ -87,6 +111,27 @@ def fraction_or_range(text: str, language: str | None) -> bool:
     return False
 
 
+def _fraction_words(norm: str, folded: bool) -> bool:
+    words = re.findall(r"[^\W\d_]+", norm)
+    table, pairs = (FOLDED_VI_EN, FOLDED_PAIRS) if folded else (FRACTION_WORDS, FRACTION_PAIRS)
+    if table & set(words) or pairs & set(zip(words, words[1:])):
+        return True
+    return _phan_fraction(re.findall(r"\d+|[^\W\d_]+", norm), folded)
+
+
+def foreign_numbers(text: str) -> bool:
+    """A digit together with a number word of another language: '2 ou trois', '설탕 2 큰술 또는 세 큰술'."""
+    if not re.search(r"\d", text):
+        return False
+    for token in " ".join(unicodedata.normalize("NFKC", text).casefold().split()).split():
+        word = token.strip(PUNCT)
+        if word in KOREAN_NUMBERS or len(word) <= 2 and any(c in CJK_NUMERALS for c in word):
+            return True
+        if FOREIGN_NUMBERS & set(re.findall(r"[^\W\d_]+", word)):
+            return True
+    return False
+
+
 def half_word(token: str, folded: bool = False) -> bool:
     """R6: a half/quarter word in any listed language ('demie', 'media', 'rưỡi', '반', '杯半')."""
     word = token.strip(PUNCT).casefold()
@@ -96,11 +141,14 @@ def half_word(token: str, folded: bool = False) -> bool:
     return any(part in table for part in re.findall(r"[^\W\d_]+", word))
 
 
-def _phan_fraction(words: list[str]) -> bool:
+def _phan_fraction(words: list[str], folded: bool = False) -> bool:
     """R1: 'phần' next to a number ('ba phần tư', '1 phần 3'); 'phần trăm' is percent, not a fraction."""
     numbers = number_words() | {"không"}
+    phan, tram = "phần", "trăm"
+    if folded:
+        numbers, phan, tram = {units.fold(w) for w in numbers}, "phan", "tram"
     for i, word in enumerate(words):
-        if word != "phần" or words[i + 1 : i + 2] == ["trăm"]:
+        if word != phan or words[i + 1 : i + 2] == [tram]:
             continue
         near = words[max(0, i - 1) : i] + words[i + 1 : i + 2]
         if any(w[:1].isdigit() or w in numbers for w in near):
@@ -150,14 +198,42 @@ def _negations(text: str, number_words: frozenset[str]) -> Counter:
     for i, word in enumerate(words):
         if word == "khong":  # OCR without diacritics; 'khong' has no other reading
             word = "không"
-        nxt = words[i + 1] if i + 1 < len(words) else ""
-        if word == "không" and (nxt in number_words or nxt[:1].isdigit() or nxt in DECIMAL_WORDS):
+        nxt, then = (words[i + 1 : i + 3] + ["", ""])[:2]
+        decimal = nxt in DECIMAL_WORDS and (then in number_words or then[:1].isdigit())  # R9
+        if word == "không" and (nxt in number_words or nxt[:1].isdigit() or decimal):
             continue  # 'không trăm', 'không phẩy năm': a digit, not a negation
         if word.endswith("n't") or word in NOT_FORMS:
             out.append("not")
         elif word in NEGATIONS:
             out.append(word)
     return Counter(out)
+
+
+def negation_count(text: str, number_words: frozenset[str]) -> int:
+    """R11: how many negations a claim or its quote holds ('đừng' and 'không' count alike)."""
+    return sum(_negations(unicodedata.normalize("NFKC", text).casefold(), number_words).values())
+
+
+def _vi_marked(token: str) -> bool:
+    return any(
+        c in "đĐ" or unicodedata.name(c, "").startswith("LATIN") and len(unicodedata.normalize("NFD", c)) > 1
+        for c in token
+    )
+
+
+def ocr_words_agree(plain: str, needle: str, segment: str) -> bool:
+    """R7: on-screen words compare in order after folding. Only a needle word that carries a Vietnamese
+    mark and no digit may differ (similarity >= 80), as PaddleOCR drops stacked diacritics ('Nưng')."""
+    marked, ours, theirs = _tokens(plain), _tokens(needle), _tokens(segment)
+    if len(ours) != len(theirs) or len(marked) != len(ours):
+        return False
+    for word, a, b in zip(marked, ours, theirs):
+        if a == b:
+            continue
+        loose = _vi_marked(word) and not non_latin(word) and not any(c.isdigit() for c in word + b)
+        if not loose or fuzz.ratio(a, b) < OCR_WORD_SCORE:
+            return False
+    return True
 
 
 def negations_agree(needle: str, haystack: str, start: int, end: int, number_words: frozenset[str]) -> bool:

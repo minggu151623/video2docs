@@ -111,11 +111,19 @@ def _marks(vocab: dict) -> set[str]:
 def _tokens(text: str, vocab: dict) -> list:
     tokens = [(m, vocab.get(m.group())) for m in TOKEN.finditer(text)]
     marks = _marks(vocab)
-    for i, (m, entry) in enumerate(tokens):  # 'không' is 0 only before a number word or a decimal point
-        nxt = tokens[i + 1] if i + 1 < len(tokens) else (None, None)
-        joined = nxt[0] is not None and _joined(text, m, nxt[0])
-        number_next = nxt[1] and nxt[1][0] != "l" or nxt[0] is not None and nxt[0].group() in marks
-        if m.group() == "không" and not (joined and number_next):
+
+    def number_at(k: int, after, digits: bool) -> bool:  # a number word (or digits) at k, joined to `after`
+        if k >= len(tokens) or not _joined(text, after, tokens[k][0]):
+            return False
+        m, entry = tokens[k]
+        return bool(entry and entry[0] != "l") or digits and m.group()[0].isdigit()
+
+    for i, (m, entry) in enumerate(tokens):  # 'không' is 0 only before a number word or a built decimal
+        nxt = tokens[i + 1][0] if i + 1 < len(tokens) else None
+        number_next = number_at(i + 1, m, False)
+        decimal = nxt is not None and nxt.group() in marks and _joined(text, m, nxt)
+        decimal = decimal and number_at(i + 2, nxt, True)  # R9: 'không chấm nước mắm' stays a negation
+        if m.group() == "không" and not (number_next or decimal):
             tokens[i] = (m, None)
         prev = tokens[i - 1][0] if i else None
         if m.group() == "trăm" and prev is not None and prev.group() == "phần" and _joined(text, prev, m):
@@ -274,6 +282,20 @@ def number_tokens(text: str, language: str | None) -> list[str]:
     spelled, _, _, unread = _spell(folded, language)
     out = ["~" + " ".join(words.split()) for _, _, words in unread]
     for m in NUMBER.finditer(spelled):
-        if not any(b <= m.start() < e for b, e, _ in unread):
-            out.append(number_shape(m.group()))
+        if any(b <= m.start() < e for b, e, _ in unread):
+            continue
+        out.append("~" + _glued(spelled, m) if _glued(spelled, m) else number_shape(m.group()))
     return out
+
+
+def _glued(text: str, m) -> str:
+    """R8: a sign or separator glued between a letter and the number ('freezer-18', 'dùng.05') cannot be
+    read as signed or unsigned; returns that sign plus the number, else ''."""
+    at = m.start()
+    if m.group()[0] in "-–−.,":
+        lead = ""
+    elif at and text[at - 1] in "-–−.,/:":
+        at, lead = at - 1, text[at - 1]
+    else:
+        return ""
+    return lead + m.group() if at and text[at - 1].isalpha() else ""

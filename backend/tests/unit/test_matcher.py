@@ -609,7 +609,7 @@ def test_number_tokens_shapes():
         "0.05",
         "1.05",
     ]
-    assert number_tokens("pt-18 và 3,", None) == ["18", "3"]
+    assert number_tokens("pt-18 và 3,", None) == ["~-18", "3"]  # ruling R8: sign glued to a word
 
 
 # ---- regression: round 2 (ranges and alternatives, zero groups, decimal zeros) ---------------
@@ -824,8 +824,8 @@ def test_vietnamese_words_that_fold_to_number_words_do_not_block_speech():
 def test_bare_leading_separator_numbers_read_with_a_zero():
     assert oclaim("Dùng 5 ml thuốc", "Dùng .05 ml thuốc").status == "unverified"
     assert oclaim("Dùng .05 ml thuốc", "Dùng .05 ml thuốc").status == "verified"
-    # ruling R3: '.05' is written '0.05' ('0,05' too), so the two spellings agree
-    assert oclaim("Dùng 0.05 ml thuốc", "Dùng .05 ml thuốc").status == "verified"
+    # ruling R3 reads '.05' as '0.05', but ruling R7 compares on-screen words as written
+    assert oclaim("Dùng 0.05 ml thuốc", "Dùng .05 ml thuốc").status == "unverified"
     assert oclaim("Dùng 0.5 ml thuốc", "Dùng .05 ml thuốc").status == "unverified"
 
 
@@ -867,8 +867,8 @@ def test_valid_compounds_verify_end_to_end():
         ("ba trăm linh hai nghìn", "vi", ["302000"]),
         ("một triệu hai trăm nghìn", "vi", ["1200000"]),
         ("hai mươi lăm nghìn", "vi", ["25000"]),
-        ("dùng.05", None, ["0.05"]),
-        ("muối,5 phút", None, ["0.5"]),
+        ("dùng.05", None, ["~.05"]),  # ruling R8: a separator glued to a word is not read
+        ("muối,5 phút", None, ["~,5"]),
     ],
 )
 def test_bare_scales_are_unread_and_separators_after_letters_start_numbers(text, lang, expected):

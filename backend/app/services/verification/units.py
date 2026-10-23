@@ -8,7 +8,7 @@ import unicodedata
 from app.services.verification.numbers import NUMBER, number_shape, spell_digits
 
 PUNCT = ".,;:!?()[]{}\"'"
-SYMBOLS = "$€£¥₫×÷+~"  # 'x' counts too when it stands alone or is glued to the number ('x2')
+SYMBOLS = "$€£¥₫×÷+~<>≤≥"  # 'x' counts too when it stands alone or is glued to the number ('x2')
 # canonical unit -> spellings, '|' between spellings. Only unambiguous ones: 'cân' (also 'scale'),
 # 'lạng' (100 g), 'phân' (cm or manure), 'ly' and 'in' are left out, so they compare only as written.
 _TABLE = {

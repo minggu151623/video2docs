@@ -254,14 +254,16 @@ def _match_screen(
 ) -> tuple[str, bool] | None:
     """PaddleOCR drops stacked Vietnamese diacritics, so both sides lose them; numbers stay exact.
 
-    Ruling R2b: text with no digit and no vi/en number word must be the segment word for word."""
+    Ruling R7: the aligned segment holds the needle's words in order after folding; only a word written
+    with a Vietnamese mark may be misread a little."""
     needle, haystack = _fold(expected), _fold(ocr_text)
-    exact = exact or not any(_has_number(w, folded=True) for w in needle.split())
     plain = normalize(expected), normalize(ocr_text)
     found = _locate(needle, haystack, threshold, DIGITS_ONLY, folded=True, exact=exact, plain=plain)
     if not found:
         return None
     segment = haystack[found[0] : found[1]]
+    if not guards.ocr_words_agree(plain[0], needle, segment):
+        return None
     ok = found[2] and all(_bounded(_fold(r), segment) for r in required)
     return normalize(ocr_text)[found[0] : found[1]], ok
 
@@ -343,10 +345,12 @@ def _inconsistent(item, source: str, spoken: bool, language: str | None, text_la
     """Spec 3.3 tier 1: the item's own values must be in the verbatim text it was extracted from.
 
     Returns the reason when they are not, else None. OCR text is read with both vi and en number words."""
-    if guards.fraction_or_range(source, language if spoken else None):
+    if guards.fraction_or_range(source, language if spoken else None, folded=not spoken):
         return RANGE
     if isinstance(item, ExactInput):
         return None if _squash(item.text) == _squash(source) else NO_VALUE
+    if guards.foreign_numbers(source):
+        return NO_VALUE  # a second number spelled in a language we cannot read ('2 ou trois')
     source_language = language if spoken else None
     found = Counter(number_tokens(source, source_language))
     if isinstance(item, (Material, Parameter)):
@@ -357,13 +361,15 @@ def _inconsistent(item, source: str, spoken: bool, language: str | None, text_la
         if check_name and not guards.name_in_source(item.name, source, normalize if spoken else _fold):
             return NO_NAME
     else:
-        claimed = Counter(number_tokens(item.text, None))
+        claimed, mode = Counter(number_tokens(item.text, None)), _unit_mode(spoken, language, text_language)
         if claimed and claimed != found:
             return NO_VALUE
-        if claimed and not units.claim_units_agree(
-            item.text, source, source_language, _unit_mode(spoken, language, text_language)
-        ):
+        if claimed and not units.claim_units_agree(item.text, source, source_language, mode):
             return NO_VALUE
+        words = _number_words(False)
+        if mode == "same" and guards.negation_count(item.text, words) != guards.negation_count(source, words):
+            return NO_VALUE  # ruling R11: 'Chấm nước mắm' from 'không chấm nước mắm'
+
     numeric = number_tokens(_value(item) or "", None)
     if not guards.has_vocabulary(source_language) and numeric and not any(t[:1].isdigit() for t in found):
         return NO_VALUE  # ruling C3c: a number the quote can only hold as a word we cannot read

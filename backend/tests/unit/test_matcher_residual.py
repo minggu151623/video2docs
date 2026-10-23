@@ -368,3 +368,94 @@ R6_NEGATION_CASES = [
 @pytest.mark.parametrize("case", R6_NEGATION_CASES)
 def test_r6_more_negation_words(case):
     assert case().status == "unverified"
+
+
+# ---- round 2: R7-R11 -----------------------------------------------------------------------------
+
+
+def ocr_none(item, screen):
+    return show(item, screen, text_language="vi")
+
+
+ROUND2_CASES = [
+    # R8: a sign glued to a word makes the number unreadable
+    lambda: ocr_none(par("18", "°C", ost="Freezer-18°C", name="Freezer"), "Freezer-18°C"),
+    lambda: ocr_none(mat("5", "g", ost="Đường-5g", name="Đường"), "Đường-5g"),
+    lambda: ocr_none(cl("Đặt nhiệt độ 5°C", ost="Nhiệt độ-5°C"), "Nhiệt độ-5°C"),
+    # R9: 'không chấm' with no number after is a negation
+    lambda: say(cl("Chấm muối ớt", "chấm muối ớt"), "món này không chấm muối ớt", "vi", "vi"),
+    lambda: say(
+        cl("Chấm nước mắm", "chấm nước mắm cho ngon"), "nhớ là không chấm nước mắm cho ngon", "vi", "vi"
+    ),
+    # R7: on-screen words compare exactly after folding, also when a word folds into a vi number word
+    lambda: ocr_none(
+        cl("Tapez", ost="Entrez le mot de passe trois fois"), "Entrez le mot de passe quatre fois"
+    ),
+    lambda: ocr_none(
+        cl("Hornear", ost="Ten cuidado, hornea tres minutos"), "Ten cuidado, hornea cuatro minutos"
+    ),
+    lambda: ocr_none(
+        cl("Cuire", ost="Cuire trois minutes à 180 degrés"), "Cuire quatre minutes à 180 degrés"
+    ),
+    lambda: ocr_none(
+        cl("Backen", ost="Backen Sie drei Minuten bei 180 Grad"), "Backen Sie vier Minuten bei 180 Grad"
+    ),
+    # number words of other languages next to digits in the on-screen text
+    lambda: ocr_none(
+        mat("2", "tasses", ost="2 ou trois tasses de farine", name="farine"), "2 ou trois tasses de farine"
+    ),
+    lambda: ocr_with(
+        mat("2", "tasses", ost="2 ou trois tasses de farine", name="farine"),
+        "2 ou trois tasses de farine",
+        "en",
+    ),
+    lambda: ocr_none(
+        mat("2", "tazas", ost="2 o tres tazas de harina", name="harina"), "2 o tres tazas de harina"
+    ),
+    lambda: ocr_none(
+        mat("2", "큰술", ost="설탕 2 큰술 또는 세 큰술", name="설탕"), "설탕 2 큰술 또는 세 큰술"
+    ),
+    lambda: say(
+        par("2", "minutes", "cuire 2 ou trois minutes", name="cuire"), "cuire 2 ou trois minutes", None, "vi"
+    ),
+    # R10: fraction words without diacritics
+    lambda: ocr_none(par("2", "tiếng", ost="Ham 2 tieng ruoi", name="Ham"), "Ham 2 tieng ruoi"),
+    lambda: ocr_none(mat("2", "chén", ost="Bot 2 chen nua", name="Bot"), "Bot 2 chen nua"),
+    # R11: comparison symbols, claim negation against its quote, more languages' negations
+    lambda: ocr_none(cl("Bake 5 min", ost="Bake <5 min"), "Bake <5 min"),
+    lambda: ocr_none(cl("Bake 5 min", ost="Bake ≥5 min"), "Bake ≥5 min"),
+    lambda: say(
+        cl("Chấm nước mắm", "không chấm nước mắm cho ngon"), "nhớ là không chấm nước mắm cho ngon", "vi", "vi"
+    ),
+    lambda: say(cl("Ajouter le sel", "ajouter le sel"), "ne pas ajouter le sel", "fr", "fr"),
+    lambda: say(cl("Salz verwenden", "salz verwenden"), "kein salz verwenden", "de", "de"),
+    lambda: say(cl("Aggiungere sale", "aggiungere sale"), "non aggiungere sale", "it", "it"),
+    lambda: say(cl("Adicionar sal", "adicionar sal"), "não adicionar sal", "pt", "pt"),
+    lambda: say(cl("Añadir sal", "añadir sal"), "nunca añadir sal", "es", "es"),
+]
+
+
+@pytest.mark.parametrize("case", ROUND2_CASES)
+def test_round2_inputs_never_verify(case):
+    assert case().status == "unverified"
+
+
+def test_round2_positives():
+    item = cl("Nướng ở 180°C", ost="Nướng ở 180°C")
+    assert ocr_none(item, "Nưng ở 180°C").status == "verified"  # R7: stacked-diacritic loss tolerated
+    assert ocr_none(cl("Cuire 2 minutes", ost="Cuire 2 minutes"), "Cuire 2 minutes").status == "verified"
+    item = mat("0,5", "lít", "dùng không phẩy năm lít nước", name="nước")
+    assert say(item, "các bạn dùng không phẩy năm lít nước nhé", "vi", "vi").status == "verified"
+    assert number_tokens("không chấm nước mắm", "vi") == []
+    assert number_tokens("không phẩy năm", "vi") == ["0.5"]
+    assert number_tokens("freezer-18°c", None) == ["~-18"]
+    item = cl("Không chạm vào chảo nóng", "đừng chạm vào chảo đang nóng")
+    assert say(item, "các bạn đừng chạm vào chảo đang nóng nhé", "vi", "vi").status == "verified"
+    assert ocr_none(par("18", "°C", ost="Freezer 18°C", name="Freezer"), "Freezer 18°C").status == "verified"
+
+
+def test_round2_recall_cost_ocr_words_without_marks_compare_exactly():
+    # ruling R7: 'chao' has no diacritic in the on_screen_text, so a misread 'chao' -> 'chau' is not tolerated
+    assert (
+        ocr_none(cl("Bật bếp", ost="Bat bep cho chao nong"), "Bat bep cho chau nong").status == "unverified"
+    )
