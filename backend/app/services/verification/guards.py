@@ -58,7 +58,7 @@ def fraction_or_range(text: str, language: str | None, folded: bool = False) -> 
     `folded` (on-screen text, ruling R10): fraction words are also looked up without diacritics
     ('Ham 2 tieng ruoi', 'Bot 2 chen nua'; 'nữa' then reads as 'nửa')."""
     if folded:
-        bare = units.fold(" ".join(unicodedata.normalize("NFKC", text).casefold().split()))
+        bare = units.fold(" ".join(lexicon.clean(text).casefold().split()))
         if _fraction_words(bare, True):
             return True
         if number_tokens(bare, None) and any(half_word(w, True) for w in bare.split()):
@@ -67,7 +67,7 @@ def fraction_or_range(text: str, language: str | None, folded: bool = False) -> 
     text = lexicon.clean(text)
     if any(s in raw for s in FRACTION_SYMBOLS):
         return True
-    norm = " ".join(unicodedata.normalize("NFKC", text).casefold().split())
+    norm = " ".join(text.casefold().split())  # `text` is already cleaned
     if _fraction_words(norm, False):
         return True
     if number_tokens(norm, language) and any(half_word(w) for w in norm.split()):
@@ -151,16 +151,19 @@ def spelled_agree(needle: str, segment: str, number_words: frozenset[str]) -> bo
     return count(needle) == count(segment)
 
 
-def negation_count(text: str, number_words: frozenset[str]) -> int:
+def negation_count(text: str, number_words: frozenset[str], ocr: bool = False) -> int:
     """R12f: how many negations a text holds, each with the word it negates ('ne pas X' is one)."""
-    return len(lexicon.negation_pairs(text, number_words))
+    return len(lexicon.negation_pairs(text, number_words, ocr=ocr))
 
 
-def claim_negations_agree(text: str, source: str, mode: str, number_words: frozenset[str]) -> bool:
-    """R12f: one language: the same (negation, next word) pairs; otherwise the same number of them."""
+def claim_negations_agree(
+    text: str, source: str, mode: str, number_words: frozenset[str], ocr: bool = False
+) -> bool:
+    """R12f: one language: the same (negation, next word) pairs; otherwise the same number of them.
+    `ocr` (R15): the source is on-screen text, so a misread 'Kh0ng' in it still counts, on both sides."""
     if mode == "same":
         return lexicon.negation_pairs(text, number_words) == lexicon.negation_pairs(source, number_words)
-    return negation_count(text, number_words) == negation_count(source, number_words)
+    return negation_count(text, number_words, ocr) == negation_count(source, number_words, ocr)
 
 
 def _locked(word: str, number_words: frozenset[str]) -> bool:
@@ -189,14 +192,21 @@ def ocr_words_agree(
 
 
 def negations_agree(
-    needle: str, haystack: str, start: int, end: int, number_words: frozenset[str], decimals: bool = False
+    needle: str,
+    haystack: str,
+    start: int,
+    end: int,
+    number_words: frozenset[str],
+    decimals: bool = False,
+    ocr: bool = False,
 ) -> bool:
     """I1 + R12f: the same (negation, next word) pairs in the needle as in the matched segment plus one
-    word on each side. `decimals`: a quantity, where 'không phẩy năm' is a number, not a negation."""
+    word on each side. `decimals`: a quantity, where 'không phẩy năm' is a number, not a negation.
+    `ocr` (R15): on-screen text, where 'Kh0ng' and 'Khóng' still negate and next words are folded."""
     before, after = haystack[:start].split()[-1:], haystack[end:].split()[:1]
     wider = " ".join(before + [haystack[start:end]] + after)
     pairs = lexicon.negation_pairs
-    return pairs(needle, number_words, decimals) == pairs(wider, number_words, decimals)
+    return pairs(needle, number_words, decimals, ocr) == pairs(wider, number_words, decimals, ocr)
 
 
 def name_in_source(name: str, source: str, fold) -> bool:

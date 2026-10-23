@@ -8,6 +8,20 @@ NUMBER = re.compile(r"(?:(?<!\w)[-–−])?(?:(?<![\d.,/:])[.,]\d+|\d+)(?:[.,/:\
 SEPARATORS = (".", ",", "/", ":")
 _PD = [i for i in [*range(0x10000), 0x10EAD] if unicodedata.category(chr(i)) == "Pd"]
 DASHES = str.maketrans({i: "-" for i in [*_PD, 0x2212]})  # R12b: every dash and the minus sign
+# R15: NFKC would make '10²' read as '102' and '5¹' as '51'; superscripts and subscripts keep a mark
+_RAISED = "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ"
+_LOWERED = "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎"
+SCRIPTS = str.maketrans(
+    {c: "^" + unicodedata.normalize("NFKC", c) for c in _RAISED}
+    | {c: "_" + unicodedata.normalize("NFKC", c) for c in _LOWERED}
+)
+
+
+def nfkc(text: str) -> str:
+    """NFKC with superscript and subscript characters kept apart ('10²' is '10^2'), every dash as '-'
+    (also 'ー' right before a digit)."""
+    text = unicodedata.normalize("NFKC", text.translate(SCRIPTS)).translate(DASHES)
+    return re.sub(r"ー(?=\d)", "-", text)  # the Japanese long-vowel mark before a digit reads as a minus
 
 
 def _table(spec):
@@ -255,7 +269,7 @@ def _digits(run: str) -> str:
 
 def digit_runs(text: str, language: str | None) -> list[str]:
     """Consecutive-digit runs after number words become digits; leading zeros dropped ('007' -> '7')."""
-    folded = unicodedata.normalize("NFKC", text).casefold()
+    folded = nfkc(text).casefold()
     return [_digits(run) for run in re.findall(r"\d+", spell_digits(folded, language)[0])]
 
 
@@ -280,7 +294,7 @@ def number_tokens(text: str, language: str | None) -> list[str]:
 
     A run of number words that is not read ('hai ba', 'hai ba phẩy năm') becomes one opaque token
     '~hai ba', so two texts only agree when they hold the same unread words."""
-    folded = unicodedata.normalize("NFKC", text).translate(DASHES).casefold()
+    folded = nfkc(text).casefold()
     spelled, _, _, unread = _spell(folded, language)
     out = ["~" + " ".join(words.split()) for _, _, words in unread]
     for m in NUMBER.finditer(spelled):

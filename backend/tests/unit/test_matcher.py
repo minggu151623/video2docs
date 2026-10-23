@@ -88,8 +88,13 @@ def parameter(
     )
 
 
+# ruling R13: on-screen numbers are only checked while a Vietnamese or English transcript exists, so OCR
+# tests run with one (no words; only its language matters to an on-screen item)
+SCREEN_ONLY = Transcript(language="vi", words=[])
+
+
 def verify(item, tr=None, ocr=None):
-    return verify_item("p", item, tr, ocr, SETTINGS)
+    return verify_item("p", item, SCREEN_ONLY if tr is None and ocr is not None else tr, ocr, SETTINGS)
 
 
 @pytest.mark.parametrize(

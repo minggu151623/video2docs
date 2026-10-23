@@ -5,9 +5,11 @@ passes the draft language, so the cases pass `text_language` too."""
 
 import pytest
 from app.schemas.verification import Transcript, Word
-from app.services.verification.matcher import NO_DIGITS, verify_item
+from app.services.verification.lexicon import foreign_number_word
+from app.services.verification.matcher import NO_DIGITS, NO_LANGUAGE, verify_item
 from app.services.verification.numbers import number_tokens
-from test_matcher import SETTINGS
+from app.services.verification.units import prefix_at
+from test_matcher import SETTINGS, exact
 from test_matcher_final_review import cl, mat, par, say, show
 
 
@@ -374,6 +376,7 @@ def test_r6_more_negation_words(case):
 
 
 def ocr_none(item, screen):
+    """No transcript language to read numbers by; since R13 `show` supplies a Vietnamese one."""
     return show(item, screen, text_language="vi")
 
 
@@ -574,3 +577,318 @@ def test_round3_recall_cost_symbol_before_the_number_must_be_in_the_value():
         say(par("+5", "mm", "offset +5 mm", name="offset"), "offset +5 mm", "en", "en").status == "verified"
     )
     assert say(par("5", "mm", "offset 5 mm", name="offset"), "offset 5 mm", "en", "en").status == "verified"
+
+
+# ---- round 4: R13-R15 ------------------------------------------------------------------------------
+
+
+def ocr_vi(item, screen):
+    """R13: an on-screen number is only checked while a Vietnamese or English transcript exists."""
+    return ocr_with(item, screen, "vi")
+
+
+def ocr_lang(item, screen, language):
+    t = (
+        None
+        if language is False
+        else Transcript(language=language, words=[Word(start=10, end=10.3, text="a")])
+    )
+    return verify_item("p", item, t, [(11.0, screen)], SETTINGS, text_language="vi")
+
+
+R13_NUMERIC = [
+    par("180", "°C", ost="Nướng ở 180°C", name="Nướng"),
+    mat("200", "g", ost="Bột 200 g", name="Bột"),
+    par("cao", None, ost="Lửa cao", name="Lửa"),  # a parameter value is a value even without digits
+    cl("Cuire 2 minutes", ost="Cuire 2 minutes"),
+    cl("Nướng hai phút", ost="Nướng hai phút"),
+    cl("Nướng phút", ost="Nướng hai phút"),  # a number word in the on-screen text alone
+    cl("Hornear", ost="Hornear veinte minutos"),  # a number word of another language
+    exact("python3 app.py", on_screen_text="python3 app.py"),
+]
+
+
+@pytest.mark.parametrize("item", R13_NUMERIC)
+@pytest.mark.parametrize("language", [False, None, "", "und"])
+def test_r13_ocr_numbers_need_a_vietnamese_or_english_transcript(item, language):
+    result = ocr_lang(item, item.on_screen_text, language)
+    assert result.status == "unverified"
+    # R2a keeps its own reason for a named language without number words ('und' with digits)
+    assert result.reason == NO_LANGUAGE or (language == "und" and result.reason == NO_DIGITS)
+
+
+@pytest.mark.parametrize("language", ["fr", "ko", "ja"])
+def test_r13_other_transcript_languages_keep_r2a(language):
+    item = cl("Cuire 2 minutes", ost="Cuire 2 minutes")
+    assert ocr_lang(item, "Cuire 2 minutes", language).reason == NO_DIGITS
+
+
+def test_r13_vietnamese_or_english_transcript_lets_ocr_numbers_verify():
+    for language in ("vi", "en", "vi-VN", "EN"):
+        assert ocr_lang(cl("Cuire 2 minutes", ost="Cuire 2 minutes"), "Cuire 2 minutes", language).status == (
+            "verified"
+        )
+        item = par("180", "°C", ost="Nướng ở 180°C", name="Nướng")
+        assert ocr_lang(item, "Nướng ở 180°C", language).status == "verified"
+    assert (
+        ocr_vi(exact("python3 app.py", on_screen_text="python3 app.py"), "python3 app.py").status
+        == "verified"
+    )
+
+
+def test_r13_text_without_numbers_still_verifies_without_a_transcript():
+    assert ocr_lang(cl("Bấm nút Lưu", ost="Bấm nút Lưu"), "Bấm nút Lưu", False).status == "verified"
+    item = exact("git status", on_screen_text="git status")
+    assert ocr_lang(item, "git status", False).status == "verified"
+    assert ocr_lang(mat(None, None, ost="Muối", name="Muối"), "Muối", False).status == "verified"
+
+
+def test_r13_spoken_items_are_not_gated():
+    assert say(mat("200", "gram", "200 gram bột"), "cho 200 gram bột vào", "vi", "vi").status == "verified"
+
+
+N2_WORDS = (
+    "sechzehn siebzehn einhundert eintausend dezasseis dezassete dezanove doscientos trescientos "
+    "quinientos novecientos duecento seicento ottocento novecento duemila tremila duzentos quinhentos "
+    "novecentos septante nonante 스무 쉰 예순 일흔 여든 아흔 석 넉 兩 萬 零 〇 廿"
+).split()
+
+
+@pytest.mark.parametrize("word", N2_WORDS)
+def test_r13_lexicon_backstop_words(word):
+    assert foreign_number_word(word)
+
+
+def test_r13_lexicon_still_spares_english_words():
+    for word in "milk until under unsalted centimeters dozen novel ventilation quarantine percent".split():
+        assert not foreign_number_word(word), word
+
+
+N2_CASES = [
+    lambda: par("10", "Minuten", ost="Backen 10 bis sechzehn Minuten", name="Backen"),
+    lambda: par("10", "Minuten", ost="Backen 10 bis siebzehn Minuten", name="Backen"),
+    lambda: mat("50", "g", ost="Mehl 50 oder einhundert g", name="Mehl"),
+    lambda: mat("100", "gramos", ost="Harina 100 o doscientos gramos", name="Harina"),
+    lambda: mat("400", "gramos", ost="Harina 400 o quinientos gramos", name="Harina"),
+    lambda: mat("100", "grammi", ost="Farina 100 o duecento grammi", name="Farina"),
+    lambda: mat("100", "gramas", ost="Farinha 100 ou duzentos gramas", name="Farinha"),
+    lambda: par("10", "minutos", ost="Assar 10 a dezasseis minutos", name="Assar"),
+    lambda: par("60", "minutes", ost="Cuire 60 ou septante minutes", name="Cuire"),
+    lambda: par("80", "minutes", ost="Cuire 80 ou nonante minutes", name="Cuire"),
+    lambda: mat("10", "개", ost="계란 10 개 또는 스무 개", name="계란"),
+    lambda: mat("40", "개", ost="계란 40 개 또는 쉰 개", name="계란"),
+    lambda: mat("2", "잔", ost="물 2 잔 또는 석 잔", name="물"),
+    lambda: mat("3", "잔", ost="물 3 잔 또는 넉 잔", name="물"),
+    lambda: mat("1", "杯", ost="水 1 杯 或 兩 杯", name="水"),
+    lambda: mat("5000", "元", ost="價格 5000 元 或 萬 元", name="價格"),
+    lambda: cl("계란 10 개", ost="계란 10 개 또는 스무 개"),
+]
+
+
+@pytest.mark.parametrize("case", N2_CASES)
+def test_r13_lexicon_inputs_never_verify(case):
+    item = case()
+    assert ocr_vi(item, item.on_screen_text).status == "unverified"
+    assert ocr_lang(item, item.on_screen_text, False).reason == NO_LANGUAGE
+
+
+def test_r13_lexicon_short_needles_next_to_foreign_words():
+    item = mat("100", "gramos", ost="Harina 100 gramos", name="Harina")
+    assert ocr_vi(item, "Harina 100 gramos o doscientos").status == "unverified"
+    item = par("10", "Minuten", ost="Backen 10 Minuten", name="Backen")
+    assert ocr_vi(item, "Backen 10 Minuten oder sechzehn").status == "unverified"
+
+
+# R14: the symbol before a number, past spaces and opening brackets/quotes
+PREFIXES = [
+    ("nhân x 2", "x"),
+    ("scale x 2 cups", "x"),
+    ("scale × 2 cups", "×"),
+    ("temp< 5", "<"),
+    ("giá$ 5", "$"),
+    ("bake≤ 5", "≤"),
+    ("cups+ 5", "+"),
+    ("$ 5", "$"),
+    ("$  5", "$"),
+    ("- 18", "-"),
+    ("x5", "x"),
+    ("(x5)", "x"),
+    ("x (5)", "x"),
+    ("≤(5)", "≤"),
+    ("<= (5", "<="),
+    ("≤ (5)", "≤"),
+    ("≤ '5'", "≤"),
+    ("≤ [5]", "≤"),
+    ("≤ “5”", "≤"),
+    ("~ (5)", "~"),
+    ("- (5)", "-"),
+    ("+ (5)", "+"),
+    ("$ (5)", "$"),
+    ("≈ «5»", "≈"),
+    ("bake ≈5", "≈"),
+    ("(5)", ""),
+    ("'5'", ""),
+    ("bột (200 g)", ""),
+    ("max 5", ""),
+    ("box 5", ""),
+    ("thêm 2 cốc, 5 phút", ""),
+    ("đợi... 5 phút", ""),
+    ("bước: 5 phút", ""),
+    ("5", ""),
+]
+
+
+@pytest.mark.parametrize("text,want", PREFIXES)
+def test_r14_prefix_at(text, want):
+    at = max(k for k, ch in enumerate(text) if ch.isdigit() and not text[k + 1 : k + 2].isdigit())
+    while at and text[at - 1].isdigit():
+        at -= 1
+    assert prefix_at(text, at) == want
+
+
+R14_SYMBOLS = ["≤ (5)", "≤ '5'", "≤ [5]", "≤ “5”", "~ (5)", "- (5)", "+ (5)", "$ (5)", "≈ «5»"]
+R14_CASES = [
+    lambda: ocr_vi(cl("Bake 5 min", ost="Bake≤ 5 min"), "Bake≤ 5 min"),
+    lambda: ocr_vi(cl("Price 5", ost="Price$ 5"), "Price$ 5"),
+    lambda: ocr_vi(cl("Scale 2 cups", ost="Scale x 2 cups"), "Scale x 2 cups"),
+    lambda: ocr_vi(cl("Temp 5", ost="temp< 5"), "temp< 5"),
+    lambda: ocr_vi(cl("Thêm 5 cốc", ost="Thêm+ 5 cốc"), "Thêm+ 5 cốc"),
+    lambda: ocr_vi(par("2", "cups", ost="Recipe x 2 cups", name="Recipe"), "Recipe x 2 cups"),
+    lambda: ocr_vi(cl("Scale 2 cups", ost="Scale 2 cups"), "Scale x 2 cups"),
+    lambda: say(cl("Nhân 2 công thức", "nhân x 2 công thức"), "giờ nhân x 2 công thức nhé", "vi", "vi"),
+    lambda: say(par("2", "lần", "nhân x 2 lần", name="nhân"), "giờ nhân x 2 lần nhé", "vi", "vi"),
+    *[
+        lambda s=s: ocr_vi(par("5", "min", ost=f"Bake {s} min", name="Bake"), f"Bake {s} min")
+        for s in R14_SYMBOLS
+    ],
+    *[lambda s=s: ocr_vi(cl("Bake 5 min", ost=f"Bake {s} min"), f"Bake {s} min") for s in R14_SYMBOLS],
+    *[
+        lambda s=s: say(par("5", "min", f"bake {s} min", name="bake"), f"now bake {s} min ok", "en", "en")
+        for s in R14_SYMBOLS
+    ],
+]
+
+
+@pytest.mark.parametrize("case", R14_CASES)
+def test_r14_symbols_before_a_space_or_bracket_never_verify(case):
+    assert case().status == "unverified"
+
+
+def test_r14_positives():
+    assert ocr_vi(cl("Bake 5 min", ost="Bake 5 min"), "Bake 5 min").status == "verified"
+    assert ocr_vi(cl("Bake ≤5 min", ost="Bake ≤5 min"), "Bake ≤5 min").status == "verified"
+    assert ocr_vi(cl("Bột 200 g", ost="Bột (200 g)"), "Bột (200 g)").status == "verified"
+    assert ocr_vi(cl("Giá $5", ost="Giá $ 5"), "Giá $ 5").status == "verified"
+    item = mat("2", "cốc", "thêm 2 cốc sữa, rồi 5 phút sau khuấy đều", name="sữa")
+    assert (
+        say(item, "thêm 2 cốc sữa, rồi 5 phút sau khuấy đều", "vi", "vi").status == "unverified"
+    )  # 2 numbers
+    item = par("5", "phút", "đợi... 5 phút", name="đợi")
+    assert say(item, "giờ đợi... 5 phút nhé", "vi", "vi").status == "verified"
+
+
+# R15: negation pairs compare the next word as written; OCR misreads of 'không'/'đừng'; superscripts
+R15_CASES = [
+    lambda: say(
+        cl("Không chấm nước mắm", "chấm nước mắm, không chạm tay"),
+        "các bạn chấm nước mắm, không chạm tay nhé",
+        "vi",
+        "vi",
+    ),
+    lambda: say(cl("Không nấu 5 phút", "nấu 5 phút không nâu"), "nấu 5 phút không nâu nhé", "vi", "vi"),
+    lambda: say(cl("Không bật lửa to", "bật lửa to không bắt"), "bật lửa to không bắt nhé", "vi", "vi"),
+    *[
+        lambda n=n: ocr_vi(cl("Chấm nước mắm", ost="Chấm nước mắm"), f"{n} chấm nước mắm")
+        for n in ["Kh0ng", "Khônq", "Khóng", "Khồng", "Khong", "KHÔNG", "Dừng", "Đưng"]
+    ],
+    lambda: ocr_vi(par("102", "m", ost="Diện tích 10² m", name="Diện tích"), "Diện tích 10² m"),
+    lambda: ocr_vi(par("100", "m", ost="Diện tích 10² m", name="Diện tích"), "Diện tích 10² m"),
+    lambda: ocr_vi(cl("Bake 51 min", ost="Bake 5¹ min"), "Bake 5¹ min"),
+    lambda: ocr_vi(cl("Area 102 m", ost="Area 10² m"), "Area 10² m"),
+    lambda: ocr_vi(par("12", "mm", ost="Size 1₂ mm", name="Size"), "Size 1₂ mm"),
+    lambda: say(par("102", "m", "diện tích 10² m", name="diện tích"), "diện tích 10² m nhé", "vi", "vi"),
+]
+
+
+@pytest.mark.parametrize("case", R15_CASES)
+def test_r15_inputs_never_verify(case):
+    assert case().status == "unverified"
+
+
+def test_r15_superscripts_stay_apart_from_digits():
+    assert number_tokens("10² m", None) != ["102"]
+    assert number_tokens("5¹ min", None) != ["51"]
+    assert number_tokens("1₂ mm", None) != ["12"]
+
+
+def test_r15_positives():
+    item = cl("Không chạm vào chảo nóng", "đừng chạm vào chảo đang nóng")
+    assert say(item, "các bạn đừng chạm vào chảo đang nóng nhé", "vi", "vi").status == "verified"
+    item = cl("Không chạm vào chảo", "không chạm vào chảo")
+    assert say(item, "nhớ là không chạm vào chảo nhé", "vi", "vi").status == "verified"
+    assert ocr_vi(cl("Không chấm", ost="Không chấm nước mắm"), "Khong chấm nước mắm").status == "verified"
+    assert ocr_vi(cl("Dùng 2 thìa", ost="Dùng 2 thìa"), "Dùng 2 thìa").status == "verified"
+    assert ocr_vi(cl("Đúng 5 phút", ost="Đúng 5 phút"), "Đúng 5 phút").status == "verified"
+    assert ocr_vi(cl("Diện tích 10² m", ost="Diện tích 10² m"), "Diện tích 10² m").status == "verified"
+
+
+def test_round4_positives():
+    item = cl("Nướng ở 180°C", ost="Nướng ở 180°C")
+    assert ocr_vi(item, "Nưng ở 180°C").status == "verified"
+    assert ocr_lang(item, "Nưng ở 180°C", False).reason == NO_LANGUAGE  # R13 recall cost: silent video
+    cuire = cl("Cuire 2 minutes", ost="Cuire 2 minutes")
+    assert ocr_lang(cuire, "Cuire 2 minutes", False).reason == NO_LANGUAGE
+    assert ocr_lang(cuire, "Cuire 2 minutes", "fr").reason == NO_DIGITS
+    assert ocr_lang(cuire, "Cuire 2 minutes", "en").status == "verified"
+    item = mat("0,5", "lít", "dùng không phẩy năm lít nước", name="nước")
+    assert say(item, "các bạn dùng không phẩy năm lít nước nhé", "vi", "vi").status == "verified"
+
+
+# round 4 siblings (same classes as N2/R15, found by probe29)
+SIBLING_CASES = [
+    # foreign spelled numbers with no digit: the neighbour check now sees them on screen
+    lambda: ocr_vi(cl("Cuire trois minutes", ost="trois minutes"), "Cuire deux ou trois minutes"),
+    lambda: ocr_vi(
+        par("trois", "minutes", ost="trois minutes", name="minutes"), "Cuire deux ou trois minutes"
+    ),
+    lambda: ocr_vi(cl("두 컵", ost="두 컵"), "두 컵 또는 세 컵"),
+    lambda: ocr_vi(cl("Usa tres tazas", ost="tres tazas"), "Usa dos o tres tazas"),
+    lambda: ocr_vi(cl("drei Tassen", ost="drei Tassen"), "zwei oder drei Tassen"),
+    # the Japanese long-vowel mark right before a digit reads as a minus
+    lambda: ocr_vi(par("18", "°C", ost="Freezerー18°C", name="Freezer"), "Freezerー18°C"),
+    lambda: ocr_vi(par("18", "°C", ost="Freezer ー18°C", name="Freezer"), "Freezer ー18°C"),
+    # a misread negation copied into on_screen_text still counts against the claim text
+    *[
+        lambda n=n: ocr_vi(cl("Chấm nước mắm", ost=f"{n} chấm nước mắm"), f"{n} chấm nước mắm")
+        for n in ["Kh0ng", "Khônq", "Khóng", "Khồng", "Dừng"]
+    ],
+]
+
+
+@pytest.mark.parametrize("case", SIBLING_CASES)
+def test_round4_siblings_never_verify(case):
+    assert case().status == "unverified"
+
+
+@pytest.mark.parametrize("word", "fuenfzehn zwoelf zwo 卅 壹 貳 參 拾".split())
+def test_round4_more_lexicon_words(word):
+    assert foreign_number_word(word)
+
+
+def test_round4_sibling_positives():
+    assert ocr_vi(mat("2", "杯", ost="ラーメン 2 杯", name="ラーメン"), "ラーメン 2 杯").status == "verified"
+    assert ocr_vi(cl("Use three cups", ost="Use three cups"), "Use three cups").status == "verified"
+    assert (
+        ocr_vi(cl("Cuire trois minutes", ost="Cuire trois minutes"), "Cuire trois minutes").status
+        == "verified"
+    )
+
+
+def test_round4_recall_cost_folded_dung_is_not_a_negation():
+    # R15: 'Dung' without marks is usually 'dùng' (use), so it does not negate
+    assert ocr_vi(cl("Chấm nước mắm", ost="Dung chấm nước mắm"), "Dung chấm nước mắm").status == "verified"
+
+
+def test_round4_recall_cost_superscript_units_are_not_plain_digits():
+    # R15: 'm²' is 'm^2', so a claim that writes 'm2' no longer meets it
+    assert ocr_vi(cl("Lát 10 m2", ost="10 m²"), "10 m²").status == "unverified"

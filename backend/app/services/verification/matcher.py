@@ -14,7 +14,8 @@ Safety rules, every doubt ends as `unverified`:
   or parameter name is in its own quote, and languages without number words need an exact segment;
 - follow-up rulings R1-R5: ordinal fractions, spoken decimals ('không phẩy năm' is 0.5), '1:30' as one
   token, the symbol before a number ($, €, x, ÷...), claim units against their quote (units.py), digits
-  in a language without number words never verify, OCR text without numbers must match word for word."""
+  in a language without number words never verify, OCR text without numbers must match word for word;
+- ruling R13: an on-screen number is only checked while a Vietnamese or English transcript exists."""
 
 import re
 import unicodedata
@@ -34,7 +35,9 @@ NO_VALUE = "giá trị không có trong nguyên văn"
 NO_NAME = "tên mục không có trong nguyên văn"
 RANGE = "nguyên văn có khoảng giá trị hoặc phân số"
 NO_DIGITS = "ngôn ngữ chưa hỗ trợ kiểm chứng số"
+NO_LANGUAGE = "chưa xác định ngôn ngữ video để kiểm chứng số"
 DIGITS_ONLY = "und"
+VI_EN = ("vi", "en")  # ruling R13: the transcript languages whose videos get on-screen numbers checked
 SIGNS, SEPARATORS = "-–−+", ".,/:"
 MODIFIERS = {"rưỡi", "phẩy", "chấm", "nửa", "âm", "trừ", "half", "point", "minus", "negative", "½", "¼", "¾"}
 MODIFIERS |= guards.FRACTION_WORDS | {"ruoi", "phay"}  # 'rưỡi', 'phẩy' as OCR reads them
@@ -112,6 +115,12 @@ def _has_number(token: str, folded: bool = False) -> bool:
     return any(c.isdigit() for c in word) or word in _number_words(folded)
 
 
+def _spelled_number(token: str, folded: bool) -> bool:
+    """`_has_number`, and on OCR text also a number word of another listed language ('trois', '두'),
+    so on-screen numbers written as words get the neighbour check too."""
+    return _has_number(token, folded) or folded and lexicon.foreign_number_word(token)
+
+
 def _beside_number(haystack: str, start: int, end: int, folded: bool) -> bool:
     """Another number, or a dash, near the first or last number of the segment: ranges and alternatives.
 
@@ -121,7 +130,7 @@ def _beside_number(haystack: str, start: int, end: int, folded: bool) -> bool:
     '반'), or a bare dash right next to the segment within reach, ends the match
     ('2 - 3 phút', 'nấu 2 hay khoảng tầm 3 phút', 'two, or if you like, three')."""
     tokens = haystack[start:end].split()
-    marks = [i for i, w in enumerate(tokens) if _has_number(w, folded)]
+    marks = [i for i, w in enumerate(tokens) if _spelled_number(w, folded)]
     if not marks:
         return False
 
@@ -147,7 +156,7 @@ def _edges_ok(needle: str, haystack: str, start: int, end: int, language: str | 
         after = haystack[end : end + 2]
         if after[0].isdigit() or (after[0] in SIGNS + SEPARATORS and after[1:].isdigit()):
             return False
-    spelled = folded and any(_has_number(w, folded) for w in needle.split())  # OCR reads no number words
+    spelled = folded and any(_spelled_number(w, folded) for w in needle.split())  # OCR reads no number words
     if not number_tokens(needle, language) and not spelled:
         return True
     if _beside_number(haystack, start, end, folded):
@@ -182,7 +191,9 @@ def _locate(
         Counter(number_tokens(needle, language)) == Counter(number_tokens(segment, language))
         and _edges_ok(needle, haystack, start, end, language, folded)
         and guards.units_agree(needle, haystack, start, end, words if folded else frozenset())
-        and guards.negations_agree(*(plain or (needle, haystack)), start, end, _number_words(False))
+        and guards.negations_agree(
+            *(plain or (needle, haystack)), start, end, _number_words(False), ocr=folded
+        )
         and (not folded or guards.spelled_agree(needle, segment, words))
         and not lexicon.digits_with_foreign_words(segment)  # R12d
     )
@@ -383,7 +394,7 @@ def _inconsistent(item, source: str, spoken: bool, language: str | None, text_la
             return NO_VALUE
         if claimed and not units.claim_units_agree(item.text, source, source_language, mode):
             return NO_VALUE
-        if not guards.claim_negations_agree(item.text, source, mode, _number_words(False)):
+        if not guards.claim_negations_agree(item.text, source, mode, _number_words(False), not spoken):
             return NO_VALUE  # R12f: 'Chấm nước mắm' from 'không chấm nước mắm'
 
     numeric = number_tokens(_value(item) or "", None)
@@ -393,6 +404,25 @@ def _inconsistent(item, source: str, spoken: bool, language: str | None, text_la
     if not all(_bounded(_canonical(r, spoken, language), text) for r in _required(item)):
         return NO_VALUE
     return None
+
+
+def _spells_number(text: str | None) -> bool:
+    """A Vietnamese/English number word, or one of another listed language (lexicon), in the text."""
+    words = re.findall(r"[^\W_]+", normalize(text or ""))
+    return any(w in _number_words(False) for w in words) or any(
+        lexicon.foreign_number_word(t) for t in (text or "").split()
+    )
+
+
+def _states_number(item) -> bool:
+    """R13: an item whose on-screen check would compare a number: a material quantity or parameter
+    value, a claim with a digit or a number word, a command with a digit."""
+    if isinstance(item, ExactInput):
+        return units.has_digit(item.text, item.on_screen_text)
+    if isinstance(item, (Material, Parameter)) and (_value(item) or "").strip():
+        return True
+    texts = (_value(item), item.on_screen_text)
+    return units.has_digit(*texts) or any(_spells_number(t) for t in texts)
 
 
 def _result(status, method, reason=None, **rest) -> ItemVerification:
@@ -431,6 +461,12 @@ def verify_item(
     fields = (_value(item), getattr(item, "text", None), item.quote, item.on_screen_text)
     if transcript is not None and not guards.has_vocabulary(transcript.language) and units.has_digit(*fields):
         return _result("unverified", "none", NO_DIGITS)  # ruling R2a: digits we cannot tie to speech
+    if (
+        not spoken
+        and _states_number(item)
+        and _code(transcript.language if transcript else None) not in VI_EN
+    ):
+        return _result("unverified", "none", NO_LANGUAGE)  # ruling R13: no vi/en speech to read the screen by
     reason = _inconsistent(item, source, spoken, language, text_language)
     if reason:
         return _result("unverified", "none", reason)

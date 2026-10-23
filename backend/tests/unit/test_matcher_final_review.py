@@ -6,7 +6,7 @@ from app.schemas.verification import Transcript, Word
 from app.services.verification.matcher import NO_VALUE, verify_item
 from app.services.verification.numbers import number_tokens
 from app.services.verification.ocr import reading_order
-from test_matcher import SETTINGS, exact, span, stated_exact, transcript
+from test_matcher import SCREEN_ONLY, SETTINGS, exact, span, stated_exact, transcript
 
 
 def mat(quantity, unit, quote=None, ost=None, name="Bột"):
@@ -51,8 +51,9 @@ def say(item, spoken, lang="vi", text_language=None):
 
 
 def show(item, *screens, text_language=None):
+    """On-screen check while a Vietnamese transcript exists (ruling R13 needs one for numbers)."""
     frames = [(11.0, s) for s in screens]
-    return verify_item("p", item, None, frames, SETTINGS, text_language=text_language)
+    return verify_item("p", item, SCREEN_ONLY, frames, SETTINGS, text_language=text_language)
 
 
 # ---- C1: ranges, fractions and second numbers inside the quote -----------------------------------

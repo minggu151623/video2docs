@@ -9,8 +9,9 @@ from app.services.verification.lexicon import clean
 from app.services.verification.numbers import NUMBER, number_shape, spell_digits
 
 PUNCT = ".,;:!?()[]{}\"'"
-OPENERS = "([{\"'“‘«"  # brackets and quotes before a number do not change it ('(200 g)')
-SENTENCE = ".,;:!?)]}\"'”’»"  # a standalone token of these ends a sentence, it is not a symbol
+OPENERS = "([{\"'“‘«‹「"  # brackets and quotes before a number do not change it ('(200 g)')
+SENTENCE = ".,;:!?)]}\"'”’»›」…"  # a token ending in these ends a sentence or clause, not a symbol
+POSTFIX = "%°‰′″"  # unit marks written after a number ('10% 5')
 # canonical unit -> spellings, '|' between spellings. Only unambiguous ones: 'cân' (also 'scale'),
 # 'lạng' (100 g), 'phân' (cm or manure), 'ly' and 'in' are left out, so they compare only as written.
 _TABLE = {
@@ -48,23 +49,33 @@ LONGEST = max(len(s.split()) for s in UNITS)
 
 
 def prefix_at(text: str, start: int) -> str:
-    """R12c: the symbols right before a number: the whole run of characters that are neither letters,
-    digits nor spaces ('$5', '<=5', '≈5', '÷2'), else a standalone symbol token ('$ 5', '- 18').
-    A glued 'x' counts too ('x2'). Brackets and quotes are dropped from the run."""
+    """R12c + R14: the symbols right before a number.
+
+    The run of characters that are neither letters, digits nor spaces glued to it ('$5', '<=5', '≤(5)'),
+    brackets and quotes left out; else a glued 'x' ('x2'); else, past spaces and opening brackets/quotes,
+    the previous token's trailing symbols ('Bake≤ 5', '$ 5', '≤ (5)', '- 18') or a standalone 'x'
+    ('x 2'). Sentence punctuation ('cups, 5', 'đợi... 5') and unit marks ('10% 5') are not symbols."""
     i = start
     while i > 0 and not text[i - 1].isalnum() and not text[i - 1].isspace():
         i -= 1
-    run = text[i:start].lstrip(OPENERS)
+    run = "".join(c for c in text[i:start] if c not in OPENERS)
     if run:
         return run
     if text[i - 1 : i] == "x" and (i == 1 or not text[i - 2].isalnum()):
         return "x"
-    if text[start - 1 : start] == " ":
-        token = text[:start].split()[-1:]
-        word = token[0] if token else ""
-        if word and not any(c.isalnum() or c in SENTENCE for c in word):
-            return word.lstrip(OPENERS)
-    return ""
+    j = i
+    while j > 0 and (text[j - 1].isspace() or text[j - 1] in OPENERS):
+        j -= 1
+    if j == i:
+        return ""  # nothing between the previous word and the number
+    word = text[:j].split()[-1:]
+    word = word[0].lstrip(OPENERS) if word else ""
+    if word in ("x", "×"):
+        return word
+    k = len(word)
+    while k > 0 and not word[k - 1].isalnum():
+        k -= 1
+    return "".join(c for c in word[k:] if c not in SENTENCE + OPENERS + POSTFIX)
 
 
 def value_prefixes_agree(value: str, source: str, language: str | None) -> bool:

@@ -295,8 +295,8 @@ def test_ocr_frames_respect_configured_maximum(tmp_path, monkeypatch, media):
         settings(tmp_path, verify_max_ocr_frames=2),
         asset(),
         draft(two_spans),
-        None,
-        "skipped",
+        TRANSCRIPT,
+        "ok",
         tmp_path,
         lambda: None,
     )
@@ -306,7 +306,7 @@ def test_ocr_frames_respect_configured_maximum(tmp_path, monkeypatch, media):
 def test_ocr_skipped_without_engine_or_need(tmp_path, monkeypatch, media):
     use(monkeypatch, ocr=None)
     report = pipeline.run_verification(
-        settings(tmp_path), asset(), draft(SCREEN), None, "ok", tmp_path, lambda: None
+        settings(tmp_path), asset(), draft(SCREEN), TRANSCRIPT, "ok", tmp_path, lambda: None
     )
     assert report.ocr_status == "skipped" and report.items["materials/0"].status == "not_checked"
     use(monkeypatch, ocr=FakeOCR())
@@ -354,7 +354,7 @@ def test_ocr_failure_does_not_raise(tmp_path, monkeypatch, media, caplog, error,
     use(monkeypatch, ocr=FakeOCR(error=error))
     with caplog.at_level(logging.WARNING, logger="video2docs.verification"):
         report = pipeline.run_verification(
-            settings(tmp_path), asset(), draft(SCREEN), None, "skipped", tmp_path, lambda: None
+            settings(tmp_path), asset(), draft(SCREEN), TRANSCRIPT, "ok", tmp_path, lambda: None
         )
     assert code in caplog.text and (kind is None or kind in caplog.text)
     assert report.ocr_status == "failed" and report.ocr_error == code
@@ -374,7 +374,7 @@ def test_ocr_checks_cancellation_between_frames(tmp_path, monkeypatch, media):
 
     with pytest.raises(AppError):
         pipeline.run_verification(
-            settings(tmp_path), asset(), draft(SCREEN), None, "skipped", tmp_path, cancel
+            settings(tmp_path), asset(), draft(SCREEN), TRANSCRIPT, "ok", tmp_path, cancel
         )
     assert len(media["frames"]) == 1
 
@@ -388,14 +388,14 @@ def test_frame_extraction_failure_leaves_item_not_checked(tmp_path, monkeypatch,
     monkeypatch.setattr(pipeline, "extract_frame", broken)
     with caplog.at_level(logging.WARNING, logger="video2docs.verification"):
         report = pipeline.run_verification(
-            settings(tmp_path), asset(), draft(SCREEN), None, "skipped", tmp_path, lambda: None
+            settings(tmp_path), asset(), draft(SCREEN), TRANSCRIPT, "ok", tmp_path, lambda: None
         )
     assert "FRAME_FAILED" in caplog.text
     assert report.ocr_status == "failed" and report.ocr_error == "NO_FRAME"
     assert report.items["materials/0"].status == "not_checked"
     assert pipeline.degraded_warning(report) == {
         "code": "VERIFICATION_DEGRADED",
-        "asr": "skipped",
+        "asr": "ok",
         "ocr": "failed",
         "asr_error": None,
         "ocr_error": "NO_FRAME",
@@ -409,7 +409,7 @@ def test_observed_item_without_visual_span_is_unverified_by_matcher(tmp_path, mo
         built.steps[0].evidence_spans[0].model_copy(update={"source": "audio"})
     ]
     report = pipeline.run_verification(
-        settings(tmp_path), asset(), built, None, "skipped", tmp_path, lambda: None
+        settings(tmp_path), asset(), built, TRANSCRIPT, "ok", tmp_path, lambda: None
     )
     item = report.items["materials/0"]
     assert (item.status, item.method, item.reason) == (
@@ -446,3 +446,15 @@ def test_draft_language_reaches_the_matcher(tmp_path, monkeypatch, media):
     )
     assert report.items["materials/0"].status == "verified"
     assert report.items["materials/1"].status == "unverified"
+
+
+def test_ocr_numbers_without_a_vietnamese_or_english_transcript_are_not_read(tmp_path, monkeypatch, media):
+    # ruling R13: a silent video (or one in another language) gets no on-screen number verification
+    use(monkeypatch, ocr=FakeOCR())
+    for transcript, status in ((None, "skipped"), (TRANSCRIPT.model_copy(update={"language": None}), "ok")):
+        report = pipeline.run_verification(
+            settings(tmp_path), asset(), draft(SCREEN), transcript, status, tmp_path, lambda: None
+        )
+        item = report.items["materials/0"]
+        assert (item.status, item.reason) == ("unverified", "chưa xác định ngôn ngữ video để kiểm chứng số")
+    assert not media["frames"]
