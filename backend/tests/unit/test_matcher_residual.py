@@ -306,3 +306,65 @@ def test_residual_positives_still_verify():
         ).status
         == "verified"
     )
+
+
+# ---- R6: fraction words in the source next to the number, in many languages; more negations ------
+
+R6_CASES = [
+    lambda: show(
+        cl("Cuire 2 minutes", ost="Cuire 2 minutes"), "Cuire 2 minutes et demie", text_language="vi"
+    ),
+    lambda: show(cl("Usar 2 tazas", ost="2 tazas"), "2 tazas y media", text_language="vi"),
+    lambda: say(mat("2", "큰술", "설탕 2 큰술", name="Đường"), "설탕 2 큰술 반", "ko", "vi"),
+    lambda: show(cl("Thêm đường 2 큰술", ost="설탕 2 큰술"), "설탕 2 큰술 반", text_language="vi"),
+    lambda: show(cl("Dùng 2 杯", ost="砂糖 2 杯"), "砂糖 2 杯半", text_language="vi"),
+    lambda: say(
+        mat("2", "cups", "add 2 cups of flour", name="flour"), "add 2 cups of flour and a half", "en", "en"
+    ),
+    lambda: say(par("1", "tiếng", "hầm 1 tiếng", name="hầm"), "hầm 1 tiếng hoặc hơn chút rưỡi", "vi", "vi"),
+    lambda: show(
+        cl("Backen 2 Stunden", ost="Backen 2 Stunden"), "Backen 2 Stunden und eine halbe", text_language="vi"
+    ),
+    lambda: show(cl("Cuocere 2 ore", ost="Cuocere 2 ore"), "Cuocere 2 ore e mezza", text_language="vi"),
+    lambda: show(
+        cl("Cozinhar 2 horas", ost="Cozinhar 2 horas"), "Cozinhar 2 horas e meia", text_language="vi"
+    ),
+    # the same words inside the on-screen text itself, when it holds a number
+    lambda: show(
+        cl("Cuire 2 minutes", ost="Cuire 2 minutes et demie"), "Cuire 2 minutes et demie", text_language="vi"
+    ),
+]
+
+
+@pytest.mark.parametrize("case", R6_CASES)
+def test_r6_fraction_words_near_the_number_in_the_source_never_verify(case):
+    assert case().status == "unverified"
+
+
+def test_r6_positives_unaffected():
+    item = cl("Cuire 2 minutes", ost="Cuire 2 minutes")
+    assert show(item, "Cuire 2 minutes", text_language="vi").status == "verified"
+    item = mat("2", "cups", "add 2 cups of flour", name="flour")
+    assert say(item, "now add 2 cups of flour", "en", "en").status == "verified"
+    # a foreign fraction word in a text without numbers is not a fraction
+    assert show(cl("Ouvrir le menu", ost="Ouvrir le menu demi"), "Ouvrir le menu demi").status == "verified"
+
+
+R6_NEGATION_CASES = [
+    lambda: say(
+        cl("Cần rút điện", "cần rút điện trước khi mở máy"), "khỏi cần rút điện trước khi mở máy", "vi", "vi"
+    ),
+    lambda: say(
+        cl("Cần rút điện", "cần rút điện trước khi mở máy"), "chả cần rút điện trước khi mở máy", "vi", "vi"
+    ),
+    lambda: say(
+        cl("Should unplug", "you should unplug it first"), "you shouldnt unplug it first", "en", "en"
+    ),
+    lambda: say(cl("It is safe", "it is safe to touch now"), "it isnt safe to touch now", "en", "en"),
+    lambda: say(cl("They are hot", "they are hot right now"), "they arent hot right now", "en", "en"),
+]
+
+
+@pytest.mark.parametrize("case", R6_NEGATION_CASES)
+def test_r6_more_negation_words(case):
+    assert case().status == "unverified"

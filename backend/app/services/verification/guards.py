@@ -14,6 +14,12 @@ from app.services.verification.numbers import NUMBER, number_tokens, number_word
 ORDINALS = "fourth fifth sixth seventh eighth ninth tenth".split()
 FRACTION_WORDS = {"rưỡi", "rưởi", "nửa", "half", "halves", "third", "thirds", "quarter", "quarters"}
 FRACTION_WORDS |= set(ORDINALS) | {w + "s" for w in ORDINALS}  # 'one fourth', 'three eighths'
+# R6: half/quarter words of other languages, checked only next to a number (some are also plain words:
+# 'media', 'quarto', 'meia'); CJK has no spaces, so '半' and '반' are found inside a token
+FOREIGN_FRACTIONS = {"demi", "demie", "quart", "medio", "media", "cuarto", "halb", "halbe", "viertel"}
+FOREIGN_FRACTIONS |= {"mezzo", "mezza", "quarto", "meio", "meia"}
+NEAR_FRACTIONS = FRACTION_WORDS | FOREIGN_FRACTIONS
+FOLDED_FRACTIONS = {units.fold(w) for w in NEAR_FRACTIONS}  # OCR text has no diacritics ('nửa' -> 'nua')
 FRACTION_PAIRS = {("phần", "tư"), ("phần", "ba")}
 DECIMAL_WORDS = {"phẩy", "chấm"}
 FRACTION_SYMBOLS = "½¼¾⅓⅔⁄"  # NFKC turns '½' into '1⁄2', so the fraction slash counts too
@@ -21,8 +27,21 @@ RANGE_WORDS = {"-", "–", "−", "~", "đến", "tới", "hoặc", "hay", "or",
 RANGE_WORDS |= {"den", "toi", "hoac"}  # the same words as OCR reads them without diacritics
 RANGE_PAIR_WORDS = {"and", "và", "va", "&"}  # only directly between two numbers: 'between 2 and 3'
 RANGE_GAP = 4  # words allowed between two numbers joined by a range word ('2 phút hoặc là 3')
-NEGATIONS = {"not", "no", "never", "without", "cannot", "không", "đừng", "chớ", "chưa", "chẳng"}
-NOT_FORMS = {"cannot", "dont", "doesnt", "didnt", "cant", "wont"}
+NEGATIONS = {
+    "not",
+    "no",
+    "never",
+    "without",
+    "cannot",
+    "không",
+    "đừng",
+    "chớ",
+    "chưa",
+    "chẳng",
+    "khỏi",
+    "chả",
+}
+NOT_FORMS = {"cannot", "dont", "doesnt", "didnt", "cant", "wont", "shouldnt", "isnt", "arent"}
 STOP_WORDS = {"và", "của", "cho", "các", "những", "với", "loại", "the", "of", "and", "for", "to", "with"}
 NAME_SCORE = 80
 PROMPT = re.compile(r"^\s*(?:[$#>](?=\s)|PS\s[^>\n]*>)")
@@ -55,6 +74,8 @@ def fraction_or_range(text: str, language: str | None) -> bool:
         return True
     if _phan_fraction(re.findall(r"\d+|[^\W\d_]+", norm)):
         return True
+    if number_tokens(norm, language) and any(half_word(w) for w in norm.split()):
+        return True  # R6: "Cuire 2 minutes et demie", "설탕 2 큰술 반"
     spelled = spell_digits(norm, language)[0]
     numbers = list(NUMBER.finditer(spelled))
     for left, right in zip(numbers, numbers[1:]):
@@ -64,6 +85,15 @@ def fraction_or_range(text: str, language: str | None) -> bool:
         if len(gap) == 1 and gap[0] in RANGE_PAIR_WORDS:  # 'between 2 and 3'
             return True
     return False
+
+
+def half_word(token: str, folded: bool = False) -> bool:
+    """R6: a half/quarter word in any listed language ('demie', 'media', 'rưỡi', '반', '杯半')."""
+    word = token.strip(PUNCT).casefold()
+    if "半" in word or word == "반" or word.endswith("반") and any(c.isdigit() for c in word):
+        return True
+    table = FOLDED_FRACTIONS if folded else NEAR_FRACTIONS
+    return any(part in table for part in re.findall(r"[^\W\d_]+", word))
 
 
 def _phan_fraction(words: list[str]) -> bool:

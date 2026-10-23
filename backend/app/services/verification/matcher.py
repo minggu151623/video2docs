@@ -117,7 +117,8 @@ def _beside_number(haystack: str, start: int, end: int, folded: bool) -> bool:
 
     Distance is counted in whitespace tokens from that edge number, so words between it and the segment
     edge use up the window: any number or number word (read or not) within NEIGHBOURHOOD tokens of it
-    outside the segment, or a bare dash right next to the segment within reach, ends the match
+    outside the segment, a half/quarter word in any listed language (ruling R6: 'et demie', 'y media',
+    '반'), or a bare dash right next to the segment within reach, ends the match
     ('2 - 3 phút', 'nấu 2 hay khoảng tầm 3 phút', 'two, or if you like, three')."""
     tokens = haystack[start:end].split()
     marks = [i for i, w in enumerate(tokens) if _has_number(w, folded)]
@@ -126,7 +127,8 @@ def _beside_number(haystack: str, start: int, end: int, folded: bool) -> bool:
 
     def near(words: list[str], gap: int) -> bool:  # words nearest the segment first
         reach = words[: max(0, NEIGHBOURHOOD - gap)]
-        return any(_has_number(w, folded) for w in reach) or (bool(reach) and reach[0] in DASHES)
+        number = any(_has_number(w, folded) or guards.half_word(w, folded) for w in reach)  # R6: 'et demie'
+        return number or (bool(reach) and reach[0] in DASHES)
 
     before, after = haystack[:start].split()[::-1], haystack[end:].split()
     return near(before, marks[0]) or near(after, len(tokens) - 1 - marks[-1])
@@ -146,6 +148,9 @@ def _edges_ok(needle: str, haystack: str, start: int, end: int, language: str | 
         return True
     if _beside_number(haystack, start, end, folded):
         return False
+    ours = needle.split()
+    if any(guards.half_word(w, folded) for w in segment.split() if w not in ours):
+        return False  # R6: '2 杯半' on screen for '2 杯'
     around = _words(haystack[:start])[-1:] + _words(segment) + _words(haystack[end:])[:1]
     return all(w not in MODIFIERS or w in _words(needle) for w in around)
 
