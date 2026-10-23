@@ -27,7 +27,7 @@ from typing import Any
 from rapidfuzz import fuzz
 from app.schemas.tutorial_v2 import ExactInput, Material, Parameter, TutorialDraftV2
 from app.schemas.verification import ItemVerification, Transcript, Word
-from app.services.verification import guards, units
+from app.services.verification import guards, lexicon, units
 from app.services.verification.numbers import NUMBER, number_tokens, number_words, spell_digits
 
 NO_VALUE = "giá trị không có trong nguyên văn"
@@ -44,8 +44,8 @@ MIN_QUOTE_CHARS = 6
 
 
 def normalize(text: str) -> str:
-    """NFKC, casefold and single spaces; diacritics and every script are kept."""
-    return " ".join(unicodedata.normalize("NFKC", text).casefold().split())
+    """NFKC, every dash as '-', casefold and single spaces; diacritics and every script are kept."""
+    return " ".join(lexicon.clean(text).casefold().split())
 
 
 def _word_char(c: str) -> bool:
@@ -127,7 +127,11 @@ def _beside_number(haystack: str, start: int, end: int, folded: bool) -> bool:
 
     def near(words: list[str], gap: int) -> bool:  # words nearest the segment first
         reach = words[: max(0, NEIGHBOURHOOD - gap)]
-        number = any(_has_number(w, folded) or guards.half_word(w, folded) for w in reach)  # R6: 'et demie'
+        # R6 'et demie'; R12d a number word of another language ('2 tazas, o tres')
+        number = any(
+            _has_number(w, folded) or guards.half_word(w, folded) or lexicon.foreign_number_word(w)
+            for w in reach
+        )
         return number or (bool(reach) and reach[0] in DASHES)
 
     before, after = haystack[:start].split()[::-1], haystack[end:].split()
@@ -180,6 +184,7 @@ def _locate(
         and guards.units_agree(needle, haystack, start, end, words if folded else frozenset())
         and guards.negations_agree(*(plain or (needle, haystack)), start, end, _number_words(False))
         and (not folded or guards.spelled_agree(needle, segment, words))
+        and not lexicon.digits_with_foreign_words(segment)  # R12d
     )
     return start, end, ok
 
@@ -262,7 +267,7 @@ def _match_screen(
     if not found:
         return None
     segment = haystack[found[0] : found[1]]
-    if not guards.ocr_words_agree(plain[0], needle, segment):
+    if not guards.ocr_words_agree(plain[0], needle, segment, _number_words(True)):
         return None
     ok = found[2] and all(_bounded(_fold(r), segment) for r in required)
     return normalize(ocr_text)[found[0] : found[1]], ok
@@ -276,9 +281,17 @@ def _speech_base(words: list[Word]) -> tuple[list[Word], str, list[int]]:
 
 
 def _match_speech(
-    quote: str, words: list[Word], language: str | None, threshold: int, required=(), exact: bool = False
+    quote: str,
+    words: list[Word],
+    language: str | None,
+    threshold: int,
+    required=(),
+    exact: bool = False,
+    quantity: bool = False,
 ):
-    """(matched text, first matched word start, values_ok) or None; diacritics stay significant."""
+    """(matched text, first matched word start, values_ok) or None; diacritics stay significant.
+
+    `quantity` (Material/Parameter): 'không phẩy năm' is only a number, not also a negation (R12e)."""
     spoken, base, word_starts = _speech_base(words)
     needle = spell_digits(normalize(quote), language)[0]
     haystack, starts, ends = spell_digits(base, language)
@@ -288,6 +301,8 @@ def _match_speech(
     begin, end = starts[found[0]], ends[found[1] - 1]
     segment = haystack[found[0] : found[1]]
     ok = found[2] and all(_bounded(_canonical(r, True, language), segment) for r in required)
+    # R12e: 'không chấm 2' reads as 0.2, but its 'không' still negates, so compare the words as spoken
+    ok = ok and guards.negations_agree(normalize(quote), base, begin, end, _number_words(False), quantity)
     return base[begin:end], spoken[bisect_right(word_starts, begin) - 1].start, ok
 
 
@@ -349,14 +364,16 @@ def _inconsistent(item, source: str, spoken: bool, language: str | None, text_la
         return RANGE
     if isinstance(item, ExactInput):
         return None if _squash(item.text) == _squash(source) else NO_VALUE
-    if guards.foreign_numbers(source):
-        return NO_VALUE  # a second number spelled in a language we cannot read ('2 ou trois')
+    if lexicon.digits_with_foreign_words(source):
+        return NO_VALUE  # R12d: a second number spelled in a language we cannot read ('2 ou trois')
     source_language = language if spoken else None
     found = Counter(number_tokens(source, source_language))
     if isinstance(item, (Material, Parameter)):
         claimed = Counter(number_tokens(_value(item) or "", None))  # ruling R5: vi and en number words
         if claimed != found:
             return NO_VALUE
+        if not units.value_prefixes_agree(_value(item) or "", source, source_language):
+            return NO_VALUE  # R12c: 'Freezer - 18°C' or '<=5' for a bare value
         check_name = not spoken or _same_language(text_language, language)
         if check_name and not guards.name_in_source(item.name, source, normalize if spoken else _fold):
             return NO_NAME
@@ -366,9 +383,8 @@ def _inconsistent(item, source: str, spoken: bool, language: str | None, text_la
             return NO_VALUE
         if claimed and not units.claim_units_agree(item.text, source, source_language, mode):
             return NO_VALUE
-        words = _number_words(False)
-        if mode == "same" and guards.negation_count(item.text, words) != guards.negation_count(source, words):
-            return NO_VALUE  # ruling R11: 'Chấm nước mắm' from 'không chấm nước mắm'
+        if not guards.claim_negations_agree(item.text, source, mode, _number_words(False)):
+            return NO_VALUE  # R12f: 'Chấm nước mắm' from 'không chấm nước mắm'
 
     numeric = number_tokens(_value(item) or "", None)
     if not guards.has_vocabulary(source_language) and numeric and not any(t[:1].isdigit() for t in found):
@@ -444,7 +460,8 @@ def verify_item(
                 hit = _match_speech_exact(source, words, transcript.words)
             else:
                 threshold, required = settings.verify_text_threshold, _required(item)
-                hit = _match_speech(source, words, language, threshold, required, exact_text)
+                quantity = isinstance(item, (Material, Parameter))
+                hit = _match_speech(source, words, language, threshold, required, exact_text, quantity)
             hits = [hit] if hit else []
         else:
             low, high = max(0.0, s.start_sec - pad), s.end_sec + pad

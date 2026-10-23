@@ -459,3 +459,118 @@ def test_round2_recall_cost_ocr_words_without_marks_compare_exactly():
     assert (
         ocr_none(cl("Bật bếp", ost="Bat bep cho chao nong"), "Bat bep cho chau nong").status == "unverified"
     )
+
+
+# ---- round 3: R12 ----------------------------------------------------------------------------------
+
+ROUND3_CASES = [
+    # (a) only Vietnamese-specific letters are tolerated, never number words
+    lambda: ocr_none(cl("Hornear", ost="Hornea veintitrés minutos"), "Hornea veintiséis minutos"),
+    lambda: ocr_with(cl("Hornear", ost="Hornea veintitrés minutos"), "Hornea veintiséis minutos", "en"),
+    lambda: ocr_none(cl("Cuocere", ost="Cuocere ottantatré minuti"), "Cuocere novantatré minuti"),
+    lambda: ocr_none(cl("Cuocere", ost="Cuocere sessantatré minuti"), "Cuocere settantatré minuti"),
+    # (b) every dash is '-'
+    lambda: ocr_none(par("18", "°C", ost="Freezer‐18°C", name="Freezer"), "Freezer‐18°C"),
+    lambda: ocr_none(par("18", "°C", ost="Freezer‑18°C", name="Freezer"), "Freezer‑18°C"),
+    lambda: ocr_none(par("18", "°C", ost="Freezer‒18°C", name="Freezer"), "Freezer‒18°C"),
+    lambda: ocr_none(par("18", "°C", ost="Freezer—18°C", name="Freezer"), "Freezer—18°C"),
+    lambda: ocr_none(cl("Đặt 18°C", ost="18°C"), "Freezer‐18°C"),
+    lambda: ocr_none(cl("Đặt 18°C", ost="18°C"), "Freezer—18°C"),
+    lambda: ocr_none(par("18", "°C", ost="Freezer - 18°C", name="Freezer"), "Freezer - 18°C"),
+    # (c) the whole symbol run before a number
+    lambda: ocr_none(cl("Bake 5 min", ost="Bake <=5 min"), "Bake <=5 min"),
+    lambda: ocr_none(cl("Bake 5 min", ost="Bake >=5 min"), "Bake >=5 min"),
+    lambda: ocr_none(cl("Bake 5 min", ost="Bake ≈5 min"), "Bake ≈5 min"),
+    lambda: ocr_none(cl("Bake 5 min", ost="Bake ≦5 min"), "Bake ≦5 min"),
+    lambda: ocr_none(cl("Bake 5 min", ost="Bake ≧5 min"), "Bake ≧5 min"),
+    lambda: ocr_none(cl("Bake 5 min", ost="Bake ⩽5 min"), "Bake ⩽5 min"),
+    lambda: ocr_none(cl("Bake 5 min", ost="Bake 5 min"), "Bake <=5 min"),
+    # (d) number words of other languages next to digits
+    lambda: ocr_none(
+        mat("2", "tazze", ost="2 o tre tazze di farina", name="farina"), "2 o tre tazze di farina"
+    ),
+    lambda: ocr_none(mat("2", "tazze", ost="2 tazze, o tre", name="tazze"), "2 tazze, o tre"),
+    lambda: ocr_none(
+        par("10", "minutes", ost="Cuire 10 à quinze minutes", name="Cuire"), "Cuire 10 à quinze minutes"
+    ),
+    lambda: ocr_none(
+        par("10", "minutos", ost="Hornear 10 o quince minutos", name="Hornear"), "Hornear 10 o quince minutos"
+    ),
+    lambda: ocr_none(
+        par("20", "minutos", ost="Hornear 20 o treinta minutos", name="Hornear"),
+        "Hornear 20 o treinta minutos",
+    ),
+    lambda: ocr_none(
+        par("10", "Minuten", ost="Backen 10 bis fünfzehn Minuten", name="Backen"),
+        "Backen 10 bis fünfzehn Minuten",
+    ),
+    lambda: ocr_none(
+        par("20", "Minuten", ost="Backen 20 oder dreißig Minuten", name="Backen"),
+        "Backen 20 oder dreißig Minuten",
+    ),
+    lambda: ocr_none(
+        par("20", "minutes", ost="Cuire 20 ou trente minutes", name="Cuire"), "Cuire 20 ou trente minutes"
+    ),
+    lambda: ocr_none(mat("2", "큰술", ost="설탕 2 큰술 또는 세큰술", name="설탕"), "설탕 2 큰술 또는 세큰술"),
+    lambda: ocr_none(
+        mat("2", "큰술", ost="설탕 2 큰술 또는 두세 큰술", name="설탕"), "설탕 2 큰술 또는 두세 큰술"
+    ),
+    lambda: ocr_none(mat("2", "tazas", ost="2 tazas", name="tazas"), "2 tazas o veintitrés"),
+    # (e)/(f) negations
+    lambda: say(cl("Chấm 2 lần", "chấm 2 lần"), "món này không chấm 2 lần", "vi", "vi"),
+    lambda: say(cl("Chấm hai lần", "chấm hai lần"), "món này không chấm hai lần", "vi", "vi"),
+    lambda: say(
+        cl("Không chấm nước mắm", "chưa ướp thì chấm nước mắm"), "chưa ướp thì chấm nước mắm", "vi", "vi"
+    ),
+    lambda: say(
+        cl("Không chấm nước mắm", "không ướp muối, chấm nước mắm"),
+        "không ướp muối, chấm nước mắm",
+        "vi",
+        "vi",
+    ),
+    lambda: ocr_none(cl("Chấm nước mắm", ost="Không chấm nước mắm"), "Không chấm nước mắm"),
+    lambda: say(cl("Dip in fish sauce", "không chấm nước mắm"), "không chấm nước mắm", "vi", "en"),
+    lambda: say(cl("Chấm nước mắm", "không chấm nước mắm"), "không chấm nước mắm", "vi", None),
+]
+
+
+@pytest.mark.parametrize("case", ROUND3_CASES)
+def test_round3_inputs_never_verify(case):
+    assert case().status == "unverified"
+
+
+def test_round3_positives():
+    assert ocr_none(cl("Nướng ở 180°C", ost="Nướng ở 180°C"), "Nưng ở 180°C").status == "verified"
+    assert ocr_none(cl("Cuire 2 minutes", ost="Cuire 2 minutes"), "Cuire 2 minutes").status == "verified"
+    item = mat("0,5", "lít", "dùng không phẩy năm lít nước", name="nước")
+    assert say(item, "các bạn dùng không phẩy năm lít nước nhé", "vi", "vi").status == "verified"
+    item = cl("Không chạm vào chảo nóng", "đừng chạm vào chảo đang nóng")
+    assert say(item, "các bạn đừng chạm vào chảo đang nóng nhé", "vi", "vi").status == "verified"
+    assert ocr_none(cl("Bake 5 min", ost="Bake 5 min"), "Bake 5 min").status == "verified"
+    assert ocr_none(cl("Bột 200 g", ost="Bột (200 g)"), "Bột (200 g)").status == "verified"
+    item = mat("2", "cups", "add 2 cups of milk until smooth", name="milk")
+    assert say(item, "now add 2 cups of milk until smooth", "en", "en").status == "verified"
+    assert number_tokens("freezer‐18°c", None) == ["~-18"]
+
+
+def test_round3_recall_cost_khong_before_decimal_word_is_a_negation_for_claims():
+    # ruling R12e: 'không phẩy năm' is 0.5 for numbers but still a negation, so the claim lacks one
+    item = cl("Dùng 0,5 lít nước", "dùng không phẩy năm lít nước")
+    assert say(item, "các bạn dùng không phẩy năm lít nước nhé", "vi", "vi").status == "unverified"
+
+
+def test_round3_quantity_written_as_digits_meets_spoken_khong_decimal():
+    # R12e: for a Material the spoken 'không phẩy năm' is 0.5, not a negation
+    item = mat("0,5", "lít", "dùng 0,5 lít nước", name="nước")
+    assert say(item, "dùng không phẩy năm lít nước", "vi", "vi").status == "verified"
+
+
+def test_round3_recall_cost_symbol_before_the_number_must_be_in_the_value():
+    # R12c: '+5' in the quote is not the bare value '5'
+    assert (
+        say(par("5", "mm", "offset +5 mm", name="offset"), "offset +5 mm", "en", "en").status == "unverified"
+    )
+    assert (
+        say(par("+5", "mm", "offset +5 mm", name="offset"), "offset +5 mm", "en", "en").status == "verified"
+    )
+    assert say(par("5", "mm", "offset 5 mm", name="offset"), "offset 5 mm", "en", "en").status == "verified"

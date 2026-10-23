@@ -6,6 +6,8 @@ import unicodedata
 TOKEN = re.compile(r"\d+|[^\W\d_]+")
 NUMBER = re.compile(r"(?:(?<!\w)[-–−])?(?:(?<![\d.,/:])[.,]\d+|\d+)(?:[.,/:\-–−]\d+)*")
 SEPARATORS = (".", ",", "/", ":")
+_PD = [i for i in [*range(0x10000), 0x10EAD] if unicodedata.category(chr(i)) == "Pd"]
+DASHES = str.maketrans({i: "-" for i in [*_PD, 0x2212]})  # R12b: every dash and the minus sign
 
 
 def _table(spec):
@@ -278,7 +280,7 @@ def number_tokens(text: str, language: str | None) -> list[str]:
 
     A run of number words that is not read ('hai ba', 'hai ba phẩy năm') becomes one opaque token
     '~hai ba', so two texts only agree when they hold the same unread words."""
-    folded = unicodedata.normalize("NFKC", text).casefold()
+    folded = unicodedata.normalize("NFKC", text).translate(DASHES).casefold()
     spelled, _, _, unread = _spell(folded, language)
     out = ["~" + " ".join(words.split()) for _, _, words in unread]
     for m in NUMBER.finditer(spelled):

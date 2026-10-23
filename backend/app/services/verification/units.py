@@ -5,10 +5,12 @@ Each check only ever turns a match into `unverified`; none of them can make a ma
 import re
 import unicodedata
 
+from app.services.verification.lexicon import clean
 from app.services.verification.numbers import NUMBER, number_shape, spell_digits
 
 PUNCT = ".,;:!?()[]{}\"'"
-SYMBOLS = "$€£¥₫×÷+~<>≤≥"  # 'x' counts too when it stands alone or is glued to the number ('x2')
+OPENERS = "([{\"'“‘«"  # brackets and quotes before a number do not change it ('(200 g)')
+SENTENCE = ".,;:!?)]}\"'”’»"  # a standalone token of these ends a sentence, it is not a symbol
 # canonical unit -> spellings, '|' between spellings. Only unambiguous ones: 'cân' (also 'scale'),
 # 'lạng' (100 g), 'phân' (cm or manure), 'ly' and 'in' are left out, so they compare only as written.
 _TABLE = {
@@ -46,16 +48,35 @@ LONGEST = max(len(s.split()) for s in UNITS)
 
 
 def prefix_at(text: str, start: int) -> str:
-    """The symbol right before a number ('$5', '€ 5', 'x2', '÷2', '~5'), else ''."""
+    """R12c: the symbols right before a number: the whole run of characters that are neither letters,
+    digits nor spaces ('$5', '<=5', '≈5', '÷2'), else a standalone symbol token ('$ 5', '- 18').
+    A glued 'x' counts too ('x2'). Brackets and quotes are dropped from the run."""
     i = start
-    while i > 0 and text[i - 1] == " ":
+    while i > 0 and not text[i - 1].isalnum() and not text[i - 1].isspace():
         i -= 1
-    c = text[i - 1 : i]
-    if c and c in SYMBOLS:
-        return c
-    if c == "x" and (i == 1 or not text[i - 2].isalnum()):
+    run = text[i:start].lstrip(OPENERS)
+    if run:
+        return run
+    if text[i - 1 : i] == "x" and (i == 1 or not text[i - 2].isalnum()):
         return "x"
+    if text[start - 1 : start] == " ":
+        token = text[:start].split()[-1:]
+        word = token[0] if token else ""
+        if word and not any(c.isalnum() or c in SENTENCE for c in word):
+            return word.lstrip(OPENERS)
     return ""
+
+
+def value_prefixes_agree(value: str, source: str, language: str | None) -> bool:
+    """R12c for a Material/Parameter: a symbol before a number in the quote ('- 18', '<=5', '~5', '+5')
+    must be before the number in the value itself."""
+
+    def symbols(raw: str, lang):
+        spelled = spell_digits(" ".join(clean(raw).casefold().split()), lang)[0]
+        return [prefix_at(spelled, m.start()) for m in NUMBER.finditer(spelled)]
+
+    ours = set(symbols(value, None))
+    return all(not p or p in ours for p in symbols(source, language))
 
 
 def unit_at(text: str, end: int) -> tuple[str, str | None]:
@@ -94,7 +115,7 @@ def claim_units_agree(text: str, source: str, source_language: str | None, mode:
     canonical table and equal; 'any' (OCR, or a language unknown): either of the two."""
 
     def keyed(raw: str, language: str | None):
-        spelled = spell_digits(" ".join(unicodedata.normalize("NFKC", raw).casefold().split()), language)[0]
+        spelled = spell_digits(" ".join(clean(raw).casefold().split()), language)[0]
         return around(spelled, [m.span() for m in NUMBER.finditer(spelled)], number_shape)
 
     ours, theirs = keyed(text, None), keyed(source, source_language)

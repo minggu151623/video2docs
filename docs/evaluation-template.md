@@ -40,8 +40,8 @@ Tổng hợp: chưa có, vì chưa có lượt chạy nào.
 
 ## Trước khi chạy cần biết
 
-- Luật số lân cận 8 token và các luật còn lại của bộ khớp (`docs/decisions.md`, mục 26 đến 43) làm một số định lượng đúng bị `unverified`; cột "mục đúng bị `unverified`" có mặt để đo đúng cái giá đó, chưa có ngưỡng.
-- Chưa có chỗ hở đã biết nào cho "sai mang ✓" sau mục 37–43; nếu cột "sai mang ✓" không đạt, ghi nguyên số, không chỉnh ngưỡng. Các luật 37–43 thêm cái giá về recall (OCR so từng từ theo thứ tự, thứ tự "fifth", "point"/"chấm" đứng trước số, câu nhận định khác ngôn ngữ với đơn vị ngoài bảng, chữ tiếng Việt trên màn hình phải trùng từng từ, "nữa" trên OCR, "media").
+- Luật số lân cận 8 token và các luật còn lại của bộ khớp (`docs/decisions.md`, mục 26 đến 44) làm một số định lượng đúng bị `unverified`; cột "mục đúng bị `unverified`" có mặt để đo đúng cái giá đó, chưa có ngưỡng.
+- Chưa có chỗ hở đã biết nào cho "sai mang ✓" sau mục 37–44; nếu cột "sai mang ✓" không đạt, ghi nguyên số, không chỉnh ngưỡng. Các luật 37–44 thêm cái giá về recall (OCR so từng từ theo thứ tự, thứ tự "fifth", "point"/"chấm" đứng trước số, câu nhận định khác ngôn ngữ với đơn vị ngoài bảng, chữ tiếng Việt trên màn hình phải trùng từng từ, "nữa" trên OCR, "media").
 - Probe schema v2 với Gemini bằng request text-only chưa chạy; lượt gửi video đầu tiên cũng là lần đầu xác nhận Google chấp nhận schema.
 - Phép chấm khớp tên và số, và ghép bước bằng `token_set_ratio`, có sai số riêng (`fixtures/eval/README.md`).
 

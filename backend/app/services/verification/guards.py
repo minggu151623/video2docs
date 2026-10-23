@@ -8,8 +8,10 @@ from collections import Counter
 
 from rapidfuzz import fuzz
 
-from app.services.verification import units
+from app.services.verification import lexicon, units
 from app.services.verification.numbers import NUMBER, number_tokens, number_words, spell_digits, vocabulary
+
+number_words_ = number_words  # the function; several checks below take a set named number_words
 
 ORDINALS = "fourth fifth sixth seventh eighth ninth tenth".split()
 FRACTION_WORDS = {"rưỡi", "rưởi", "nửa", "half", "halves", "third", "thirds", "quarter", "quarters"}
@@ -23,42 +25,11 @@ FOLDED_FRACTIONS = {units.fold(w) for w in NEAR_FRACTIONS}  # OCR text has no di
 FOLDED_VI_EN = {units.fold(w) for w in FRACTION_WORDS}
 FRACTION_PAIRS = {("phần", "tư"), ("phần", "ba")}
 FOLDED_PAIRS = {(units.fold(a), units.fold(b)) for a, b in FRACTION_PAIRS}
-# number words of languages numbers.py cannot read; next to digits they hide a second number ('2 ou trois').
-# Left out: 'tre' (Vietnamese 'bamboo'). Korean words count only as whole tokens; Chinese/Japanese numerals
-# inside a short token ('三杯', '两'); '一' and '十' are left out, they start many plain words.
-FOREIGN_NUMBERS = set(
-    "un une deux trois quatre cinq sept huit neuf dix onze douze vingt cent mille "
-    "uno una dos tres cuatro cinco seis siete ocho nueve diez cien "
-    "eins zwei drei vier fünf sechs sieben acht neun zehn elf zwölf hundert tausend "
-    "due quattro cinque sei sette otto nove dieci cento "
-    "dois duas três quatro cinco seis sete oito nove dez cem".split()
-)
-KOREAN_NUMBERS = set(
-    "하나 둘 셋 넷 다섯 여섯 일곱 여덟 아홉 열 한 두 세 네 스무 일 이 삼 사 오 육 칠 팔 구 십 백 천".split()
-)
-CJK_NUMERALS = "二三四五六七八九两"
-DECIMAL_WORDS = {"phẩy", "chấm"}
 FRACTION_SYMBOLS = "½¼¾⅓⅔⁄"  # NFKC turns '½' into '1⁄2', so the fraction slash counts too
 RANGE_WORDS = {"-", "–", "−", "~", "đến", "tới", "hoặc", "hay", "or", "to", "through", "till", "until"}
 RANGE_WORDS |= {"den", "toi", "hoac"}  # the same words as OCR reads them without diacritics
 RANGE_PAIR_WORDS = {"and", "và", "va", "&"}  # only directly between two numbers: 'between 2 and 3'
 RANGE_GAP = 4  # words allowed between two numbers joined by a range word ('2 phút hoặc là 3')
-NEGATIONS = {
-    "not",
-    "no",
-    "never",
-    "without",
-    "cannot",
-    "không",
-    "đừng",
-    "chớ",
-    "chưa",
-    "chẳng",
-    "khỏi",
-    "chả",
-}
-NEGATIONS |= {"ne", "pas", "jamais", "nunca", "nicht", "kein", "keine", "non", "não"}  # R11: fr es de it pt
-NOT_FORMS = {"cannot", "dont", "doesnt", "didnt", "cant", "wont", "shouldnt", "isnt", "arent"}
 STOP_WORDS = {"và", "của", "cho", "các", "những", "với", "loại", "the", "of", "and", "for", "to", "with"}
 NAME_SCORE = 80
 OCR_WORD_SCORE = 80
@@ -93,6 +64,7 @@ def fraction_or_range(text: str, language: str | None, folded: bool = False) -> 
         if number_tokens(bare, None) and any(half_word(w, True) for w in bare.split()):
             return True
     raw = unicodedata.normalize("NFC", text).casefold()
+    text = lexicon.clean(text)
     if any(s in raw for s in FRACTION_SYMBOLS):
         return True
     norm = " ".join(unicodedata.normalize("NFKC", text).casefold().split())
@@ -117,19 +89,6 @@ def _fraction_words(norm: str, folded: bool) -> bool:
     if table & set(words) or pairs & set(zip(words, words[1:])):
         return True
     return _phan_fraction(re.findall(r"\d+|[^\W\d_]+", norm), folded)
-
-
-def foreign_numbers(text: str) -> bool:
-    """A digit together with a number word of another language: '2 ou trois', '설탕 2 큰술 또는 세 큰술'."""
-    if not re.search(r"\d", text):
-        return False
-    for token in " ".join(unicodedata.normalize("NFKC", text).casefold().split()).split():
-        word = token.strip(PUNCT)
-        if word in KOREAN_NUMBERS or len(word) <= 2 and any(c in CJK_NUMERALS for c in word):
-            return True
-        if FOREIGN_NUMBERS & set(re.findall(r"[^\W\d_]+", word)):
-            return True
-    return False
 
 
 def half_word(token: str, folded: bool = False) -> bool:
@@ -192,55 +151,52 @@ def spelled_agree(needle: str, segment: str, number_words: frozenset[str]) -> bo
     return count(needle) == count(segment)
 
 
-def _negations(text: str, number_words: frozenset[str]) -> Counter:
-    words = _tokens(text)
-    out = []
-    for i, word in enumerate(words):
-        if word == "khong":  # OCR without diacritics; 'khong' has no other reading
-            word = "không"
-        nxt, then = (words[i + 1 : i + 3] + ["", ""])[:2]
-        decimal = nxt in DECIMAL_WORDS and (then in number_words or then[:1].isdigit())  # R9
-        if word == "không" and (nxt in number_words or nxt[:1].isdigit() or decimal):
-            continue  # 'không trăm', 'không phẩy năm': a digit, not a negation
-        if word.endswith("n't") or word in NOT_FORMS:
-            out.append("not")
-        elif word in NEGATIONS:
-            out.append(word)
-    return Counter(out)
-
-
 def negation_count(text: str, number_words: frozenset[str]) -> int:
-    """R11: how many negations a claim or its quote holds ('đừng' and 'không' count alike)."""
-    return sum(_negations(unicodedata.normalize("NFKC", text).casefold(), number_words).values())
+    """R12f: how many negations a text holds, each with the word it negates ('ne pas X' is one)."""
+    return len(lexicon.negation_pairs(text, number_words))
 
 
-def _vi_marked(token: str) -> bool:
-    return any(
-        c in "đĐ" or unicodedata.name(c, "").startswith("LATIN") and len(unicodedata.normalize("NFD", c)) > 1
-        for c in token
-    )
+def claim_negations_agree(text: str, source: str, mode: str, number_words: frozenset[str]) -> bool:
+    """R12f: one language: the same (negation, next word) pairs; otherwise the same number of them."""
+    if mode == "same":
+        return lexicon.negation_pairs(text, number_words) == lexicon.negation_pairs(source, number_words)
+    return negation_count(text, number_words) == negation_count(source, number_words)
 
 
-def ocr_words_agree(plain: str, needle: str, segment: str) -> bool:
-    """R7: on-screen words compare in order after folding. Only a needle word that carries a Vietnamese
-    mark and no digit may differ (similarity >= 80), as PaddleOCR drops stacked diacritics ('Nưng')."""
+def _locked(word: str, number_words: frozenset[str]) -> bool:
+    """R12a: a number word in any listed language is never read loosely."""
+    return word in number_words or lexicon.foreign_number_word(word)
+
+
+def ocr_words_agree(
+    plain: str, needle: str, segment: str, number_words: frozenset[str] | None = None
+) -> bool:
+    """R7 + R12a: on-screen words compare in order after folding. Only a needle word with a letter that
+    only Vietnamese uses (ă â đ ê ô ơ ư, hook above, dot below), no digit and no number word may differ
+    (similarity >= 80), as PaddleOCR drops stacked diacritics ('Nướng' read as 'Nưng')."""
+    number_words = number_words if number_words is not None else {units.fold(w) for w in number_words_()}
     marked, ours, theirs = _tokens(plain), _tokens(needle), _tokens(segment)
     if len(ours) != len(theirs) or len(marked) != len(ours):
         return False
     for word, a, b in zip(marked, ours, theirs):
         if a == b:
             continue
-        loose = _vi_marked(word) and not non_latin(word) and not any(c.isdigit() for c in word + b)
+        loose = lexicon.vietnamese_letter(word) and not any(c.isdigit() for c in word + b)
+        loose = loose and not _locked(a, number_words) and not _locked(b, number_words)
         if not loose or fuzz.ratio(a, b) < OCR_WORD_SCORE:
             return False
     return True
 
 
-def negations_agree(needle: str, haystack: str, start: int, end: int, number_words: frozenset[str]) -> bool:
-    """I1: the same negations in the needle as in the matched segment plus one word on each side."""
+def negations_agree(
+    needle: str, haystack: str, start: int, end: int, number_words: frozenset[str], decimals: bool = False
+) -> bool:
+    """I1 + R12f: the same (negation, next word) pairs in the needle as in the matched segment plus one
+    word on each side. `decimals`: a quantity, where 'không phẩy năm' is a number, not a negation."""
     before, after = haystack[:start].split()[-1:], haystack[end:].split()[:1]
     wider = " ".join(before + [haystack[start:end]] + after)
-    return _negations(needle, number_words) == _negations(wider, number_words)
+    pairs = lexicon.negation_pairs
+    return pairs(needle, number_words, decimals) == pairs(wider, number_words, decimals)
 
 
 def name_in_source(name: str, source: str, fold) -> bool:
