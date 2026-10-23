@@ -544,9 +544,12 @@ def test_claim_numbers_equal_shape_verifies():
         == "verified"
     )
     assert (
-        verify(claim(quote="cho 1/2 chén đường", text="1/2"), transcript("cho 1/2 chén đường")).status
+        verify(claim(quote="cho 1/2 chén đường", text="1/2 chén"), transcript("cho 1/2 chén đường")).status
         == "verified"
     )
+    # ruling R4c: the claim's number needs the unit its quote gives it ('1/2' alone, quote '1/2 chén')
+    bare = claim(quote="cho 1/2 chén đường", text="1/2")
+    assert verify(bare, transcript("cho 1/2 chén đường")).status == "unverified"
 
 
 @pytest.mark.parametrize(
@@ -752,7 +755,7 @@ def test_unread_number_words_become_opaque_tokens():
     assert number_tokens("cho hai ba chén", "vi") == ["~hai ba"]
     assert number_tokens("cho hai ba chén và 5 muỗng", "vi") == ["~hai ba", "5"]
     assert number_tokens("Cho  hai   mươi ba mươi", "vi") == ["~hai mươi ba mươi"]
-    assert number_tokens("Dùng .05 ml, 1,5 và ,5", None) == [".05", "1.5", ".5"]
+    assert number_tokens("Dùng .05 ml, 1,5 và ,5", None) == ["0.05", "1.5", "0.5"]  # ruling R3
 
 
 UNREAD_CLAIM_CASES = [
@@ -818,10 +821,12 @@ def test_vietnamese_words_that_fold_to_number_words_do_not_block_speech():
     assert verify(material(quote="cho 200 gram bột"), transcript(spoken)).status == "verified"
 
 
-def test_bare_leading_separator_numbers_are_kept_verbatim():
+def test_bare_leading_separator_numbers_read_with_a_zero():
     assert oclaim("Dùng 5 ml thuốc", "Dùng .05 ml thuốc").status == "unverified"
     assert oclaim("Dùng .05 ml thuốc", "Dùng .05 ml thuốc").status == "verified"
-    assert oclaim("Dùng 0.05 ml thuốc", "Dùng .05 ml thuốc").status == "unverified"
+    # ruling R3: '.05' is written '0.05' ('0,05' too), so the two spellings agree
+    assert oclaim("Dùng 0.05 ml thuốc", "Dùng .05 ml thuốc").status == "verified"
+    assert oclaim("Dùng 0.5 ml thuốc", "Dùng .05 ml thuốc").status == "unverified"
 
 
 def test_valid_compounds_verify_end_to_end():
@@ -862,8 +867,8 @@ def test_valid_compounds_verify_end_to_end():
         ("ba trăm linh hai nghìn", "vi", ["302000"]),
         ("một triệu hai trăm nghìn", "vi", ["1200000"]),
         ("hai mươi lăm nghìn", "vi", ["25000"]),
-        ("dùng.05", None, [".05"]),
-        ("muối,5 phút", None, [".5"]),
+        ("dùng.05", None, ["0.05"]),
+        ("muối,5 phút", None, ["0.5"]),
     ],
 )
 def test_bare_scales_are_unread_and_separators_after_letters_start_numbers(text, lang, expected):

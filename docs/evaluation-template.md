@@ -40,8 +40,8 @@ Tổng hợp: chưa có, vì chưa có lượt chạy nào.
 
 ## Trước khi chạy cần biết
 
-- Luật số lân cận 8 token và các luật còn lại của bộ khớp (`docs/decisions.md`, mục 26 đến 31) làm một số định lượng đúng bị `unverified`; cột "mục đúng bị `unverified`" có mặt để đo đúng cái giá đó, chưa có ngưỡng.
-- Chỗ hở đã biết (mục 31): khoảng, nửa hoặc lựa chọn viết bằng chữ nằm trong chính quote có thể làm một đầu mút mang `verified`. Cột "sai mang ✓" có thể không đạt vì lý do này; nếu vậy ghi nguyên số, không chỉnh ngưỡng.
+- Luật số lân cận 8 token và các luật còn lại của bộ khớp (`docs/decisions.md`, mục 26 đến 41) làm một số định lượng đúng bị `unverified`; cột "mục đúng bị `unverified`" có mặt để đo đúng cái giá đó, chưa có ngưỡng.
+- Chỗ hở đã biết (mục 38): chữ trên màn hình bằng ngôn ngữ Latin không phải vi/en có chữ số, khi không có transcript hoặc transcript là vi/en, vẫn khớp theo đường cũ, nên phân số hay khoảng viết bằng chữ của ngôn ngữ đó ("2 minutes et demie") có thể làm một đầu mút mang `verified`. Cột "sai mang ✓" có thể không đạt vì lý do này; nếu vậy ghi nguyên số, không chỉnh ngưỡng. Các luật 37–41 thêm cái giá về recall (thứ tự "fifth", "point"/"chấm" đứng trước số, câu nhận định khác ngôn ngữ với đơn vị ngoài bảng, chữ tiếng Việt trên màn hình phải trùng từng từ).
 - Probe schema v2 với Gemini bằng request text-only chưa chạy; lượt gửi video đầu tiên cũng là lần đầu xác nhận Google chấp nhận schema.
 - Phép chấm khớp tên và số, và ghép bước bằng `token_set_ratio`, có sai số riêng (`fixtures/eval/README.md`).
 

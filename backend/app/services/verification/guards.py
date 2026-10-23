@@ -8,10 +8,14 @@ from collections import Counter
 
 from rapidfuzz import fuzz
 
-from app.services.verification.numbers import NUMBER, number_tokens, spell_digits, vocabulary
+from app.services.verification import units
+from app.services.verification.numbers import NUMBER, number_tokens, number_words, spell_digits, vocabulary
 
-FRACTION_WORDS = {"rưỡi", "nửa", "half", "halves", "third", "thirds", "quarter", "quarters"}
+ORDINALS = "fourth fifth sixth seventh eighth ninth tenth".split()
+FRACTION_WORDS = {"rưỡi", "rưởi", "nửa", "half", "halves", "third", "thirds", "quarter", "quarters"}
+FRACTION_WORDS |= set(ORDINALS) | {w + "s" for w in ORDINALS}  # 'one fourth', 'three eighths'
 FRACTION_PAIRS = {("phần", "tư"), ("phần", "ba")}
+DECIMAL_WORDS = {"phẩy", "chấm"}
 FRACTION_SYMBOLS = "½¼¾⅓⅔⁄"  # NFKC turns '½' into '1⁄2', so the fraction slash counts too
 RANGE_WORDS = {"-", "–", "−", "~", "đến", "tới", "hoặc", "hay", "or", "to", "through", "till", "until"}
 RANGE_WORDS |= {"den", "toi", "hoac"}  # the same words as OCR reads them without diacritics
@@ -49,6 +53,8 @@ def fraction_or_range(text: str, language: str | None) -> bool:
     words = re.findall(r"[^\W\d_]+", norm)
     if FRACTION_WORDS & set(words) or FRACTION_PAIRS & set(zip(words, words[1:])):
         return True
+    if _phan_fraction(re.findall(r"\d+|[^\W\d_]+", norm)):
+        return True
     spelled = spell_digits(norm, language)[0]
     numbers = list(NUMBER.finditer(spelled))
     for left, right in zip(numbers, numbers[1:]):
@@ -60,6 +66,18 @@ def fraction_or_range(text: str, language: str | None) -> bool:
     return False
 
 
+def _phan_fraction(words: list[str]) -> bool:
+    """R1: 'phần' next to a number ('ba phần tư', '1 phần 3'); 'phần trăm' is percent, not a fraction."""
+    numbers = number_words() | {"không"}
+    for i, word in enumerate(words):
+        if word != "phần" or words[i + 1 : i + 2] == ["trăm"]:
+            continue
+        near = words[max(0, i - 1) : i] + words[i + 1 : i + 2]
+        if any(w[:1].isdigit() or w in numbers for w in near):
+            return True
+    return False
+
+
 def _number_spans(text: str, number_words: frozenset[str]) -> list[tuple[int, int]]:
     spans = [m.span() for m in NUMBER.finditer(text)]
     if number_words:
@@ -67,31 +85,24 @@ def _number_spans(text: str, number_words: frozenset[str]) -> list[tuple[int, in
     return sorted(spans)
 
 
-def _word_after(text: str, end: int) -> str:
-    rest = text[end:]
-    if rest[:1] and not rest[:1].isspace():  # a unit written on the number: '200g', '3분', '180°c'
-        word = rest.split()[0]
-    else:
-        parts = rest.split()
-        word = parts[0] if parts else ""
-    return word.strip(PUNCT)
-
-
-def _numbers_with_units(text: str, spans: list[tuple[int, int]]) -> list[tuple[str, str]]:
-    out = []
-    for a, b in spans:
-        shape = number_tokens(text[a:b], "und")
-        out.append((shape[0] if shape else text[a:b], _word_after(text, b)))
-    return out
+def _shape(text: str) -> str:
+    shape = number_tokens(text, "und")
+    return shape[0] if shape else text  # a number word on folded OCR text stays a word
 
 
 def units_agree(needle: str, haystack: str, start: int, end: int, number_words=frozenset()) -> bool:
-    """C2: the word right after each number of the needle is the word after the same number in the source.
+    """C2 + R4b: the symbol before and the unit after each number of the needle are those of the same
+    number in the source.
 
-    Numbers pair up in order; the source's word may lie just past the segment ('30' then 'hours')."""
+    Numbers pair up in order; the source's unit may lie just past the segment ('30' then 'hours')."""
     ours = _number_spans(needle, number_words)
     theirs = [s for s in _number_spans(haystack, number_words) if start <= s[0] and s[1] <= end]
-    return _numbers_with_units(needle, ours) == _numbers_with_units(haystack, theirs)
+    return units.numbers_line_up(needle, haystack, ours, theirs, _shape)
+
+
+def same_words(segment: str, needle: str) -> bool:
+    """R2: without number words to compare, the segment must hold exactly the needle's words."""
+    return _tokens(segment) == _tokens(needle)
 
 
 def spelled_agree(needle: str, segment: str, number_words: frozenset[str]) -> bool:
@@ -110,7 +121,7 @@ def _negations(text: str, number_words: frozenset[str]) -> Counter:
         if word == "khong":  # OCR without diacritics; 'khong' has no other reading
             word = "không"
         nxt = words[i + 1] if i + 1 < len(words) else ""
-        if word == "không" and (nxt in number_words or nxt[:1].isdigit()):
+        if word == "không" and (nxt in number_words or nxt[:1].isdigit() or nxt in DECIMAL_WORDS):
             continue  # 'không trăm', 'không phẩy năm': a digit, not a negation
         if word.endswith("n't") or word in NOT_FORMS:
             out.append("not")

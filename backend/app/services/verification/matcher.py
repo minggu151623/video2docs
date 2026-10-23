@@ -11,7 +11,10 @@ Safety rules, every doubt ends as `unverified`:
   one prompt token) or a stretch of speech with no word right before or after it;
 - final-review guards (guards.py): a quote with a range or a fraction never verifies, numbers in the
   value or claim text equal the quote's, each number keeps its unit word, negations agree, a material
-  or parameter name is in its own quote, and languages without number words need an exact segment."""
+  or parameter name is in its own quote, and languages without number words need an exact segment;
+- follow-up rulings R1-R5: ordinal fractions, spoken decimals ('không phẩy năm' is 0.5), '1:30' as one
+  token, the symbol before a number ($, €, x, ÷...), claim units against their quote (units.py), digits
+  in a language without number words never verify, OCR text without numbers must match word for word."""
 
 import re
 import unicodedata
@@ -24,16 +27,17 @@ from typing import Any
 from rapidfuzz import fuzz
 from app.schemas.tutorial_v2 import ExactInput, Material, Parameter, TutorialDraftV2
 from app.schemas.verification import ItemVerification, Transcript, Word
-from app.services.verification import guards
-from app.services.verification.numbers import number_tokens, number_words, spell_digits
+from app.services.verification import guards, units
+from app.services.verification.numbers import NUMBER, number_tokens, number_words, spell_digits
 
 NO_VALUE = "giá trị không có trong nguyên văn"
 NO_NAME = "tên mục không có trong nguyên văn"
 RANGE = "nguyên văn có khoảng giá trị hoặc phân số"
+NO_DIGITS = "ngôn ngữ chưa hỗ trợ kiểm chứng số"
 DIGITS_ONLY = "und"
-SIGNS, SEPARATORS = "-–−+", ".,/"
+SIGNS, SEPARATORS = "-–−+", ".,/:"
 MODIFIERS = {"rưỡi", "phẩy", "chấm", "nửa", "âm", "trừ", "half", "point", "minus", "negative", "½", "¼", "¾"}
-MODIFIERS |= {"halves", "third", "thirds", "quarter", "quarters"}
+MODIFIERS |= guards.FRACTION_WORDS | {"ruoi", "phay"}  # 'rưỡi', 'phẩy' as OCR reads them
 DASHES = {"-", "–", "−", "~"}
 NEIGHBOURHOOD = 8
 MIN_QUOTE_CHARS = 6
@@ -157,10 +161,10 @@ def _locate(
 ) -> tuple[int, int, bool] | None:
     """(start, end, numbers_ok) of the best alignment on canonical text, None when the words differ.
 
-    `exact`: the segment must equal the needle (languages without number words). `plain`: the same two
-    texts with diacritics, index for index, for the negation check on OCR text."""
+    `exact`: the segment holds exactly the needle's words (no number words to compare, rulings C3c, R2).
+    `plain`: the same two texts with diacritics, index for index, for the negation check on OCR text."""
     found = _align(needle, haystack, threshold)
-    if not found or exact and haystack[found[0] : found[1]] != needle:
+    if not found or exact and not guards.same_words(haystack[found[0] : found[1]], needle):
         return None
     start, end = found
     segment = haystack[start:end]
@@ -179,6 +183,8 @@ def _bounded(value: str, text: str) -> bool:
     """`value` occurs in `text` as a whole token ('g' in '200g' counts, '두' in '모두' does not)."""
     if not value:
         return True
+    if NUMBER.fullmatch(value.strip()):  # a bare number: the same whole number token ('0,5' is '0.5')
+        return number_tokens(value, DIGITS_ONLY)[0] in number_tokens(text, DIGITS_ONLY)
     at = text.find(value)
     while at >= 0:
         prev, nxt = text[at - 1 : at] if at else "", text[at + len(value) : at + len(value) + 2]
@@ -241,8 +247,11 @@ def _canonical(text: str, spoken: bool, language: str | None) -> str:
 def _match_screen(
     expected: str, ocr_text: str, threshold: int, required: tuple[str, ...] = (), exact: bool = False
 ) -> tuple[str, bool] | None:
-    """PaddleOCR drops stacked Vietnamese diacritics, so both sides lose them; numbers stay exact."""
+    """PaddleOCR drops stacked Vietnamese diacritics, so both sides lose them; numbers stay exact.
+
+    Ruling R2b: text with no digit and no vi/en number word must be the segment word for word."""
     needle, haystack = _fold(expected), _fold(ocr_text)
+    exact = exact or not any(_has_number(w, folded=True) for w in needle.split())
     plain = normalize(expected), normalize(ocr_text)
     found = _locate(needle, haystack, threshold, DIGITS_ONLY, folded=True, exact=exact, plain=plain)
     if not found:
@@ -309,11 +318,20 @@ def _required(item) -> tuple[str, ...]:
     return tuple(v for v in values if v and v.strip())
 
 
-def _same_language(a: str | None, b: str | None) -> bool:
-    def code(x):
-        return (x or "").lower().split("-")[0].split("_")[0]
+def _code(language: str | None) -> str:
+    return (language or "").lower().split("-")[0].split("_")[0]
 
-    return bool(code(a)) and code(a) == code(b)
+
+def _same_language(a: str | None, b: str | None) -> bool:
+    return bool(_code(a)) and _code(a) == _code(b)
+
+
+def _unit_mode(spoken: bool, language: str | None, text_language: str | None) -> str:
+    """R4c: how the claim's units meet its quote's: as written (one language), through the unit table
+    (two languages), or either way when a language is unknown (OCR text, no draft language)."""
+    if not spoken or not _code(language) or not _code(text_language):
+        return "any"
+    return "same" if _same_language(text_language, language) else "cross"
 
 
 def _inconsistent(item, source: str, spoken: bool, language: str | None, text_language: str | None):
@@ -327,15 +345,19 @@ def _inconsistent(item, source: str, spoken: bool, language: str | None, text_la
     source_language = language if spoken else None
     found = Counter(number_tokens(source, source_language))
     if isinstance(item, (Material, Parameter)):
-        claimed = Counter(number_tokens(_value(item) or "", text_language))
+        claimed = Counter(number_tokens(_value(item) or "", None))  # ruling R5: vi and en number words
         if claimed != found:
             return NO_VALUE
         check_name = not spoken or _same_language(text_language, language)
         if check_name and not guards.name_in_source(item.name, source, normalize if spoken else _fold):
             return NO_NAME
     else:
-        claimed = Counter(number_tokens(item.text, text_language))
+        claimed = Counter(number_tokens(item.text, None))
         if claimed and claimed != found:
+            return NO_VALUE
+        if claimed and not units.claim_units_agree(
+            item.text, source, source_language, _unit_mode(spoken, language, text_language)
+        ):
             return NO_VALUE
     numeric = number_tokens(_value(item) or "", None)
     if not guards.has_vocabulary(source_language) and numeric and not any(t[:1].isdigit() for t in found):
@@ -379,6 +401,9 @@ def verify_item(
     if not (source or "").strip():
         return _result("not_checkable", "none", "chỉ có hành động, không có lời nói hay chữ để đối chiếu")
     language = transcript.language if spoken and transcript else None
+    fields = (_value(item), getattr(item, "text", None), item.quote, item.on_screen_text)
+    if transcript is not None and not guards.has_vocabulary(transcript.language) and units.has_digit(*fields):
+        return _result("unverified", "none", NO_DIGITS)  # ruling R2a: digits we cannot tie to speech
     reason = _inconsistent(item, source, spoken, language, text_language)
     if reason:
         return _result("unverified", "none", reason)

@@ -4,7 +4,8 @@ import re
 import unicodedata
 
 TOKEN = re.compile(r"\d+|[^\W\d_]+")
-NUMBER = re.compile(r"(?:(?<!\w)[-–−])?(?:(?<![\d.,/])[.,]\d+|\d+)(?:[.,/\-–−]\d+)*")
+NUMBER = re.compile(r"(?:(?<!\w)[-–−])?(?:(?<![\d.,/:])[.,]\d+|\d+)(?:[.,/:\-–−]\d+)*")
+SEPARATORS = (".", ",", "/", ":")
 
 
 def _table(spec):
@@ -26,6 +27,7 @@ EN = {w: ("u", i) for i, w in enumerate(_UNITS)} | {w: ("t", 10 + i) for i, w in
 EN |= {w: ("t", 20 + 10 * i) for i, w in enumerate(_TENS)}
 EN |= {"hundred": ("h", 100), "thousand": ("k", 1000), "million": ("m", 10**6), "and": ("l", 0)}
 SCALES = {"x": 10, "h": 100, "k": 1000, "m": 10**6}
+DECIMAL_MARKS = {"phẩy": ("một",), "chấm": ("một",), "point": ("one",)}  # active with that table
 
 
 def number_words() -> set[str]:
@@ -101,43 +103,136 @@ def _joined(text: str, left, right) -> bool:
     return not text[left.end() : right.start()].strip(" -")
 
 
-def _runs(text: str, vocab: dict) -> list[tuple[int, int, list[int] | None]]:
-    """(begin, end, values) per run of number words; values is None when the run is not read."""
-    runs, group = [], []
+def _marks(vocab: dict) -> set[str]:
+    """Words that make a decimal point in speech ('không phẩy năm', 'point five'), per language."""
+    return {m for m, lang in DECIMAL_MARKS.items() if any(w in vocab for w in lang)}
+
+
+def _tokens(text: str, vocab: dict) -> list:
     tokens = [(m, vocab.get(m.group())) for m in TOKEN.finditer(text)]
-    for i, (m, entry) in enumerate(tokens):  # 'không' is 0 only before a number word ('không trăm')
+    marks = _marks(vocab)
+    for i, (m, entry) in enumerate(tokens):  # 'không' is 0 only before a number word or a decimal point
         nxt = tokens[i + 1] if i + 1 < len(tokens) else (None, None)
-        if m.group() == "không" and not (nxt[1] and nxt[1][0] != "l" and _joined(text, m, nxt[0])):
+        joined = nxt[0] is not None and _joined(text, m, nxt[0])
+        number_next = nxt[1] and nxt[1][0] != "l" or nxt[0] is not None and nxt[0].group() in marks
+        if m.group() == "không" and not (joined and number_next):
             tokens[i] = (m, None)
-    for m, entry in tokens + [(None, None)]:
-        if entry and (not group or _joined(text, group[-1][0], m)):
-            group.append((m, entry))
+        prev = tokens[i - 1][0] if i else None
+        if m.group() == "trăm" and prev is not None and prev.group() == "phần" and _joined(text, prev, m):
+            tokens[i] = (m, None)  # 'mười phần trăm' is 10 percent, not a hundred
+    return tokens
+
+
+def _runs(text: str, tokens: list) -> list[tuple[int, int, int, int, list[int] | None, list]]:
+    """(begin, end, first token, last token, values, entries) per run of number words; values is None
+    when the run is not read."""
+    runs, group = [], []
+    for k, (m, entry) in enumerate(tokens + [(None, None)]):
+        if entry and (not group or _joined(text, group[-1][1], m)):
+            group.append((k, m, entry))
             continue
-        while group and group[-1][1][0] == "l":
+        while group and group[-1][2][0] == "l":
             group.pop()
-        while group and group[0][1][0] == "l":
+        while group and group[0][2][0] == "l":
             group.pop(0)
         if group:
-            begin = group[0][0].start()
-            article = group[0][1][0] in "hkm" and re.search(r"(?<!\w)an?\s+$", text[:begin]) is not None
-            runs.append((begin, group[-1][0].end(), _evaluate([e for _, e in group], article)))
-        group = [(m, entry)] if entry else []
+            begin, entries = group[0][1].start(), [e for _, _, e in group]
+            article = entries[0][0] in "hkm" and re.search(r"(?<!\w)an?\s+$", text[:begin]) is not None
+            run = (begin, group[-1][1].end(), group[0][0], group[-1][0], _evaluate(entries, article), entries)
+            runs.append(run)
+        group = [(k, m, entry)] if entry else []
     return runs
 
 
-def spell_digits(text: str, language: str | None) -> tuple[str, list[int], list[int]]:
-    """Rewrite number words as digits in already-normalized text.
+def _operand(text: str, tokens: list, runs: dict, k: int, side: int):
+    """The number on one side of a decimal point: (begin, end, run or digit match) or None."""
+    if not 0 <= k < len(tokens):
+        return None
+    m = tokens[k][0]
+    run = runs.get((k, side))
+    if run:
+        return run[0], run[1], run
+    if m.group()[0].isdigit():
+        return m.start(), m.end(), m
+    return None
 
-    Returns the new text plus, per new character, the start and end of the source span it came from."""
-    pieces = [(b, e, v) for b, e, v in _runs(text, vocabulary(language)) if v is not None]
-    out, starts, ends, pos = [], [], [], 0
-    for begin, end, values in pieces:
-        new = " ".join(map(str, values))
+
+def _fraction_digits(operand) -> str | None:
+    """Digits after a spoken decimal point: 'năm' 5, 'hai lăm' 25, 'one four' 14, 'không năm' 05."""
+    if isinstance(operand, re.Match):
+        return _ascii(operand.group())
+    *_, values, entries = operand
+    if all(kind.lower() in "un" and value < 10 for kind, value in entries):
+        return "".join(str(value) for _, value in entries)
+    return str(values[0]) if values and len(values) == 1 else None
+
+
+def _decimals(text: str, tokens: list, runs: list, marks: set[str]) -> list[tuple[int, int, str | None]]:
+    """(begin, end, 'X.Y') per spoken decimal; None for a decimal phrase that cannot be read."""
+    out = []
+    ends, starts = {(r[3], -1): r for r in runs}, {(r[2], 1): r for r in runs}
+    for k, (m, _) in enumerate(tokens):
+        if m.group() not in marks:
+            continue
+        right = _operand(text, tokens, starts, k + 1, 1)
+        if right is None or not _joined(text, m, tokens[k + 1][0]):
+            continue
+        left = _operand(text, tokens, ends, k - 1, -1)
+        if left is not None and not _joined(text, tokens[k - 1][0], m):
+            left = None
+        begin = left[0] if left else m.start()
+        whole = "0"
+        if left and isinstance(left[2], re.Match):
+            whole = None if text[left[0] - 1 : left[0]] in SEPARATORS else _digits(left[2].group())
+        elif left:
+            values = left[2][4]
+            whole = str(values[0]) if values and len(values) == 1 else None
+        digits = _fraction_digits(right[2])
+        if isinstance(right[2], re.Match) and text[right[1] : right[1] + 1] in SEPARATORS:
+            digits = None  # 'phẩy 5,3'
+        readable = whole is not None and digits is not None and 1 <= len(digits) <= 2
+        out.append((begin, right[1], f"{whole}.{digits}" if readable else None))
+    return out
+
+
+def _pieces(text: str, vocab: dict) -> list[tuple[int, int, str | None]]:
+    """Spans to rewrite, in order: (begin, end, digits) or (begin, end, None) for an unread phrase."""
+    tokens = _tokens(text, vocab)
+    runs = _runs(text, tokens)
+    decimals = _decimals(text, tokens, runs, _marks(vocab))
+    covered = [(b, e) for b, e, _ in decimals]
+    pieces = list(decimals)
+    for begin, end, _, _, values, _ in runs:
+        if not any(b <= begin and end <= e for b, e in covered):
+            pieces.append((begin, end, None if values is None else " ".join(map(str, values))))
+    return sorted(pieces)
+
+
+def _spell(text: str, language: str | None):
+    """Number words rewritten as digits, the source span per new character, and unread phrases as
+    (begin, end, words) in the new text."""
+    out, starts, ends, unread, pos, size = [], [], [], [], 0, 0
+    for begin, end, new in _pieces(text, vocabulary(language)):
         out.append(text[pos:begin]), starts.extend(range(pos, begin)), ends.extend(range(pos + 1, begin + 1))
-        out.append(new), starts.extend([begin] * len(new)), ends.extend([end] * len(new))
+        size += begin - pos
+        if new is None:
+            new = text[begin:end]
+            unread.append((size, size + len(new), new))
+            starts.extend(range(begin, end)), ends.extend(range(begin + 1, end + 1))
+        else:
+            starts.extend([begin] * len(new)), ends.extend([end] * len(new))
+        out.append(new)
+        size += len(new)
         pos = end
     out.append(text[pos:]), starts.extend(range(pos, len(text))), ends.extend(range(pos + 1, len(text) + 1))
-    return "".join(out), starts, ends
+    return "".join(out), starts, ends, unread
+
+
+def spell_digits(text: str, language: str | None) -> tuple[str, list[int], list[int]]:
+    """Rewrite number words as digits in already-normalized text ('không phẩy năm' becomes '0.5').
+
+    Returns the new text plus, per new character, the start and end of the source span it came from."""
+    return _spell(text, language)[:3]
 
 
 def _ascii(run: str) -> str:
@@ -154,22 +249,31 @@ def digit_runs(text: str, language: str | None) -> list[str]:
     return [_digits(run) for run in re.findall(r"\d+", spell_digits(folded, language)[0])]
 
 
-def number_tokens(text: str, language: str | None) -> list[str]:
-    """Whole numbers with their shape: '1,5' -> '1.5', '1/2', '2-3' (range), '-18' and '.05' stay distinct.
+def number_shape(token: str) -> str:
+    """One written number in canonical form: '007' -> '7', '.5' and ',5' -> '0.5', '1,5' -> '1.5'.
 
-    A run of number words that is not read ('hai ba') becomes one opaque token '~hai ba', so two texts
-    only agree when they hold the same unread words."""
+    A comma or point before one or two digits is a decimal point; before three or more digits it is kept
+    as written, so '1,500' (thousands in English) and '1.500' (thousands in Vietnamese) stay distinct."""
+    token = token.replace("–", "-").replace("−", "-")
+    body = token.lstrip("-")
+    parts = re.split(r"([.,/:-])", body)
+    # only the leading zeros of the whole part go: '007' is 7 but '0,05' and '1.05' keep theirs
+    out = ["0" if parts[0] == "" else _digits(parts[0])]
+    for sep, group in zip(parts[1::2], parts[2::2]):
+        digits = _ascii(group)
+        out += ["." if sep in ".," and len(digits) <= 2 else sep, digits]
+    return token[: len(token) - len(body)] + "".join(out)
+
+
+def number_tokens(text: str, language: str | None) -> list[str]:
+    """Whole numbers with their shape: '1,5' -> '1.5', '1/2', '2-3' (range), '1:30', '-18' stay distinct.
+
+    A run of number words that is not read ('hai ba', 'hai ba phẩy năm') becomes one opaque token
+    '~hai ba', so two texts only agree when they hold the same unread words."""
     folded = unicodedata.normalize("NFKC", text).casefold()
-    out = [
-        "~" + " ".join(folded[b:e].split()) for b, e, v in _runs(folded, vocabulary(language)) if v is None
-    ]
-    for m in NUMBER.finditer(spell_digits(folded, language)[0]):
-        token = m.group().replace("–", "-").replace("−", "-")
-        body = token.lstrip("-")
-        parts = re.split(r"([.,/-])", body)
-        sign = token[: len(token) - len(body)]
-        # only the leading zeros of the whole part go: '007' is 7 but '0,05', '1.05' and '.05' keep theirs
-        first = "" if parts[0] == "" else _digits(parts[0])
-        rest = "".join(_ascii(p) if p[:1].isdigit() else p.replace(",", ".") for p in parts[1:])
-        out.append(sign + first + rest)
+    spelled, _, _, unread = _spell(folded, language)
+    out = ["~" + " ".join(words.split()) for _, _, words in unread]
+    for m in NUMBER.finditer(spelled):
+        if not any(b <= m.start() < e for b, e, _ in unread):
+            out.append(number_shape(m.group()))
     return out
