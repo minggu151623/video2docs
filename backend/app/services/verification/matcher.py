@@ -443,41 +443,55 @@ def _states_number(item) -> bool:
 
 
 SENTENCE_END = ".,;:!?…"  # ruling P2b: trimmed from the end of a word only
-QUOTES = "\"'“”‘’«»()[]{}"  # ruling P2b: trimmed from both ends of a word
+PAIRS = {"(": ")", "[": "]", "{": "}", "“": "”", "‘": "’", "«": "»", '"': '"', "'": "'"}
+CLOSERS = {close: open_ for open_, close in PAIRS.items()}
 
 
 def _symbol_only(token: str) -> bool:
     return not any(_word_char(c) for c in token)
 
 
-def _word_sequence(text: str) -> list[str]:
-    """Ruling P2b: normalized words with only sentence-level marks trimmed (quotes and brackets at either
-    end, . , ; : ! ? … at the end); tokens of those marks alone are dropped. A leading '-', '.', '/', '%',
-    '#', '&' and punctuation inside a word stay ('-rf', '.env', '/etc', 'C#', '1,5'), and so do
-    diacritics. A token of other symbols only ('-', '*', '&', '$') is joined to the next word (to the
-    previous one at the end), so 'Giá $ 5' reads 'Giá $5' while 'a part' stays two words."""
-    words = []
-    for word in normalize(text).split():
-        while word and (word[0] in QUOTES or word[-1] in QUOTES + SENTENCE_END):
-            word = word[1:] if word[0] in QUOTES else word[:-1]
-        if word:
-            words.append(word)
-    joined, pending = [], ""
-    for word in words:
-        if _symbol_only(word):
-            pending += word
+def _trim(word: str) -> str:
+    """Rulings P2b + P2c: drop sentence-end marks at the end of a word and quotes/brackets at its edges
+    that have no partner inside the word: 'Install.' -> 'install', '(200' -> '200', 'nút”' -> 'nút',
+    while 'main()', 'arr[]', 'f(x)' and '"salt"' keep theirs. A quote right after a digit is a unit
+    (5" is five inches) and stays."""
+    while word:
+        last, first = word[-1], word[0]
+        if last in SENTENCE_END:
+            word = word[:-1]
+        elif last in CLOSERS and CLOSERS[last] not in word[:-1] and not word[:-1][-1:].isdigit():
+            word = word[:-1]
+        elif first in PAIRS and PAIRS[first] not in word[1:]:
+            word = word[1:]
         else:
+            break
+    return word
+
+
+def _word_sequence(text: str) -> list[str]:
+    """Rulings P2b + P2c: normalized words compared as a list. Words keep a leading '-', '.', '/', '%',
+    '#', '&', punctuation inside them ('-rf', '.env', '/etc', 'C#', '1,5', 'main()') and diacritics;
+    only unpaired quotes/brackets at their edges and sentence-end marks at their end are trimmed
+    (`_trim`). A token without word characters ('.', '..', '-', '&', '$', '{}', '""') always stays: it
+    is joined to the next word, or kept alone at the end, so 'Giá $ 5' reads 'Giá $5', 'git add .'
+    is not 'git add' and 'a part' stays two words."""
+    joined, pending = [], ""
+    for token in normalize(text).split():
+        if _symbol_only(token):
+            pending += token
+            continue
+        word = _trim(token)
+        if word:
             joined.append(pending + word)
             pending = ""
-    if pending and joined:
-        joined[-1] += pending
-    elif pending:
+    if pending:
         joined.append(pending)
     return joined
 
 
 def _own_words(item, source: str, source_language: str | None, text_language: str | None) -> bool:
-    """Rulings P2, P2a, P2b: a matched quote proves a claim only when the claim says it in the quote's
+    """Rulings P2, P2a-P2c: a matched quote proves a claim only when the claim says it in the quote's
     own words: the same language and the same words in the same order (only case, whitespace and
     sentence-level marks at word ends may differ; see `_word_sequence`). Anything else is a paraphrase
     (`quote_matched`): a subset, a superset, one changed word or mark.

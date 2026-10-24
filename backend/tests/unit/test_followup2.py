@@ -14,7 +14,7 @@ from app.schemas.tutorial_v2 import ExactInput, GroundedClaim, TutorialDraftV2
 from app.schemas.verification import ItemVerification, Transcript, VerificationReport, Word
 from app.services.rendering import render_markdown
 from app.services.verification import guards, pipeline
-from app.services.verification.matcher import verify_item
+from app.services.verification.matcher import _word_sequence, verify_item
 from app.services.verification.ocr import OCR
 from test_matcher import SCREEN_ONLY, SETTINGS, span
 from test_matcher_final_review import cl, mat, par, say, show
@@ -402,3 +402,65 @@ def test_p2b_sentence_marks_and_spaces_around_symbols_may_differ():
     assert verify_item("p", item, EN_SPEECH, [(11.0, "open .env")], SETTINGS, text_language="en").status == (
         "verified"
     )
+
+
+# ---- P2c: standalone punctuation tokens and paired brackets stay ----------------------------------
+
+STANDALONE_MARKS = [
+    ("Run git add .", "run git add"),
+    ("Run git add", "run git add ."),
+    ("Run cd ..", "run cd"),
+    ("Run cd", "run cd .."),
+    ("Run cd ..", "run cd ."),
+    ("Run cp a .", "run cp a"),
+    ("Run cp a", "run cp a ."),
+    ('Run git commit -m ""', "run git commit -m"),
+    ("Run git commit -m", 'run git commit -m ""'),
+    ("Run echo ''", "run echo"),
+    ("Run echo", "run echo ''"),
+    ("Run find -exec rm {} ;", "run find -exec rm"),
+    ("Run xargs -I {} rm {}", "run xargs -I rm"),
+    ("Run echo ()", "run echo"),
+    ("Run echo", "run echo ()"),
+    ("Run echo []", "run echo"),
+    ("Run echo", "run echo []"),
+    ("Use an empty list []", "use an empty list"),
+    ("Call main()", "call main"),
+    ("Call main", "call main()"),
+    ("Use arr[]", "use arr"),
+    *[
+        ("Press the key", f"press the {mark} key")
+        for mark in [".", ",", ";", "?", "!", "(", '"', "[", "]", ":"]
+    ],
+]
+
+
+@pytest.mark.parametrize("text,quote", STANDALONE_MARKS)
+def test_p2c_standalone_punctuation_tokens_are_significant(text, quote):
+    out = say(cl(text, quote), f"okay so {quote} right now", "en", "en")
+    assert out.status == "quote_matched", out.reason
+    speech = Transcript(language="en", words=[Word(start=0.0, end=0.3, text="ok")])
+    item = observed(text, quote, 10, 12)
+    out = verify_item("p", item, speech, [(11.0, "Menu\n" + quote)], SETTINGS, text_language="en")
+    assert out.status == "quote_matched", out.reason
+
+
+def test_p2c_word_sequence_keeps_paired_brackets_and_unit_quotes():
+    assert _word_sequence("Call main(), then f(x).") == ["call", "main()", "then", "f(x)"]
+    assert _word_sequence("Use arr[] (here)") == ["use", "arr[]", "(here)"]
+    assert _word_sequence("Bột (200 g)") == ["bột", "200", "g"]  # unpaired edge brackets are trimmed
+    assert _word_sequence('Cut a 5" board') == ["cut", "a", '5"', "board"]
+    assert _word_sequence("run git add .") == ["run", "git", "add", "."]
+
+
+def test_p2c_positives_still_verify():
+    assert say(
+        cl("Nhấn nút Install.", "nhấn nút install"), "giờ nhấn nút install nhé", "vi", "vi"
+    ).status == ("verified")
+    assert show(cl("Giá $5", ost="Giá $ 5"), "Giá $ 5", text_language="vi").status == "verified"
+    assert say(cl("Is it safe?", "is it safe"), "so is it safe now", "en", "en").status == "verified"
+    assert (
+        say(cl("Run git add .", "run git add ."), "okay so run git add . now", "en", "en").status
+        == "verified"
+    )
+    assert say(cl("Call main()", "call main()"), "okay so call main() now", "en", "en").status == "verified"
