@@ -294,3 +294,61 @@ def test_p2_step_tip_review_line_names_the_step():
     draft = TutorialDraftV2.model_validate(payload, context={"duration": 10})
     text = render_with(draft, {"steps/0/tips/0": quote_matched()})
     assert "Mẹo (bước 1), câu diễn giải chưa kiểm chứng: Bấm Install" in text.split("## Điểm chưa rõ", 1)[1]
+
+
+# ---- P2a: a claim verifies only word for word -----------------------------------------------------
+
+SUBSETS = [
+    ("vi", "Không chạm vào chảo", "không chạm vào chảo cho đến khi nguội"),
+    ("en", "Add salt", "add salt only if needed"),
+    ("vi", "Rút điện", "rút điện sau khi tắt máy"),
+    ("en", "Bake until golden", "bake until golden then rest 10 minutes"),
+    ("vi", "Cài đặt Python", "cài đặt Python thất bại"),
+    ("en", "Python is installed", "python is installed incorrectly"),
+    ("vi", "Uống thuốc", "uống thuốc là sai"),
+    ("en", "Use bleach", "use bleach and you will ruin it"),
+    ("en", "Press the red button", "press the red button and the machine explodes"),
+]
+SUPERSETS = [
+    ("en", "Add salt and pepper", "add salt"),
+    ("en", "Install Python and reboot the computer", "install python"),
+    ("vi", "Rút điện và tháo pin ra", "rút điện"),
+    ("en", "Click Install and then delete the old folder", "click install"),
+]
+OPPOSITES = [
+    ("vi", "Bật nguồn điện", "tắt nguồn điện"),
+    ("en", "Enable the firewall", "disable the firewall"),
+    ("en", "Uncheck the box", "check the box"),
+    ("en", "Turn left at the valve", "turn right at the valve"),
+    ("en", "Select the first option", "select the last option"),
+    ("en", "Press the red button", "press the green button"),
+    ("en", "Save the file", "save the files"),
+]
+
+
+@pytest.mark.parametrize("lang,text,quote", SUBSETS + SUPERSETS + OPPOSITES)
+def test_p2a_claims_that_are_not_their_quote_word_for_word_are_quote_matched(lang, text, quote):
+    """Review probes: every guard passes (the numbers agree), but the claim says something else."""
+    out = say(cl(text, quote), f"okay so {quote} right now", lang, lang)
+    assert out.status == "quote_matched", out.reason
+
+
+@pytest.mark.parametrize("lang,text,quote", SUPERSETS + OPPOSITES)
+def test_p2a_on_screen_claims_that_are_not_their_text_word_for_word_are_quote_matched(lang, text, quote):
+    speech = Transcript(language=lang, words=[Word(start=0.0, end=0.3, text="ok")])
+    item = observed(text, quote, 10, 12)
+    out = verify_item("p", item, speech, [(11.0, "Menu\n" + quote)], SETTINGS, text_language=lang)
+    assert out.status == "quote_matched", out.reason
+
+
+def test_p2a_only_case_whitespace_and_punctuation_may_differ():
+    assert say(
+        cl("Nhấn nút Install.", "nhấn nút install"), "giờ nhấn nút install nhé", "vi", "vi"
+    ).status == ("verified")
+    item = cl("“Nhấn  nút” Install!", "nhấn nút, install")
+    assert say(item, "giờ nhấn nút, install nhé", "vi", "vi").status == "verified"
+    assert show(cl("Giá $5", ost="Giá $ 5"), "Giá $ 5", text_language="vi").status == "verified"
+    # diacritics stay significant
+    assert say(cl("Nhan nut Install", "nhấn nút install"), "giờ nhấn nút install nhé", "vi", "vi").status == (
+        "quote_matched"
+    )

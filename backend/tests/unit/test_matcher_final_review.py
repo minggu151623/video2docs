@@ -103,6 +103,9 @@ def test_c1_equal_numbers_still_verify():
     assert say(par("3", "phút", "nấu 3 phút nhé"), "bây giờ nấu 3 phút nhé").status == "verified"
     item = cl("Nấu 3 phút", "nấu 3 phút nhé")
     assert say(item, "bây giờ nấu 3 phút nhé").status == "quote_matched"  # P2: no draft language given
+    # ruling P2a: the claim leaves out 'nhé', so it is not word for word its quote
+    assert say(item, "bây giờ nấu 3 phút nhé", text_language="vi").status == "quote_matched"
+    item = cl("Nấu 3 phút nhé", "nấu 3 phút nhé")
     assert say(item, "bây giờ nấu 3 phút nhé", text_language="vi").status == "verified"
     assert say(par("2-3", "phút", "nấu khoảng 2-3 phút"), "nấu khoảng 2-3 phút nhé").status == "verified"
 
@@ -200,6 +203,9 @@ def test_c3c_exact_segment_still_verifies():
     )
     item = cl("Cuire", "faites cuire pendant trois minutes")
     assert say(item, "alors faites cuire pendant trois minutes", "fr").status == "quote_matched"
+    # ruling P2a: same language, but 'Cuire' is not its quote word for word
+    assert say(item, "alors faites cuire pendant trois minutes", "fr", "fr").status == "quote_matched"
+    item = cl("Faites cuire pendant trois minutes", "faites cuire pendant trois minutes")
     assert say(item, "alors faites cuire pendant trois minutes", "fr", "fr").status == "verified"
 
 
@@ -285,11 +291,12 @@ def test_i1_negation_flips_never_verify(case):
 
 def test_i1_khong_is_negation_unless_a_number_word_follows():
     item = cl("Không chạm vào chảo nóng", "đừng chạm vào chảo đang nóng")
-    assert say(item, "các bạn đừng chạm vào chảo đang nóng nhé", text_language="vi").status == "verified"
+    # ruling P2a: every guard passes ('không' = 'đừng'), but the claim rewords its quote
+    assert say(item, "các bạn đừng chạm vào chảo đang nóng nhé", text_language="vi").status == "quote_matched"
     assert number_tokens("không chạm vào chảo", "vi") == []
     assert number_tokens("một nghìn không trăm hai mươi", "vi") == ["1020"]
     item = cl("You do not need to unplug", "you don't need to unplug it before opening")
-    # ruling P2: no draft language given, and the claim rewords its quote (token_set_ratio 84 < 85)
+    # ruling P2: no draft language given, and the claim rewords its quote
     assert say(item, "you don't need to unplug it before opening", "en").status == "quote_matched"
 
 

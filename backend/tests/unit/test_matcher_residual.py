@@ -462,7 +462,8 @@ def test_round2_positives():
     assert number_tokens("không phẩy năm", "vi") == ["0.5"]
     assert number_tokens("freezer-18°c", None) == ["~-18"]
     item = cl("Không chạm vào chảo nóng", "đừng chạm vào chảo đang nóng")
-    assert say(item, "các bạn đừng chạm vào chảo đang nóng nhé", "vi", "vi").status == "verified"
+    # ruling P2a: every guard passes, but the claim rewords its quote, so only the quote matched
+    assert say(item, "các bạn đừng chạm vào chảo đang nóng nhé", "vi", "vi").status == "quote_matched"
     assert ocr_none(par("18", "°C", ost="Freezer 18°C", name="Freezer"), "Freezer 18°C").status == "verified"
 
 
@@ -557,7 +558,8 @@ def test_round3_positives():
     item = mat("0,5", "lít", "dùng không phẩy năm lít nước", name="nước")
     assert say(item, "các bạn dùng không phẩy năm lít nước nhé", "vi", "vi").status == "verified"
     item = cl("Không chạm vào chảo nóng", "đừng chạm vào chảo đang nóng")
-    assert say(item, "các bạn đừng chạm vào chảo đang nóng nhé", "vi", "vi").status == "verified"
+    # ruling P2a: every guard passes, but the claim rewords its quote, so only the quote matched
+    assert say(item, "các bạn đừng chạm vào chảo đang nóng nhé", "vi", "vi").status == "quote_matched"
     assert ocr_none(cl("Bake 5 min", ost="Bake 5 min"), "Bake 5 min").status == "verified"
     assert ocr_none(cl("Bột 200 g", ost="Bột (200 g)"), "Bột (200 g)").status == "verified"
     item = mat("2", "cups", "add 2 cups of milk until smooth", name="milk")
@@ -835,10 +837,14 @@ def test_r15_superscripts_stay_apart_from_digits():
 
 def test_r15_positives():
     item = cl("Không chạm vào chảo nóng", "đừng chạm vào chảo đang nóng")
-    assert say(item, "các bạn đừng chạm vào chảo đang nóng nhé", "vi", "vi").status == "verified"
+    # ruling P2a: every guard passes, but the claim rewords its quote, so only the quote matched
+    assert say(item, "các bạn đừng chạm vào chảo đang nóng nhé", "vi", "vi").status == "quote_matched"
     item = cl("Không chạm vào chảo", "không chạm vào chảo")
     assert say(item, "nhớ là không chạm vào chảo nhé", "vi", "vi").status == "verified"
-    assert ocr_vi(cl("Không chấm", ost="Không chấm nước mắm"), "Khong chấm nước mắm").status == "verified"
+    item = cl("Không chấm", ost="Không chấm nước mắm")  # P2a: a shorter claim is only quote_matched
+    assert ocr_vi(item, "Khong chấm nước mắm").status == "quote_matched"
+    item = cl("Không chấm nước mắm", ost="Không chấm nước mắm")
+    assert ocr_vi(item, "Khong chấm nước mắm").status == "verified"
     assert ocr_vi(cl("Dùng 2 thìa", ost="Dùng 2 thìa"), "Dùng 2 thìa").status == "verified"
     assert ocr_vi(cl("Đúng 5 phút", ost="Đúng 5 phút"), "Đúng 5 phút").status == "verified"
     assert ocr_vi(cl("Diện tích 10² m", ost="Diện tích 10² m"), "Diện tích 10² m").status == "verified"
@@ -898,8 +904,10 @@ def test_round4_sibling_positives():
 
 
 def test_round4_recall_cost_folded_dung_is_not_a_negation():
-    # R15: 'Dung' without marks is usually 'dùng' (use), so it does not negate
-    assert ocr_vi(cl("Chấm nước mắm", ost="Dung chấm nước mắm"), "Dung chấm nước mắm").status == "verified"
+    # R15: 'Dung' without marks is usually 'dùng' (use), so it does not negate: no guard fails; the claim
+    # leaves 'Dung' out, so by ruling P2a only the quote matched
+    item = cl("Chấm nước mắm", ost="Dung chấm nước mắm")
+    assert ocr_vi(item, "Dung chấm nước mắm").status == "quote_matched"
 
 
 def test_round4_recall_cost_superscript_units_are_not_plain_digits():
@@ -959,7 +967,8 @@ def test_r16_positives_words_the_model_wrote_as_shown():
     assert ocr_vi(cl("Dừng khuấy 5 phút", ost="Dừng khuấy 5 phút"), "Dừng khuấy 5 phút").status == "verified"
     assert ocr_vi(cl("Thông gió 5 phút", ost="Thông gió 5 phút"), "Thông gió 5 phút").status == "verified"
     item = cl("Đổ vào hộp đựng 2 lít", ost="Hộp đựng 2 lít")
-    assert ocr_vi(item, "Hộp đựng 2 lít").status == "verified"
+    assert ocr_vi(item, "Hộp đựng 2 lít").status == "quote_matched"  # ruling P2a: the claim adds words
+    assert ocr_vi(cl("Hộp đựng 2 lít", ost="Hộp đựng 2 lít"), "Hộp đựng 2 lít").status == "verified"
     assert ocr_vi(cl("Không nấu 5 phút", ost="Không nấu 5 phút"), "Không nấu 5 phút").status == "verified"
 
 

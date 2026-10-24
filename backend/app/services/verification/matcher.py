@@ -17,8 +17,8 @@ Safety rules, every doubt ends as `unverified`:
   in a language without number words never verify, OCR text without numbers must match word for word;
 - ruling R13: an on-screen number is only checked while a Vietnamese or English transcript with words
   exists (R16b);
-- ruling P2: a claim whose quote passed every check is `verified` only when its text is in the quote's
-  language and near-identical to it (token_set_ratio >= 85); otherwise it is `quote_matched`."""
+- rulings P2 + P2a: a claim whose quote passed every check is `verified` only when its text is in the
+  quote's language and says the same words in the same order; otherwise it is `quote_matched`."""
 
 import re
 import unicodedata
@@ -47,7 +47,6 @@ MODIFIERS |= guards.FRACTION_WORDS | {"ruoi", "phay"}  # 'rưỡi', 'phẩy' as 
 DASHES = {"-", "–", "−", "~"}
 NEIGHBOURHOOD = 8
 MIN_QUOTE_CHARS = 6
-PARAPHRASE_SCORE = 85  # ruling P2: a claim this close to its own quote, in its language, is not a paraphrase
 
 
 def normalize(text: str) -> str:
@@ -443,15 +442,33 @@ def _states_number(item) -> bool:
     return units.has_digit(*texts) or any(_spells_number(t) for t in texts)
 
 
+def _word_sequence(text: str) -> list[str]:
+    """Normalized words with punctuation trimmed from both ends; punctuation-only tokens dropped.
+    Diacritics and punctuation inside a word ('1,5', 'don't') stay significant."""
+    words = []
+    for word in normalize(text).split():
+        chars = list(word)
+        while chars and unicodedata.category(chars[0]).startswith("P"):
+            chars.pop(0)
+        while chars and unicodedata.category(chars[-1]).startswith("P"):
+            chars.pop()
+        if chars:
+            words.append("".join(chars))
+    return words
+
+
 def _own_words(item, source: str, source_language: str | None, text_language: str | None) -> bool:
-    """Ruling P2: a matched quote proves a claim only when the claim says it in the quote's own words:
-    the same language and token_set_ratio >= 85. Otherwise the claim is a paraphrase (`quote_matched`).
+    """Rulings P2 + P2a: a matched quote proves a claim only when the claim says it in the quote's own
+    words: the same language and the same words in the same order (only case, whitespace and the
+    punctuation at either end of a word may differ). Anything else is a paraphrase (`quote_matched`):
+    a subset, a superset, one changed word.
     Materials, parameters and exact inputs carry their own checked values and are not affected."""
     if not isinstance(item, GroundedClaim):
         return True
     if not _same_language(text_language, source_language):
         return False
-    return fuzz.token_set_ratio(normalize(item.text), normalize(source)) >= PARAPHRASE_SCORE
+    # whitespace may differ too ('Giá $5' = 'Giá $ 5'), so the words are compared joined
+    return "".join(_word_sequence(item.text)) == "".join(_word_sequence(source))
 
 
 def _result(status, method, reason=None, **rest) -> ItemVerification:
