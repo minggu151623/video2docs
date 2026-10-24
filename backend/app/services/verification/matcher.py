@@ -17,7 +17,7 @@ Safety rules, every doubt ends as `unverified`:
   in a language without number words never verify, OCR text without numbers must match word for word;
 - ruling R13: an on-screen number is only checked while a Vietnamese or English transcript with words
   exists (R16b);
-- rulings P2-P2d: a claim whose quote passed every check is `verified` only when its text is in the
+- rulings P2-P2e: a claim whose quote passed every check is `verified` only when its text is in the
   quote's language and says the same words in the same order; otherwise it is `quote_matched`."""
 
 import re
@@ -445,6 +445,7 @@ def _states_number(item) -> bool:
 SENTENCE_END = ".,;:!?…"  # ruling P2b: trimmed from the end of a word only
 PAIRS = {"(": ")", "[": "]", "{": "}", "“": "”", "‘": "’", "«": "»", '"': '"', "'": "'"}
 CLOSERS = {close: open_ for open_, close in PAIRS.items()}
+NUMBER_SYMBOLS = set("$€£¥₫≤≥<>≈")  # ruling P2e: the only symbols joined to a following number
 
 
 def _symbol_only(token: str) -> bool:
@@ -477,13 +478,15 @@ def _trim(word: str, text: str, first: bool, last: bool) -> str:
 
 
 def _word_sequence(text: str) -> list[str]:
-    """Rulings P2b-P2d: normalized words compared as a list. Words keep a leading '-', '.', '/', '%',
+    """Rulings P2b-P2e: normalized words compared as a list. Words keep a leading '-', '.', '/', '%',
     '#', '&', punctuation inside them ('-rf', '.env', '/etc', 'C#', '1,5', 'main()') and diacritics;
     only sentence-end marks at their end and unpaired quotes/brackets at the two edges of the whole
     sequence are trimmed (`_trim`). A token without word characters ('.', '..', '-', '&', '$', '{}',
-    '""') always stays and is joined to the next token only when that one starts with a digit: 'Giá $ 5'
-    reads 'Giá $5' and '- 5' reads '-5', while 'rm -rf . /tmp' is not 'rm -rf ./tmp', 'rm - rf' is
-    not 'rm -rf', 'git add .' is not 'git add' and 'a part' stays two words."""
+    '""') always stays. It is joined to the next token only when it is made of currency or comparison
+    symbols (NUMBER_SYMBOLS) and that token starts with a digit: 'Giá $ 5' reads 'Giá $5' and '≤ 5'
+    reads '≤5', while 'cd / 5', 'ls ~ 1', 'chmod + 7', '- 18°C' keep the symbol apart, 'rm -rf . /tmp'
+    is not 'rm -rf ./tmp', 'rm - rf' is not 'rm -rf', 'git add .' is not 'git add' and 'a part' stays
+    two words."""
     clean = normalize(text)
     tokens = clean.split()
     words = []
@@ -491,7 +494,7 @@ def _word_sequence(text: str) -> list[str]:
         word = token if _symbol_only(token) else _trim(token, clean, i == 0, i == len(tokens) - 1)
         if not word:
             continue
-        if words and _symbol_only(words[-1]) and word[0].isdigit():
+        if words and set(words[-1]) <= NUMBER_SYMBOLS and word[0].isdigit():
             words[-1] += word
         else:
             words.append(word)

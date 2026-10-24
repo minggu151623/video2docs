@@ -515,7 +515,8 @@ def test_p2d_separate_arguments_and_quoted_spans_are_significant(text, quote):
 
 def test_p2d_word_sequence():
     assert _word_sequence("Giá $ 5") == _word_sequence("Giá $5") == ["giá", "$5"]
-    assert _word_sequence("≤ 5") == ["≤5"] and _word_sequence("- 5") == ["-5"]
+    assert _word_sequence("≤ 5") == ["≤5"]
+    assert _word_sequence("- 5") == ["-", "5"]  # ruling P2e: '-' no longer joins a number
     assert _word_sequence("rm -rf . /tmp") == ["rm", "-rf", ".", "/tmp"]
     assert _word_sequence("rm - rf") == ["rm", "-", "rf"]
     assert _word_sequence('grep "a b" f') == ["grep", '"a', 'b"', "f"]
@@ -536,3 +537,49 @@ def test_p2d_positives_still_verify():
     item = cl("Run git add .", "run git add .")
     assert say(item, "okay so run git add . now", "en", "en").status == "verified"
     assert say(cl("Call main()", "call main()"), "okay so call main() now", "en", "en").status == "verified"
+
+
+# ---- P2e: only currency and comparison symbols join a following number -----------------------------
+
+SYMBOL_ARGUMENTS = [
+    ("Run cd / 5", "run cd /5"),
+    ("Run cd /5", "run cd / 5"),
+    ("Run ls ~ 1", "run ls ~1"),
+    ("Run ls ~1", "run ls ~ 1"),
+    ("Run git reset HEAD ~ 1", "run git reset head ~1"),
+    ("Run git reset HEAD ~1", "run git reset head ~ 1"),
+    ("Run chmod + 7 f", "run chmod +7 f"),
+    ("Run chmod +7 f", "run chmod + 7 f"),
+    ("Run echo # 1", "run echo #1"),
+    ("Run echo #1", "run echo # 1"),
+    ("Run x = 5", "run x =5"),
+    ("Run x =5", "run x = 5"),
+]
+
+
+@pytest.mark.parametrize("text,quote", SYMBOL_ARGUMENTS)
+def test_p2e_other_symbols_stay_separate_from_numbers(text, quote):
+    # on speech an earlier number guard may already stop these; what matters is that none verifies
+    out = say(cl(text, quote), f"okay so {quote} right now", "en", "en")
+    assert out.status in ("quote_matched", "unverified"), out.reason
+    speech = Transcript(language="en", words=[Word(start=0.0, end=0.3, text="ok")])
+    item = observed(text, quote, 10, 12)
+    out = verify_item("p", item, speech, [(11.0, "Menu\n" + quote)], SETTINGS, text_language="en")
+    assert out.status == "quote_matched", out.reason
+
+
+def test_p2e_word_sequence():
+    for symbol in ("$", "€", "£", "¥", "₫", "≤", "≥", "<", ">", "≈"):
+        assert _word_sequence(f"giá {symbol} 5") == _word_sequence(f"giá {symbol}5") == ["giá", f"{symbol}5"]
+    for symbol in ("/", "\\", "~", "#", "+", "=", "-", "*", "%", "&", ".", ".."):
+        assert _word_sequence(f"run {symbol} 5") == ["run", symbol, "5"], symbol
+    assert _word_sequence("- 18°C") != _word_sequence("-18°C")  # accepted recall cost (P2e)
+
+
+def test_p2e_accepted_currency_join_in_prose():
+    # ruling P2e accepts "$ 1" = "$1": claims are prose; commands are exact_inputs and compared exactly
+    assert _word_sequence("Run echo $ 1") == _word_sequence("run echo $1")
+
+
+def test_p2e_positives_still_verify():
+    test_p2d_positives_still_verify()
