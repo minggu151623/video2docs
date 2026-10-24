@@ -561,7 +561,9 @@ def test_round3_positives():
     # ruling P2a: every guard passes, but the claim rewords its quote, so only the quote matched
     assert say(item, "các bạn đừng chạm vào chảo đang nóng nhé", "vi", "vi").status == "quote_matched"
     assert ocr_none(cl("Bake 5 min", ost="Bake 5 min"), "Bake 5 min").status == "verified"
-    assert ocr_none(cl("Bột 200 g", ost="Bột (200 g)"), "Bột (200 g)").status == "verified"
+    assert ocr_none(cl("Bột (200 g)", ost="Bột (200 g)"), "Bột (200 g)").status == "verified"
+    # ruling P2d: brackets inside the sequence stay, so the unbracketed claim only paraphrases
+    assert ocr_none(cl("Bột 200 g", ost="Bột (200 g)"), "Bột (200 g)").status == "quote_matched"
     item = mat("2", "cups", "add 2 cups of milk until smooth", name="milk")
     assert say(item, "now add 2 cups of milk until smooth", "en", "en").status == "verified"
     assert number_tokens("freezer‐18°c", None) == ["~-18"]
@@ -791,7 +793,9 @@ def test_r14_symbols_before_a_space_or_bracket_never_verify(case):
 def test_r14_positives():
     assert ocr_vi(cl("Bake 5 min", ost="Bake 5 min"), "Bake 5 min").status == "verified"
     assert ocr_vi(cl("Bake ≤5 min", ost="Bake ≤5 min"), "Bake ≤5 min").status == "verified"
-    assert ocr_vi(cl("Bột 200 g", ost="Bột (200 g)"), "Bột (200 g)").status == "verified"
+    assert ocr_vi(cl("Bột (200 g)", ost="Bột (200 g)"), "Bột (200 g)").status == "verified"
+    # ruling P2d: brackets inside the sequence stay, so the unbracketed claim only paraphrases
+    assert ocr_vi(cl("Bột 200 g", ost="Bột (200 g)"), "Bột (200 g)").status == "quote_matched"
     assert ocr_vi(cl("Giá $5", ost="Giá $ 5"), "Giá $ 5").status == "verified"
     item = mat("2", "cốc", "thêm 2 cốc sữa, rồi 5 phút sau khuấy đều", name="sữa")
     assert (
@@ -1050,7 +1054,9 @@ def test_r16_symbol_positives():
     for screen in ("Bake ≤ about 5 min", "Price $ about 5", "Scale x about 2 cups", "Bake about 5 min"):
         assert ocr_vi(cl(screen, ost=screen), screen).status == "verified", screen
     assert ocr_vi(cl("Giá $5", ost="Giá $ 5"), "Giá $ 5").status == "verified"
-    assert ocr_vi(cl("Bột 200 g", ost="Bột (200 g)"), "Bột (200 g)").status == "verified"
+    assert ocr_vi(cl("Bột (200 g)", ost="Bột (200 g)"), "Bột (200 g)").status == "verified"
+    # ruling P2d: brackets inside the sequence stay, so the unbracketed claim only paraphrases
+    assert ocr_vi(cl("Bột 200 g", ost="Bột (200 g)"), "Bột (200 g)").status == "quote_matched"
     assert ocr_vi(cl("Lưu ý: nướng 5 phút", ost="Lưu ý: nướng 5 phút"), "Lưu ý: nướng 5 phút").status == (
         "verified"
     )

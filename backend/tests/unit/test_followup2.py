@@ -345,8 +345,11 @@ def test_p2a_only_case_whitespace_and_punctuation_may_differ():
     assert say(
         cl("Nhấn nút Install.", "nhấn nút install"), "giờ nhấn nút install nhé", "vi", "vi"
     ).status == ("verified")
-    item = cl("“Nhấn  nút” Install!", "nhấn nút, install")
+    item = cl("“Nhấn  nút Install!", "nhấn nút, install")
     assert say(item, "giờ nhấn nút, install nhé", "vi", "vi").status == "verified"
+    # ruling P2d: a quote inside the sequence stays
+    item = cl("“Nhấn  nút” Install!", "nhấn nút, install")
+    assert say(item, "giờ nhấn nút, install nhé", "vi", "vi").status == "quote_matched"
     assert show(cl("Giá $5", ost="Giá $ 5"), "Giá $ 5", text_language="vi").status == "verified"
     # diacritics stay significant
     assert say(cl("Nhan nut Install", "nhấn nút install"), "giờ nhấn nút install nhé", "vi", "vi").status == (
@@ -448,7 +451,7 @@ def test_p2c_standalone_punctuation_tokens_are_significant(text, quote):
 def test_p2c_word_sequence_keeps_paired_brackets_and_unit_quotes():
     assert _word_sequence("Call main(), then f(x).") == ["call", "main()", "then", "f(x)"]
     assert _word_sequence("Use arr[] (here)") == ["use", "arr[]", "(here)"]
-    assert _word_sequence("Bột (200 g)") == ["bột", "200", "g"]  # unpaired edge brackets are trimmed
+    assert _word_sequence("Bột (200 g)") == ["bột", "(200", "g)"]  # ruling P2d: paired across words
     assert _word_sequence('Cut a 5" board') == ["cut", "a", '5"', "board"]
     assert _word_sequence("run git add .") == ["run", "git", "add", "."]
 
@@ -463,4 +466,73 @@ def test_p2c_positives_still_verify():
         say(cl("Run git add .", "run git add ."), "okay so run git add . now", "en", "en").status
         == "verified"
     )
+    assert say(cl("Call main()", "call main()"), "okay so call main() now", "en", "en").status == "verified"
+
+
+# ---- P2d: symbols join only numbers; unpaired quotes/brackets trimmed only at the sequence edges ----
+
+SEPARATE_ARGUMENTS = [
+    ("Run rm -rf . /tmp", "run rm -rf ./tmp"),
+    ("Run rm -rf ./tmp", "run rm -rf . /tmp"),
+    ("Run ls .. /etc", "run ls ../etc"),
+    ("Run ls ../etc", "run ls .. /etc"),
+    ("Run ls . foo", "run ls .foo"),
+    ("Run ls .foo", "run ls . foo"),
+    ("Run cp a . b", "run cp a .b"),
+    ("Run cp a .b", "run cp a . b"),
+    ("Run cd .. foo", "run cd ..foo"),
+    ("Run cd ..foo", "run cd .. foo"),
+    (". run foo", ".run foo"),
+    (".run foo", ". run foo"),
+    ("- run foo", "-run foo"),
+    ("-run foo", "- run foo"),
+    ("Run rm - rf", "run rm -rf"),
+    ("Run rm -rf", "run rm - rf"),
+]
+SPAN_EDGES = [
+    ('Run grep "a b" f', "run grep a b f"),
+    ("Run grep a b f", 'run grep "a b" f'),
+    ("Run (cd a && make)", "run cd a && make"),
+    ("Run cd a && make", "run (cd a && make)"),
+    ("(cd a && make)", "cd a && make"),
+    ("cd a && make", "(cd a && make)"),
+    ("Call f(x, y)", "call f(x y"),
+    ("Call f(x y", "call f(x, y)"),
+    ("Run echo $(date +%s)", "run echo $(date +%s"),
+    ("Run echo $(date +%s", "run echo $(date +%s)"),
+]
+
+
+@pytest.mark.parametrize("text,quote", SEPARATE_ARGUMENTS + SPAN_EDGES)
+def test_p2d_separate_arguments_and_quoted_spans_are_significant(text, quote):
+    out = say(cl(text, quote), f"okay so {quote} right now", "en", "en")
+    assert out.status == "quote_matched", out.reason
+    speech = Transcript(language="en", words=[Word(start=0.0, end=0.3, text="ok")])
+    item = observed(text, quote, 10, 12)
+    out = verify_item("p", item, speech, [(11.0, "Menu\n" + quote)], SETTINGS, text_language="en")
+    assert out.status == "quote_matched", out.reason
+
+
+def test_p2d_word_sequence():
+    assert _word_sequence("Giá $ 5") == _word_sequence("Giá $5") == ["giá", "$5"]
+    assert _word_sequence("≤ 5") == ["≤5"] and _word_sequence("- 5") == ["-5"]
+    assert _word_sequence("rm -rf . /tmp") == ["rm", "-rf", ".", "/tmp"]
+    assert _word_sequence("rm - rf") == ["rm", "-", "rf"]
+    assert _word_sequence('grep "a b" f') == ["grep", '"a', 'b"', "f"]
+    assert _word_sequence("(cd a && make)") == ["(cd", "a", "&&", "make)"]
+    assert _word_sequence("f(x, y)") == ["f(x", "y)"]
+    # unpaired quotes/brackets at the very start and end of the sequence are still trimmed
+    assert _word_sequence("“Nhấn nút install.") == ["nhấn", "nút", "install"]
+    assert _word_sequence("nhấn nút install”.") == ["nhấn", "nút", "install"]
+    assert _word_sequence("Bột 200 g)") == ["bột", "200", "g"]
+
+
+def test_p2d_positives_still_verify():
+    assert say(
+        cl("Nhấn nút Install.", "nhấn nút install"), "giờ nhấn nút install nhé", "vi", "vi"
+    ).status == ("verified")
+    assert show(cl("Giá $5", ost="Giá $ 5"), "Giá $ 5", text_language="vi").status == "verified"
+    assert say(cl("Is it safe?", "is it safe"), "so is it safe now", "en", "en").status == "verified"
+    item = cl("Run git add .", "run git add .")
+    assert say(item, "okay so run git add . now", "en", "en").status == "verified"
     assert say(cl("Call main()", "call main()"), "okay so call main() now", "en", "en").status == "verified"

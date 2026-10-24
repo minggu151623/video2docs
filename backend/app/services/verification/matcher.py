@@ -17,7 +17,7 @@ Safety rules, every doubt ends as `unverified`:
   in a language without number words never verify, OCR text without numbers must match word for word;
 - ruling R13: an on-screen number is only checked while a Vietnamese or English transcript with words
   exists (R16b);
-- rulings P2 + P2a: a claim whose quote passed every check is `verified` only when its text is in the
+- rulings P2-P2d: a claim whose quote passed every check is `verified` only when its text is in the
   quote's language and says the same words in the same order; otherwise it is `quote_matched`."""
 
 import re
@@ -451,18 +451,25 @@ def _symbol_only(token: str) -> bool:
     return not any(_word_char(c) for c in token)
 
 
-def _trim(word: str) -> str:
-    """Rulings P2b + P2c: drop sentence-end marks at the end of a word and quotes/brackets at its edges
-    that have no partner inside the word: 'Install.' -> 'install', '(200' -> '200', 'nút”' -> 'nút',
-    while 'main()', 'arr[]', 'f(x)' and '"salt"' keep theirs. A quote right after a digit is a unit
-    (5" is five inches) and stays."""
+def _paired(mark: str, text: str) -> bool:
+    """True when the quote/bracket `mark` has a partner anywhere in `text` ('"' and "'" pair with
+    themselves, so they need a second one)."""
+    partner = PAIRS.get(mark) or CLOSERS[mark]
+    return text.count(mark) > 1 if partner == mark else partner in text
+
+
+def _trim(word: str, text: str, first: bool, last: bool) -> str:
+    """Rulings P2b-P2d: drop sentence-end marks at the end of a word ('Install.' -> 'install'). A
+    quote/bracket without a partner anywhere in the whole `text` is dropped only at the start of the
+    first word and at the end of the last word ('“nhấn nút install', 'Bột 200 g)'); everywhere else
+    marks stay, so 'main()', 'f(x, y)', '(cd a && make)' and 'grep "a b" f' keep theirs. A quote
+    right after a digit is a unit (5" is five inches) and stays."""
     while word:
-        last, first = word[-1], word[0]
-        if last in SENTENCE_END:
+        if word[-1] in SENTENCE_END:
             word = word[:-1]
-        elif last in CLOSERS and CLOSERS[last] not in word[:-1] and not word[:-1][-1:].isdigit():
+        elif last and word[-1] in CLOSERS and not _paired(word[-1], text) and not word[-2:-1].isdigit():
             word = word[:-1]
-        elif first in PAIRS and PAIRS[first] not in word[1:]:
+        elif first and word[0] in PAIRS and not _paired(word[0], text):
             word = word[1:]
         else:
             break
@@ -470,24 +477,25 @@ def _trim(word: str) -> str:
 
 
 def _word_sequence(text: str) -> list[str]:
-    """Rulings P2b + P2c: normalized words compared as a list. Words keep a leading '-', '.', '/', '%',
+    """Rulings P2b-P2d: normalized words compared as a list. Words keep a leading '-', '.', '/', '%',
     '#', '&', punctuation inside them ('-rf', '.env', '/etc', 'C#', '1,5', 'main()') and diacritics;
-    only unpaired quotes/brackets at their edges and sentence-end marks at their end are trimmed
-    (`_trim`). A token without word characters ('.', '..', '-', '&', '$', '{}', '""') always stays: it
-    is joined to the next word, or kept alone at the end, so 'Giá $ 5' reads 'Giá $5', 'git add .'
-    is not 'git add' and 'a part' stays two words."""
-    joined, pending = [], ""
-    for token in normalize(text).split():
-        if _symbol_only(token):
-            pending += token
+    only sentence-end marks at their end and unpaired quotes/brackets at the two edges of the whole
+    sequence are trimmed (`_trim`). A token without word characters ('.', '..', '-', '&', '$', '{}',
+    '""') always stays and is joined to the next token only when that one starts with a digit: 'Giá $ 5'
+    reads 'Giá $5' and '- 5' reads '-5', while 'rm -rf . /tmp' is not 'rm -rf ./tmp', 'rm - rf' is
+    not 'rm -rf', 'git add .' is not 'git add' and 'a part' stays two words."""
+    clean = normalize(text)
+    tokens = clean.split()
+    words = []
+    for i, token in enumerate(tokens):
+        word = token if _symbol_only(token) else _trim(token, clean, i == 0, i == len(tokens) - 1)
+        if not word:
             continue
-        word = _trim(token)
-        if word:
-            joined.append(pending + word)
-            pending = ""
-    if pending:
-        joined.append(pending)
-    return joined
+        if words and _symbol_only(words[-1]) and word[0].isdigit():
+            words[-1] += word
+        else:
+            words.append(word)
+    return words
 
 
 def _own_words(item, source: str, source_language: str | None, text_language: str | None) -> bool:
