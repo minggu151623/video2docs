@@ -442,33 +442,51 @@ def _states_number(item) -> bool:
     return units.has_digit(*texts) or any(_spells_number(t) for t in texts)
 
 
+SENTENCE_END = ".,;:!?…"  # ruling P2b: trimmed from the end of a word only
+QUOTES = "\"'“”‘’«»()[]{}"  # ruling P2b: trimmed from both ends of a word
+
+
+def _symbol_only(token: str) -> bool:
+    return not any(_word_char(c) for c in token)
+
+
 def _word_sequence(text: str) -> list[str]:
-    """Normalized words with punctuation trimmed from both ends; punctuation-only tokens dropped.
-    Diacritics and punctuation inside a word ('1,5', 'don't') stay significant."""
+    """Ruling P2b: normalized words with only sentence-level marks trimmed (quotes and brackets at either
+    end, . , ; : ! ? … at the end); tokens of those marks alone are dropped. A leading '-', '.', '/', '%',
+    '#', '&' and punctuation inside a word stay ('-rf', '.env', '/etc', 'C#', '1,5'), and so do
+    diacritics. A token of other symbols only ('-', '*', '&', '$') is joined to the next word (to the
+    previous one at the end), so 'Giá $ 5' reads 'Giá $5' while 'a part' stays two words."""
     words = []
     for word in normalize(text).split():
-        chars = list(word)
-        while chars and unicodedata.category(chars[0]).startswith("P"):
-            chars.pop(0)
-        while chars and unicodedata.category(chars[-1]).startswith("P"):
-            chars.pop()
-        if chars:
-            words.append("".join(chars))
-    return words
+        while word and (word[0] in QUOTES or word[-1] in QUOTES + SENTENCE_END):
+            word = word[1:] if word[0] in QUOTES else word[:-1]
+        if word:
+            words.append(word)
+    joined, pending = [], ""
+    for word in words:
+        if _symbol_only(word):
+            pending += word
+        else:
+            joined.append(pending + word)
+            pending = ""
+    if pending and joined:
+        joined[-1] += pending
+    elif pending:
+        joined.append(pending)
+    return joined
 
 
 def _own_words(item, source: str, source_language: str | None, text_language: str | None) -> bool:
-    """Rulings P2 + P2a: a matched quote proves a claim only when the claim says it in the quote's own
-    words: the same language and the same words in the same order (only case, whitespace and the
-    punctuation at either end of a word may differ). Anything else is a paraphrase (`quote_matched`):
-    a subset, a superset, one changed word.
+    """Rulings P2, P2a, P2b: a matched quote proves a claim only when the claim says it in the quote's
+    own words: the same language and the same words in the same order (only case, whitespace and
+    sentence-level marks at word ends may differ; see `_word_sequence`). Anything else is a paraphrase
+    (`quote_matched`): a subset, a superset, one changed word or mark.
     Materials, parameters and exact inputs carry their own checked values and are not affected."""
     if not isinstance(item, GroundedClaim):
         return True
     if not _same_language(text_language, source_language):
         return False
-    # whitespace may differ too ('Giá $5' = 'Giá $ 5'), so the words are compared joined
-    return "".join(_word_sequence(item.text)) == "".join(_word_sequence(source))
+    return _word_sequence(item.text) == _word_sequence(source)
 
 
 def _result(status, method, reason=None, **rest) -> ItemVerification:

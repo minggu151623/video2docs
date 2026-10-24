@@ -352,3 +352,53 @@ def test_p2a_only_case_whitespace_and_punctuation_may_differ():
     assert say(cl("Nhan nut Install", "nhấn nút install"), "giờ nhấn nút install nhé", "vi", "vi").status == (
         "quote_matched"
     )
+
+
+# ---- P2b: meaningful punctuation and word boundaries stay -----------------------------------------
+
+PUNCTUATION_CHANGES = [
+    ("Run rm rf", "run rm -rf"),
+    ("Run python m venv", "run python -m venv"),
+    ("Run git commit m", "run git commit -m"),
+    ("Use flag force", "use flag --force"),
+    ("Delete git folder", "delete .git folder"),
+    ("Open env", "open .env"),
+    ("Install NET", "install .NET"),
+    ("Install C", "install C#"),
+    ("Add PATH", "add %PATH%"),
+    ("Go to etc", "go to /etc"),
+    ("Press the button", "press the - button"),
+    ("Salt pepper", "salt & pepper"),
+    ("Use the key", "use the * key"),
+    ("Use the key", "use the – key"),
+]
+WORD_SPLITS = [
+    ("Apart from the pan", "a part from the pan"),
+    ("Move away", "move a way"),
+    ("Anyone can do it", "any one can do it"),
+    ("Take it off", "take it of f"),
+]
+
+
+@pytest.mark.parametrize("text,quote", PUNCTUATION_CHANGES + WORD_SPLITS)
+def test_p2b_punctuation_and_word_boundaries_are_significant(text, quote):
+    out = say(cl(text, quote), f"okay so {quote} right now", "en", "en")
+    assert out.status == "quote_matched", out.reason
+    speech = Transcript(language="en", words=[Word(start=0.0, end=0.3, text="ok")])
+    item = observed(text, quote, 10, 12)
+    out = verify_item("p", item, speech, [(11.0, "Menu\n" + quote)], SETTINGS, text_language="en")
+    assert out.status == "quote_matched", out.reason
+
+
+def test_p2b_sentence_marks_and_spaces_around_symbols_may_differ():
+    assert say(
+        cl("Nhấn nút Install.", "nhấn nút install"), "giờ nhấn nút install nhé", "vi", "vi"
+    ).status == ("verified")
+    assert show(cl("Giá $5", ost="Giá $ 5"), "Giá $ 5", text_language="vi").status == "verified"
+    assert say(cl("Is it safe?", "is it safe"), "so is it safe now", "en", "en").status == "verified"
+    item = cl("Run rm -rf", "run rm -rf")
+    assert say(item, "okay so run rm -rf right now", "en", "en").status == "verified"
+    item = observed("Open .env", "open .env", 10, 12)
+    assert verify_item("p", item, EN_SPEECH, [(11.0, "open .env")], SETTINGS, text_language="en").status == (
+        "verified"
+    )
