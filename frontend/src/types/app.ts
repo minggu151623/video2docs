@@ -1,4 +1,4 @@
-import type { TutorialDraftV1 } from "./tutorial";
+import type { TutorialDraftV2 } from "./tutorial";
 export interface Project {
   id: string;
   name: string;
@@ -37,8 +37,10 @@ export interface Job {
   created_at: string;
   cleanup_pending: number;
   is_mock: boolean;
-  warnings: unknown[];
+  warnings: JobWarning[];
 }
+/** Known codes: NOT_TUTORIAL, LATER_CLIP_NOT_TUTORIAL, VERIFICATION_DEGRADED. Others and bare strings are tolerated. */
+export type JobWarning = { code: string; [key: string]: unknown } | string;
 export interface ProjectDetail extends Project {
   assets: Asset[];
   jobs: Job[];
@@ -70,8 +72,33 @@ export interface Generation {
   quality_status: string;
   job_id: string;
 }
+/** `quote_matched`: a claim's quote matched, but its paraphrase is not verified (ruling P2). */
+export type VerificationStatus =
+  | "verified"
+  | "quote_matched"
+  | "unverified"
+  | "not_checkable"
+  | "not_checked";
+export interface VerificationItem {
+  status: VerificationStatus;
+  method: "asr" | "ocr" | "none";
+  matched_text: string | null;
+  matched_sec: number | null;
+  checked_range: [number, number] | null;
+  reason: string | null;
+}
+export type EngineStatus = "ok" | "skipped" | "failed";
+/** Written by the backend apart from the draft; item keys look like `steps/{i}/parameters/{j}`. */
+export interface Verification {
+  items: Record<string, VerificationItem>;
+  asr_status: EngineStatus;
+  ocr_status: EngineStatus;
+  asr_error: string | null;
+  ocr_error: string | null;
+}
 export interface GenerationDetail extends Generation {
-  draft: TutorialDraftV1;
+  draft: TutorialDraftV2;
+  verification: Verification | null;
   evidence: Evidence[];
 }
 export interface Capabilities {

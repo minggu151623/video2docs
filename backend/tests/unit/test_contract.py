@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 import pytest
-from app.schemas.tutorial import TutorialDraftV1
+from app.schemas.tutorial_v2 import TutorialDraftV2
 from app.providers.mock import MockProvider
 from app.services.media import plan_chunks
 from app.services.documents import assemble, escape
@@ -29,7 +29,7 @@ def test_invalid_chunk_timeline(duration):
 
 @pytest.fixture
 def draft():
-    return TutorialDraftV1.model_validate_json(
+    return TutorialDraftV2.model_validate_json(
         MockProvider(Settings(ai_provider="mock")).analyze(None, 5, "vi", {})["text"], context={"duration": 5}
     )
 
@@ -38,7 +38,7 @@ def draft():
     "mutation", ["nan", "infinity", "outside", "eof", "extra", "reason", "span", "empty"]
 )
 def test_reject_invalid_schema(draft, mutation):
-    data = draft.model_dump()
+    data = draft.model_dump(by_alias=True)
     if mutation == "nan":
         data["steps"][0]["start_sec"] = float("nan")
     if mutation == "infinity":
@@ -56,24 +56,28 @@ def test_reject_invalid_schema(draft, mutation):
     if mutation == "empty":
         data["steps"], data["uncertainties"] = [], []
     with pytest.raises(ValueError):
-        TutorialDraftV1.model_validate(data, context={"duration": 5})
+        TutorialDraftV2.model_validate(data, context={"duration": 5})
 
 
 def test_partial_command_requires_review(draft):
-    data = draft.model_dump()
+    data = draft.model_dump(by_alias=True)
     data["steps"][0].update(
         needs_review=False,
         review_reason=None,
-        commands=[
+        exact_inputs=[
             {
+                "kind": "command",
                 "language": "sh",
                 "text": "npm ???",
                 "completeness": "partial",
                 "evidence_spans": data["steps"][0]["evidence_spans"],
+                "basis": "unclear",
+                "quote": None,
+                "on_screen_text": None,
             }
         ],
     )
-    parsed = TutorialDraftV1.model_validate(data, context={"duration": 5})
+    parsed = TutorialDraftV2.model_validate(data, context={"duration": 5})
     assert parsed.steps[0].needs_review and parsed.steps[0].review_reason
 
 

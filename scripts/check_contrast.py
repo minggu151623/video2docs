@@ -18,6 +18,11 @@ pairs = [
     ("error", "#8b3022", "#fff0ec"),
     ("footer", "#5e6d60", "#f5f6f2"),
     ("source label", "#596c60", "#f5f6f2"),
+    ("domain chip", "#24332d", "#e9eee7"),
+    ("unverified badge", "#78491a", "#f6edde"),
+    ("not-tutorial heading", "#704518", "#faf0df"),
+    ("not-tutorial body", "#24332d", "#faf0df"),
+    ("not-tutorial muted", "#5b4a38", "#faf0df"),
 ]
 for name, fg, bg in pairs:
     high, low = sorted((luminance(fg), luminance(bg)), reverse=True)

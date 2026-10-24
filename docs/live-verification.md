@@ -2,6 +2,53 @@
 
 Khởi tạo: 20/10/2026; cập nhật: 21/10/2026, Asia/Ho_Chi_Minh. Đây là báo cáo live, tách khỏi các test mock trước đó.
 
+## Schema v2 và kiểm chứng ASR/OCR ngày 24/10/2026
+
+Người dùng đồng ý phí. Nhánh `feat/general-tutorials` tại `72006e2`, model `gemini-3.1-flash-lite`, đoạn 120 giây.
+
+**Probe schema v2 (chỉ văn bản, 3 request).** Google chấp nhận schema provider v2 (~16 KB): 3/3 `completed`, 5–7 giây, không có HTTP 400. 2/3 qua validation Pydantic; 1 lần model ghi thông số "Mức lửa" là `observed` mà không chép `on_screen_text`, trái quy tắc prompt, trong app sẽ tốn lượt repair duy nhất của job. [Kết quả](verification/schema-v2-probe.json).
+
+**Toàn video Python Windows 11.** Project `3152f50e-cfe0-4fa6-8136-6d03b926107c`. Pipeline pass ngay lần đầu: 2 request analyze, không repair (13.057 + 11.582 token đầu vào), 11 bước, 11 ảnh, MD/ZIP/PDF 12 trang, cleanup pending 0, hash nguồn giữ nguyên. Gemini xếp đúng lĩnh vực `software`, `is_tutorial=true`. [Báo cáo](verification/live-v9-general.json).
+
+| Giai đoạn | Thời gian |
+| --- | --- |
+| Chép lời nói (ASR, gồm lần đầu tải whisper `small` 927 MB) | 48 s |
+| Phân tích 2 đoạn (chuẩn bị + upload + Gemini) | 80 s |
+| Trích ảnh | 16 s |
+| Kiểm chứng (OCR 4 mục + khớp) | 92 s |
+| Tổng job, video 3 phút 37 | 237 s |
+
+ASR nhận ngôn ngữ `en`, 431 từ, chép đúng lời người nói (kể cả "python space hyphen hyphen version").
+
+**Đối chiếu frame gốc.** Thứ tự 11 bước khớp video; Optional Features 59–78 s, Advanced Options 79–99 s, progress 99–120 s, hoàn tất 115–135 s. Ảnh đúng nội dung ở 10/11 bước: Advanced Options 93 s, progress 110 s, "Setup was successful" 134 s (lượt v8 chỉ có progress), `python --version` + `Python 3.13.0` 150 s, IDLE `print("Amit Diwan")` 179 s, Save As "Demo" 192 s. Ảnh bước "Tùy chỉnh tính năng" (63 s) là màn hình đầu đang bấm Customize, chưa phải Optional Features.
+
+**Kiểm chứng: 6 mục, 2 ✓, 4 ?.**
+
+| Mục | Trạng thái | Đối chiếu |
+| --- | --- | --- |
+| Lệnh `python` (tìm trên Google) | ✓ OCR 13,5 s | Đúng |
+| Ngữ cảnh đoạn "Đã hoàn tất cài đặt Python" | ✓ OCR 115 s | **Sai về nghĩa**: chữ trích "Setup Progress" có trên màn hình, nhưng lúc 115 s cài đặt còn đang chạy. ✓ chỉ chứng minh chữ trích tồn tại, không chứng minh câu diễn giải |
+| Lệnh `python --version` | ? | Có trên màn hình 150 s; hàng OCR là `C:\Users\hp>python --version`, dấu nhắc Windows chưa được bỏ |
+| Lệnh `print("Amit Diwan")` | ? | Có trên màn hình 179 s; hàng OCR có dấu nhắc IDLE `>>>` |
+| Thông số "Tên tệp: Demo" | ? | Đúng; bị luật tên mục phải có trong nguyên văn |
+| Chuẩn bị "Windows 11" | ? | Đúng; lý do "giá trị không có trong nguyên văn" |
+
+Trên video này: 1/2 ✓ sai nghĩa (mục tiêu spec ≥ 95% ✓ đúng) và 4 mục đúng bị "?". Video phần mềm có ít định lượng nên phần kiểm chứng định lượng chưa được thử; cần một video nấu ăn hoặc sửa chữa. Một video không phải điểm rubric.
+
+**Kiểm chứng lại sau khi sửa (24/10/2026, không gọi Gemini).** Sau commit `2c0f00c` (bỏ dấu nhắc `C:\...>`, `>>>`, `...`, `In [n]:` khi khớp lệnh OCR; mô tả chỉ được ✓ khi cùng ngôn ngữ và trùng từng từ với câu trích, ngược lại là `quote_matched` "≈ khớp nguyên văn … “đoạn đã khớp”"), chạy job `verify` trên cùng generation: 0 request provider, 77 giây (OCR), generation vẫn `needs_review`. [Kết quả](verification/live-v9-reverify.json).
+
+| Mục | Trước | Sau |
+| --- | --- | --- |
+| Lệnh `python` 13,5 s | ✓ | ✓ |
+| Lệnh `python --version` | ? | ✓ OCR 150 s |
+| Lệnh `print("Amit Diwan")` | ? | ✓ OCR 177 s |
+| "Đã hoàn tất cài đặt Python" (sai nghĩa) | ✓ | ≈ khớp nguyên văn “setup progress”, liệt kê ở "Điểm chưa rõ" |
+| "Tên tệp: Demo", "Windows 11" | ? | ? (luật tên mục; giá trị không có trong nguyên văn) |
+
+3/3 ✓ đúng trên video này; 2 mục đúng vẫn "?". Đây vẫn là một video phần mềm, chưa đo phần định lượng.
+
+**Kiểm chứng lại offline sau follow-up 2 (`docs/decisions.md` mục 47–48), không gọi Gemini.** Cùng draft, transcript ASR đã cache và PaddleOCR local trên các frame `ocr_seconds` của từng mục: `python --version` ✓ OCR 150 s, `print("Amit Diwan")` ✓ OCR 177 s; câu "Đã hoàn tất cài đặt Python" thành `quote_matched` (≈, chưa kiểm chứng câu diễn giải), không còn ✓. Lệnh `python` (13,5 s) lần này ra "?" cả với code trước thay đổi: OCR offline đọc hàng thành `α python` thay vì `python`, khác lượt live; không do thay đổi này.
+
 ## Cải tiến chất lượng ngày 21/10/2026
 
 Kết quả mới nhất: [báo cáo cải tiến](quality-improvements.md) và [audit JSON](verification/live-quality-improvement.json). Contract v7 giữ scope của các claim, chuyển phần suy luận sang review, truyền ngữ cảnh ba bước trước và chặn mốc ảnh mâu thuẫn. Repair nhận JSON gốc có giới hạn trong bộ nhớ, không lưu raw vào audit.

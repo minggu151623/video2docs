@@ -1,4 +1,9 @@
-"""Run against built app + separate worker configured AI_PROVIDER=mock on port 8001."""
+"""Run against built app + separate worker configured AI_PROVIDER=mock on port 8001.
+
+API and worker must run with ASR_ENGINE=none OCR_ENGINE=none so verification is deterministic: the mock
+draft then reports "0/2 mục đã kiểm chứng". The mock reads the uploaded file name: `mock-two-steps*` adds
+a step with nothing to verify, `mock-not-tutorial*` makes the first clip a non-tutorial.
+"""
 
 import json
 import os
@@ -6,6 +11,8 @@ import signal
 from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
 from pypdf import PdfReader
+import shutil
+import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -16,11 +23,18 @@ errors = []
 checks = []
 
 
+def copy_fixture(directory, name):
+    target = Path(directory) / name
+    shutil.copyfile(ROOT / "fixtures/synthetic_tutorial.mp4", target)
+    return target
+
+
 def checked(name):
     checks.append(name)
     print("PASS", name, flush=True)
 
 
+uploads = tempfile.mkdtemp(prefix="e2e-upload-")
 with sync_playwright() as p:
     browser = p.chromium.launch()
     context = browser.new_context(viewport={"width": 1440, "height": 1000}, accept_downloads=True)
@@ -31,7 +45,9 @@ with sync_playwright() as p:
     page.screenshot(path=str(OUT / "empty-desktop.png"), full_page=True)
     page.get_by_role("button", name="Tạo dự án mới", exact=True).click()
     page.get_by_label("Tên dự án", exact=True).fill("E2E: Tài liệu tiếng Việt")
-    page.get_by_label("Video nguồn").set_input_files(ROOT / "fixtures/synthetic_tutorial.mp4")
+    expect(page.get_by_text("Video hướng dẫn: nấu ăn, sửa chữa, phần mềm…", exact=False)).to_be_visible()
+    expect(page.get_by_text("Luôn kiểm tra ảnh, định lượng và lệnh trước khi sử dụng", exact=False)).to_be_visible()
+    page.get_by_label("Video nguồn").set_input_files(copy_fixture(uploads, "mock-two-steps-tutorial.mp4"))
     page.get_by_role("button", name="Lưu video vào dự án").click()
     expect(page.locator("video")).to_be_visible(timeout=30000)
     checked("create project, upload, FFmpeg validation, playback")
@@ -49,6 +65,43 @@ with sync_playwright() as p:
     expect(page.get_by_label("Nội dung Markdown")).to_be_visible(timeout=30000)
     expect(page.get_by_label("Nội dung Markdown")).to_contain_text("MOCK")
     checked("consent gating, analysis, reload persists job and document")
+    steps = page.locator(".steps .step")
+    expect(page.get_by_text("Lĩnh vực: Khác", exact=True)).to_be_visible()
+    expect(page.get_by_text("Trạng thái tài liệu: Cần kiểm tra", exact=True)).to_be_visible()
+    expect(page.get_by_text("0/2 mục đã kiểm chứng", exact=True)).to_be_visible()
+    expect(page.get_by_text("ASR không chạy · OCR không chạy", exact=True)).to_be_visible()
+    expect(steps).to_have_count(2)
+    expect(page.locator(".verify-badge")).to_have_count(1)
+    expect(steps.first.locator(".verify-badge")).to_have_text("1 mục chưa kiểm chứng")
+    checked("domain label, N/M verification summary, per-step badge")
+    page.screenshot(path=str(OUT / "verification-desktop.png"), full_page=True)
+    page.get_by_label("Chỉ hiện mục chưa kiểm chứng").check()
+    expect(steps).to_have_count(1)
+    expect(steps.first).to_contain_text("MOCK: kiểm tra frame nguồn")
+    page.get_by_label("Chỉ hiện mục chưa kiểm chứng").uncheck()
+    expect(steps).to_have_count(2)
+    checked("unverified-only filter hides steps without unverified items")
+    page.route(
+        "**/api/v1/generations/*/verify",
+        lambda route: route.fulfill(
+            status=409,
+            content_type="application/json",
+            body=json.dumps(
+                {"error": {"code": "JOB_IN_PROGRESS", "message": "Dự án đang có một job tạo hoặc kiểm chứng tài liệu."}}
+            ),
+        ),
+    )
+    page.get_by_role("button", name="Kiểm chứng lại", exact=True).click()
+    expect(page.get_by_role("alert").filter(has_text="Dự án đang có một job tạo hoặc kiểm chứng tài liệu.")).to_be_visible()
+    page.unroute("**/api/v1/generations/*/verify")
+    with page.expect_response(
+        lambda r: r.request.method == "POST" and r.url.endswith("/verify") and r.status == 202
+    ):
+        page.get_by_role("button", name="Kiểm chứng lại", exact=True).click()
+    expect(page.get_by_role("status").filter(has_text="Đã kiểm chứng lại.")).to_be_visible(timeout=30000)
+    expect(page.get_by_text("0/2 mục đã kiểm chứng", exact=True)).to_be_visible()
+    expect(page.get_by_text("Trạng thái tài liệu: Cần kiểm tra", exact=True)).to_be_visible()
+    checked("re-verify shows 409 message, then runs a verify job and reloads the generation")
     page.get_by_role("button", name="00:00:00", exact=True).first.click()
     assert page.locator("video").evaluate("(el)=>el.currentTime") == 0
     page.locator(".evidence-button").first.click()
@@ -187,9 +240,76 @@ with sync_playwright() as p:
     page.get_by_role("button", name="Xóa dữ liệu dự án", exact=True).click()
     expect(page.get_by_role("heading", name="Thư viện video", exact=True)).to_be_visible(timeout=10000)
     checked("delete confirmation and return to library")
+    page.get_by_role("button", name="Tạo dự án mới", exact=True).click()
+    page.get_by_label("Tên dự án", exact=True).fill("E2E: không phải tutorial")
+    page.get_by_label("Video nguồn").set_input_files(copy_fixture(uploads, "mock-not-tutorial-vlog.mp4"))
+    page.get_by_role("button", name="Lưu video vào dự án").click()
+    expect(page.locator("video")).to_be_visible(timeout=30000)
+    page.get_by_label("Tôi đồng ý gửi video này").check()
+    page.get_by_label("Tiếp tục với chi phí").check()
+    with page.expect_request(lambda r: r.method == "POST" and r.url.endswith("/jobs")) as first_request:
+        page.get_by_role("button", name="Tạo tài liệu", exact=True).click()
+    assert "skip_tutorial_gate" not in (first_request.value.post_data or "")
+    expect(page.get_by_role("heading", name="Video này không được nhận là video hướng dẫn")).to_be_visible(
+        timeout=30000
+    )
+    expect(page.get_by_text("Lý do: MOCK: không phải tutorial", exact=True)).to_be_visible()
+    expect(page.get_by_label("Nội dung Markdown")).to_have_count(0)
+    expect(page.get_by_text("Đã dừng sau đoạn đầu", exact=False).first).to_be_visible()
+    expect(page.get_by_text("đoạn hoàn tất", exact=False)).to_have_count(0)
+    page.screenshot(path=str(OUT / "not-tutorial-desktop.png"), full_page=True)
+    page.set_viewport_size({"width": 375, "height": 900})
+    page.screenshot(path=str(OUT / "not-tutorial-mobile.png"), full_page=True)
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    page.set_viewport_size({"width": 1440, "height": 1000})
+    checked("non-tutorial stop screen shows the reason and no partial progress")
+    analyze_anyway = page.get_by_role("button", name="Vẫn phân tích toàn bộ", exact=True)
+    analyze_anyway.focus()
+    page.keyboard.press("Enter")
+    dialog = page.get_by_role("dialog")
+    expect(dialog).to_be_visible()
+    confirm = dialog.get_by_role("button", name="Xác nhận phân tích toàn bộ", exact=True)
+    expect(confirm).to_be_disabled()
+    page.screenshot(path=str(OUT / "not-tutorial-dialog-desktop.png"))
+    dialog.get_by_label("Gửi lại video này tới provider để phân tích toàn bộ.").check()
+    expect(confirm).to_be_disabled()
+    dialog.get_by_label("Chấp nhận có thể tính phí thêm, chưa xác định trước.").check()
+    page.route(
+        "**/api/v1/projects/*/jobs",
+        lambda route: route.fulfill(
+            status=409,
+            content_type="application/json",
+            body=json.dumps({"error": {"code": "JOB_IN_PROGRESS", "message": "Dự án đang có một job tạo tài liệu."}}),
+        )
+        if route.request.method == "POST"
+        else route.continue_(),
+    )
+    confirm.click()
+    expect(dialog.get_by_role("alert").filter(has_text="Dự án đang có một job tạo tài liệu.")).to_be_visible()
+    expect(page.locator(".notice.error")).to_have_count(0)
+    page.unroute("**/api/v1/projects/*/jobs")
+    checked("failed skip-gate enqueue shows its error inside the open dialog")
+    with page.expect_request(lambda r: r.method == "POST" and r.url.endswith("/jobs")) as skip_request:
+        confirm.click()
+    assert json.loads(skip_request.value.post_data)["skip_tutorial_gate"] is True
+    assert skip_request.value.headers.get("idempotency-key")
+    expect(dialog).not_to_be_visible()
+    expect(page.get_by_label("Nội dung Markdown")).to_be_visible(timeout=30000)
+    expect(page.get_by_role("heading", name="Video này không được nhận là video hướng dẫn")).to_have_count(0)
+    if not page.locator(".job-history").evaluate("(el)=>el.open"):
+        page.locator(".job-history summary").click()
+    history = page.locator(".job-history")
+    expect(history).to_contain_text("Tạo tài liệu · Không phải tutorial")
+    expect(history).to_contain_text("Đã dừng sau đoạn đầu; không phân tích các đoạn sau.")
+    expect(history).to_contain_text("Video không giống video hướng dẫn: MOCK: không phải tutorial")
+    checked("analyze anyway: cost confirmation, then a new job with skip_tutorial_gate")
+    page.get_by_role("button", name="Xóa dự án", exact=True).click()
+    page.get_by_role("button", name="Xóa dữ liệu dự án", exact=True).click()
+    expect(page.get_by_role("heading", name="Thư viện video", exact=True)).to_be_visible(timeout=10000)
     assert not errors, errors
     checked("no browser JavaScript errors")
     browser.close()
+shutil.rmtree(uploads, ignore_errors=True)
 (OUT / "browser-results.json").write_text(
     json.dumps({"passed": checks, "page_errors": errors}, ensure_ascii=False, indent=2)
 )

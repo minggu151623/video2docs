@@ -28,6 +28,7 @@ from app.db.models import (
 )
 from app.providers.gemini import PROMPT
 from app.providers.structured_schema import analysis_contract_hash
+from app.schemas.tutorial_v2 import load_draft
 from app.workers.runner import TERMINAL
 
 router = APIRouter(prefix="/api/v1")
@@ -47,6 +48,7 @@ def public(row, exclude=()):
             "playback_path",
             "thumbnail_path",
             "validated_json_path",
+            "verification_json_path",
             "timeline_map_json",
             "settings_snapshot_json",
             "lease_owner",
@@ -111,6 +113,7 @@ class AnalyzeInput(Input):
     consent_id: str
     allow_unknown_cost: bool = False
     budget_usd: float = Field(default=1, gt=0, le=100)
+    skip_tutorial_gate: bool = False
 
 
 class EstimateInput(Input):
@@ -406,7 +409,7 @@ def enqueue(
         snapshot = {
             "config": cfg.snapshot(),
             "prompt_sha256": sha256(PROMPT.read_bytes()),
-            "schema_version": "1.0",
+            "schema_version": "2.0",
             "analysis_contract_sha256": analysis_contract_hash(),
             "asset_sha256": asset.sha256,
             **body.model_dump(),
@@ -532,12 +535,54 @@ def generations(project_id: str, request: Request):
 @router.get("/generations/{generation_id}")
 def generation_detail(generation_id: str, request: Request):
     with request.app.state.Session() as s:
+        data_dir = request.app.state.settings.data_dir
         generation = resource(s, Generation, generation_id)
-        draft = json.loads(
-            safe_path(request.app.state.settings.data_dir, generation.validated_json_path).read_bytes()
+        asset = s.get(Asset, s.get(Job, generation.job_id).asset_id)
+        draft = load_draft(
+            safe_path(data_dir, generation.validated_json_path).read_bytes(), asset.duration_sec
+        )
+        report = (
+            safe_path(data_dir, generation.verification_json_path)
+            if generation.verification_json_path
+            else None
         )
         evidence = s.scalars(select(Evidence).where(Evidence.generation_id == generation.id)).all()
-        return {**public(generation), "draft": draft, "evidence": [public(e) for e in evidence]}
+        return {
+            **public(generation),
+            "draft": draft.model_dump(by_alias=True, mode="json"),
+            "verification": json.loads(report.read_bytes()) if report and report.is_file() else None,
+            "evidence": [public(e) for e in evidence],
+        }
+
+
+@router.post("/generations/{generation_id}/verify", status_code=202)
+def verify_generation(generation_id: str, request: Request):
+    """Re-check a generation against local ASR/OCR; the AI provider is never called."""
+    cfg = request.app.state.settings
+    with request.app.state.Session.begin() as s:
+        generation = resource(s, Generation, generation_id)
+        if generation.quality_status not in ("succeeded", "needs_review"):
+            raise AppError("GENERATION_INCOMPLETE", "Generation chưa hoàn tất.", 409)
+        active = s.scalar(
+            select(Job.id).where(
+                Job.project_id == generation.project_id,
+                Job.kind.in_(["analyze", "verify"]),
+                Job.state.in_(["queued", "running", "retry_wait", "cancel_requested"]),
+            )
+        )
+        if active:
+            raise AppError("JOB_IN_PROGRESS", "Dự án đang có một job tạo hoặc kiểm chứng tài liệu.", 409)
+        job = Job(
+            id=uid(),
+            project_id=generation.project_id,
+            asset_id=s.get(Job, generation.job_id).asset_id,
+            kind="verify",
+            settings_snapshot_json=json.dumps({"config": cfg.snapshot(), "generation_id": generation.id}),
+        )
+        s.add(job)
+        s.flush()
+        response = dump_job(s, job)
+    return JSONResponse(response, 202, headers={"Location": f"/api/v1/jobs/{job.id}"})
 
 
 @router.get("/projects/{project_id}/document")

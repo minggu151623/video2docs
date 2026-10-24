@@ -29,16 +29,35 @@ from app.db.models import (
     now,
 )
 from app.providers import get_provider
-from app.schemas.tutorial import TutorialDraftV1
+from app.schemas.tutorial_v2 import TutorialDraftV2, load_draft
 from app.services.media import plan_chunks, probe, encode, extract_frame
 from app.services.documents import assemble, render_markdown, create_revision, has_review_claims
 from app.services.analysis import clip_metadata, evidence_timestamp, repair_payload
 from app.providers.timecodes import TimecodeError
 from app.services.exports import build_export
 from app.services.budget import check_budget, cost
+from app.services.verification.pipeline import (
+    degraded_warning,
+    needs_review,
+    run_verification,
+    save_report,
+    transcribe_asset,
+    transcript_cache_path,
+)
 
-TERMINAL = {"succeeded", "needs_review", "failed", "cancelled", "interrupted"}
+TERMINAL = {"succeeded", "needs_review", "not_tutorial", "failed", "cancelled", "interrupted"}
 LOG = logging.getLogger("video2docs.worker")
+
+
+def quality_status(draft, report):
+    """needs_review when the draft or its verification leaves anything for a person to check."""
+    flagged = (
+        draft.uncertainties
+        or has_review_claims(draft)
+        or any(s.needs_review for s in draft.steps)
+        or needs_review(report)
+    )
+    return "needs_review" if flagged else "succeeded"
 
 
 def process_identity(pid):
@@ -109,6 +128,11 @@ class Worker:
                 job.error_code = "UNKNOWN_OUTCOME" if calls else "WORKER_RESTARTED"
                 job.error_message = "Worker bị gián đoạn. Checkpoint được giữ; cần chủ động thử lại."
                 job.lease_owner, job.lease_expires_at = None, None
+                if job.project_id:  # scratch of the killed run (clips, speech audio, OCR frames)
+                    shutil.rmtree(
+                        safe_path(self.settings.data_dir, f"projects/{job.project_id}/derived/{job.id}"),
+                        ignore_errors=True,
+                    )
             active = s.scalar(
                 select(func.count())
                 .select_from(Job)
@@ -281,6 +305,26 @@ class Worker:
             if owned:
                 provider.close()
 
+    def not_tutorial_gate(self, job, snapshot, index, draft):
+        """Record non-tutorial clips; True when the job must stop after the first clip."""
+        if draft.is_tutorial:
+            return False
+        stop = index == 0 and not snapshot.get("skip_tutorial_gate")
+        warning = (
+            {"code": "NOT_TUTORIAL", "reason": draft.not_tutorial_reason}
+            if stop
+            else {"code": "LATER_CLIP_NOT_TUTORIAL", "clip_index": index + 1}
+            if index > 0
+            else None
+        )
+        if warning:
+            with self.Session.begin() as s:
+                current_job = s.get(Job, job.id)
+                warnings = json.loads(current_job.warnings_json)
+                if warning not in warnings:
+                    current_job.warnings_json = json.dumps(warnings + [warning])
+        return stop
+
     def analyze(self, job):
         cfg = Settings(**{**self.settings.model_dump(), **json.loads(job.settings_snapshot_json)["config"]})
         snapshot = json.loads(job.settings_snapshot_json)
@@ -299,16 +343,20 @@ class Worker:
         self.phase(job.id, "preparing", sum(c.state == "validated" for c in chunks), len(chunks))
         parts, repairs = [], 0
         try:
+            self.phase(job.id, "transcribing")
+            transcript, asr_status, asr_error = transcribe_asset(
+                cfg, asset, Cancellation(self, job.id), self.workdir(job)
+            )
             for index, chunk in enumerate(chunks):
                 self.check(job.id)
                 if chunk.state == "validated" and chunk.result_path:
                     path = safe_path(cfg.data_dir, chunk.result_path)
                     if file_hash(path) != chunk.result_sha256:
                         raise AppError("CHECKPOINT_CHANGED", "Checkpoint không khớp hash.", 422)
-                    draft = TutorialDraftV1.model_validate_json(
-                        path.read_bytes(), context={"duration": chunk.duration_sec}
-                    )
+                    draft = load_draft(path.read_bytes(), chunk.duration_sec)
                     parts.append((chunk.start_sec, draft))
+                    if self.not_tutorial_gate(job, snapshot, index, draft):
+                        return "not_tutorial"
                     continue
                 clip_rel = f"projects/{job.project_id}/derived/{job.id}/{chunk.id}.mp4"
                 clip = safe_path(cfg.data_dir, clip_rel)
@@ -432,7 +480,7 @@ class Worker:
                             422,
                         )
                     try:
-                        draft = TutorialDraftV1.model_validate_json(
+                        draft = TutorialDraftV2.model_validate_json(
                             provider.decode(result["text"]), context={"duration": chunk.duration_sec}
                         )
                         if draft.language != snapshot["output_language"]:
@@ -489,7 +537,7 @@ class Worker:
                         repairs += 1
                         repair = repair_payload(chunk.duration_sec, errors, result["text"])
                 rel = f"projects/{job.project_id}/derived/results/{chunk.id}.json"
-                content = draft.model_dump_json().encode()
+                content = draft.model_dump_json(by_alias=True).encode()
                 atomic_write(safe_path(cfg.data_dir, rel), content)
                 with self.Session.begin() as s:
                     s.execute(
@@ -501,11 +549,13 @@ class Worker:
                 self.cleanup(job.id, provider)
                 clip.unlink(missing_ok=True)
                 self.phase(job.id, "analyzing", index + 1, len(chunks))
+                if self.not_tutorial_gate(job, snapshot, index, draft):
+                    return "not_tutorial"
             self.phase(job.id, "assembling")
             draft = assemble(parts, asset.duration_sec, cfg.max_steps)
             generation_id = uid()
             json_rel = f"projects/{job.project_id}/generations/{generation_id}/draft.json"
-            atomic_write(safe_path(cfg.data_dir, json_rel), draft.model_dump_json().encode())
+            atomic_write(safe_path(cfg.data_dir, json_rel), draft.model_dump_json(by_alias=True).encode())
             with self.Session.begin() as s:
                 generation = Generation(
                     id=generation_id,
@@ -554,18 +604,29 @@ class Worker:
                         raise
                     step.needs_review, step.review_reason = True, "Trích ảnh thất bại; hãy chọn mốc khác."
                     warnings.append(exc.code)
-            quality = (
-                "needs_review"
-                if draft.uncertainties or has_review_claims(draft) or any(s.needs_review for s in draft.steps)
-                else "succeeded"
+            self.phase(job.id, "verifying")
+            report = run_verification(
+                cfg,
+                asset,
+                draft,
+                transcript,
+                asr_status,
+                self.workdir(job),
+                Cancellation(self, job.id),
+                asr_error,
             )
-            atomic_write(safe_path(cfg.data_dir, json_rel), draft.model_dump_json().encode())
+            if warning := degraded_warning(report):
+                warnings.append(warning)
+            quality = quality_status(draft, report)
+            atomic_write(safe_path(cfg.data_dir, json_rel), draft.model_dump_json(by_alias=True).encode())
+            verification_rel = save_report(cfg, job.project_id, generation_id, report)
             markdown = render_markdown(
                 draft,
                 asset,
                 "mock-fixture" if cfg.ai_provider == "mock" else cfg.gemini_model,
                 generation,
                 evidence,
+                report,
             )
             atomic_write(
                 safe_path(cfg.data_dir, f"projects/{job.project_id}/generations/{generation_id}/document.md"),
@@ -574,7 +635,9 @@ class Worker:
             self.phase(job.id, "saving")
             with self.Session.begin() as s:
                 s.execute(
-                    update(Generation).where(Generation.id == generation_id).values(quality_status=quality)
+                    update(Generation)
+                    .where(Generation.id == generation_id)
+                    .values(quality_status=quality, verification_json_path=verification_rel)
                 )
                 document = s.scalar(select(Document).where(Document.project_id == job.project_id))
                 if document is None:
@@ -590,6 +653,56 @@ class Worker:
                 self.cleanup(job.id, provider)
             finally:
                 provider.close()
+
+    def workdir(self, job):
+        """Scratch space removed with the job's derived folder when the job ends."""
+        return safe_path(self.settings.data_dir, f"projects/{job.project_id}/derived/{job.id}/verification")
+
+    def verify(self, job):
+        """Re-run ASR/OCR verification for a stored generation. Never constructs the AI provider."""
+        snapshot = json.loads(job.settings_snapshot_json)
+        cfg = Settings(**{**self.settings.model_dump(), **snapshot["config"]})
+        with self.Session() as s:
+            asset = s.get(Asset, job.asset_id)
+            generation = s.get(Generation, snapshot["generation_id"])
+            source = json.loads(s.get(Job, generation.job_id).settings_snapshot_json).get("config", {})
+            images = s.scalars(select(Evidence).where(Evidence.generation_id == generation.id)).all()
+        draft = load_draft(
+            safe_path(cfg.data_dir, generation.validated_json_path).read_bytes(), asset.duration_sec
+        )
+        check = Cancellation(self, job.id)
+        self.phase(job.id, "transcribing")
+        transcript, asr_status, asr_error = transcribe_asset(cfg, asset, check, self.workdir(job))
+        self.phase(job.id, "verifying")
+        report = run_verification(
+            cfg, asset, draft, transcript, asr_status, self.workdir(job), check, asr_error
+        )
+        self.check(job.id)
+        document = safe_path(
+            cfg.data_dir, f"projects/{job.project_id}/generations/{generation.id}/document.md"
+        )
+        previous = document.read_text() if document.is_file() else ""
+        evidence = {}
+        for image in images:  # keep the frames the generation was rendered with, not later reselections
+            if image.step_id not in evidence or f"assets/{image.id}.png" in previous:
+                evidence[image.step_id] = image
+        model = (
+            "mock-fixture"
+            if source.get("ai_provider") == "mock"
+            else source.get("gemini_model", cfg.gemini_model)
+        )
+        verification_rel = save_report(cfg, job.project_id, generation.id, report)
+        atomic_write(document, render_markdown(draft, asset, model, generation, evidence, report).encode())
+        with self.Session.begin() as s:
+            s.execute(
+                update(Generation)
+                .where(Generation.id == generation.id)
+                .values(quality_status=quality_status(draft, report), verification_json_path=verification_rel)
+            )
+            if warning := degraded_warning(report):
+                current_job = s.get(Job, job.id)
+                current_job.warnings_json = json.dumps(json.loads(current_job.warnings_json) + [warning])
+        return "succeeded"
 
     def make_evidence(self, job, asset, generation_id, step_id, timestamp):
         rel = f"projects/{job.project_id}/evidence/{uid()}.png"
@@ -665,6 +778,23 @@ class Worker:
     def delete(self, job):
         self.phase(job.id, "deleting")
         self.cleanup()
+        with self.Session() as s:
+            hashes = set(s.scalars(select(Asset.sha256).where(Asset.project_id == job.project_id)))
+            shared = set(
+                s.scalars(
+                    select(Asset.sha256)
+                    .join(Project, Project.id == Asset.project_id)
+                    .where(
+                        Asset.project_id != job.project_id,
+                        Project.deleted_at.is_(None),
+                        Asset.sha256.in_(hashes),
+                    )
+                )
+            )
+        for digest in hashes - shared:  # cached speech of this video goes with its last project
+            cached = safe_path(self.settings.data_dir, transcript_cache_path(digest, self.settings)).parent
+            for path in cached.glob(f"{digest}-*.json"):
+                path.unlink(missing_ok=True)
         directory = safe_path(self.settings.data_dir, f"projects/{job.project_id}")
         if directory.exists():
             shutil.rmtree(directory)
@@ -704,6 +834,7 @@ class Worker:
                 state = {
                     "validate_asset": self.validate,
                     "analyze": self.analyze,
+                    "verify": self.verify,
                     "extract_evidence": self.extract,
                     "export": self.export,
                     "delete_project": self.delete,

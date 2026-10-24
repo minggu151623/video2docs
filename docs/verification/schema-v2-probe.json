@@ -1,0 +1,25 @@
+[
+  {
+    "request": 1,
+    "status": "completed",
+    "latency_s": 5.5,
+    "parsed": true,
+    "domain": "cooking",
+    "steps": 2
+  },
+  {
+    "request": 2,
+    "status": "completed",
+    "latency_s": 6.6,
+    "parsed": false,
+    "error": "1 validation error for TutorialDraftV2\nsteps.1.parameters.1\n  Value error, An observed value requires the verbatim on_screen_text [type=value_error, input_value={'name': 'Mức lửa', '... 'on_screen_text': None}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.14/v/value_error"
+  },
+  {
+    "request": 3,
+    "status": "completed",
+    "latency_s": 5.6,
+    "parsed": true,
+    "domain": "cooking",
+    "steps": 2
+  }
+]

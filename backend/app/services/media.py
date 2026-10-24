@@ -216,3 +216,43 @@ def extract_frame(source, target, timestamp, check_cancel=lambda: None):
         return actual, width, height
     finally:
         partial.unlink(missing_ok=True)
+
+
+def extract_audio(source, target, check_cancel, *, timeout):
+    target.parent.mkdir(parents=True, exist_ok=True)
+    partial = target.with_suffix(".partial")
+    try:
+        run_process(
+            [
+                "ffmpeg",
+                "-nostdin",
+                "-v",
+                "error",
+                "-y",
+                "-protocol_whitelist",
+                "file",
+                "-threads",
+                "2",
+                "-i",
+                str(source),
+                "-map",
+                "0:a:0",
+                "-vn",
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                "-c:a",
+                "pcm_s16le",
+                "-f",
+                "wav",
+                str(partial),
+            ],
+            timeout,
+            check_cancel,
+        )
+        if not partial.exists() or partial.stat().st_size == 0:
+            raise AppError("MEDIA_INVALID", "Không trích được audio từ video này.", 422)
+        os.replace(partial, target)
+    finally:
+        partial.unlink(missing_ok=True)
