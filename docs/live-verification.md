@@ -35,6 +35,18 @@ ASR nhận ngôn ngữ `en`, 431 từ, chép đúng lời người nói (kể c�
 
 Trên video này: 1/2 ✓ sai nghĩa (mục tiêu spec ≥ 95% ✓ đúng) và 4 mục đúng bị "?". Video phần mềm có ít định lượng nên phần kiểm chứng định lượng chưa được thử; cần một video nấu ăn hoặc sửa chữa. Một video không phải điểm rubric.
 
+**Kiểm chứng lại sau khi sửa (24/10/2026, không gọi Gemini).** Sau commit `2c0f00c` (bỏ dấu nhắc `C:\...>`, `>>>`, `...`, `In [n]:` khi khớp lệnh OCR; mô tả chỉ được ✓ khi cùng ngôn ngữ và trùng từng từ với câu trích, ngược lại là `quote_matched` "≈ khớp nguyên văn … “đoạn đã khớp”"), chạy job `verify` trên cùng generation: 0 request provider, 77 giây (OCR), generation vẫn `needs_review`. [Kết quả](verification/live-v9-reverify.json).
+
+| Mục | Trước | Sau |
+| --- | --- | --- |
+| Lệnh `python` 13,5 s | ✓ | ✓ |
+| Lệnh `python --version` | ? | ✓ OCR 150 s |
+| Lệnh `print("Amit Diwan")` | ? | ✓ OCR 177 s |
+| "Đã hoàn tất cài đặt Python" (sai nghĩa) | ✓ | ≈ khớp nguyên văn “setup progress”, liệt kê ở "Điểm chưa rõ" |
+| "Tên tệp: Demo", "Windows 11" | ? | ? (luật tên mục; giá trị không có trong nguyên văn) |
+
+3/3 ✓ đúng trên video này; 2 mục đúng vẫn "?". Đây vẫn là một video phần mềm, chưa đo phần định lượng.
+
 **Kiểm chứng lại offline sau follow-up 2 (`docs/decisions.md` mục 47–48), không gọi Gemini.** Cùng draft, transcript ASR đã cache và PaddleOCR local trên các frame `ocr_seconds` của từng mục: `python --version` ✓ OCR 150 s, `print("Amit Diwan")` ✓ OCR 177 s; câu "Đã hoàn tất cài đặt Python" thành `quote_matched` (≈, chưa kiểm chứng câu diễn giải), không còn ✓. Lệnh `python` (13,5 s) lần này ra "?" cả với code trước thay đổi: OCR offline đọc hàng thành `α python` thay vì `python`, khác lượt live; không do thay đổi này.
 
 ## Cải tiến chất lượng ngày 21/10/2026

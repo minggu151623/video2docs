@@ -1,0 +1,79 @@
+{
+  "job_state": "succeeded",
+  "error_code": null,
+  "warnings": [],
+  "provider_calls": 0,
+  "seconds": 76.7,
+  "phases": [
+    {
+      "phase": "queued",
+      "t": 0.0
+    },
+    {
+      "phase": "verifying",
+      "t": 1.0
+    },
+    {
+      "phase": "succeeded",
+      "t": 76.7
+    }
+  ],
+  "quality_status": "needs_review",
+  "asr": [
+    "ok",
+    null
+  ],
+  "ocr": [
+    "ok",
+    null
+  ],
+  "status": {
+    "unverified": 2,
+    "quote_matched": 1,
+    "verified": 3
+  },
+  "items": {
+    "prerequisites/0": {
+      "status": "unverified",
+      "method": "none",
+      "matched_text": null,
+      "matched_sec": null,
+      "reason": "giá trị không có trong nguyên văn"
+    },
+    "prerequisites/1": {
+      "status": "quote_matched",
+      "method": "ocr",
+      "matched_text": "setup progress",
+      "matched_sec": 115.0,
+      "reason": null
+    },
+    "steps/0/exact_inputs/0": {
+      "status": "verified",
+      "method": "ocr",
+      "matched_text": "python",
+      "matched_sec": 13.5,
+      "reason": null
+    },
+    "steps/8/exact_inputs/0": {
+      "status": "verified",
+      "method": "ocr",
+      "matched_text": "python --version",
+      "matched_sec": 150.0,
+      "reason": null
+    },
+    "steps/9/exact_inputs/0": {
+      "status": "verified",
+      "method": "ocr",
+      "matched_text": "print(\"Amit Diwan\")",
+      "matched_sec": 177.0,
+      "reason": null
+    },
+    "steps/10/parameters/0": {
+      "status": "unverified",
+      "method": "none",
+      "matched_text": null,
+      "matched_sec": null,
+      "reason": "tên mục không có trong nguyên văn"
+    }
+  }
+}
