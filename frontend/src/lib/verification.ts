@@ -15,20 +15,24 @@ export const domainText: Record<Domain, string> = {
 export const domainLabel = (domain: string) =>
   domainText[domain as Domain] ?? domainText.other;
 
+/** A quote_matched claim still needs a person: only its quote was found (ruling P2). */
 const needsCheck = (item: VerificationItem) =>
-  item.status === "unverified" || item.status === "not_checked";
+  item.status === "unverified" ||
+  item.status === "not_checked" ||
+  item.status === "quote_matched";
 
 export function summarize(verification: Verification) {
   const items = Object.values(verification.items);
   const checkable = items.filter((i) => i.status !== "not_checkable");
   return {
     verified: checkable.filter((i) => i.status === "verified").length,
+    quoteMatched: checkable.filter((i) => i.status === "quote_matched").length,
     total: checkable.length,
     notCheckable: items.length - checkable.length,
   };
 }
 
-/** Unverified or not-checked items of step `index`; 0 when there is no report. */
+/** Unverified, not-checked or quote-matched items of step `index`; 0 when there is no report. */
 export function pendingInStep(
   verification: Verification | null,
   index: number,

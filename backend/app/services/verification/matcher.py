@@ -16,7 +16,9 @@ Safety rules, every doubt ends as `unverified`:
   token, the symbol before a number ($, €, x, ÷...), claim units against their quote (units.py), digits
   in a language without number words never verify, OCR text without numbers must match word for word;
 - ruling R13: an on-screen number is only checked while a Vietnamese or English transcript with words
-  exists (R16b)."""
+  exists (R16b);
+- ruling P2: a claim whose quote passed every check is `verified` only when its text is in the quote's
+  language and near-identical to it (token_set_ratio >= 85); otherwise it is `quote_matched`."""
 
 import re
 import unicodedata
@@ -27,7 +29,7 @@ from functools import lru_cache
 from itertools import accumulate
 from typing import Any
 from rapidfuzz import fuzz
-from app.schemas.tutorial_v2 import ExactInput, Material, Parameter, TutorialDraftV2
+from app.schemas.tutorial_v2 import ExactInput, GroundedClaim, Material, Parameter, TutorialDraftV2
 from app.schemas.verification import ItemVerification, Transcript, Word
 from app.services.verification import guards, lexicon, units
 from app.services.verification.numbers import NUMBER, number_tokens, number_words, spell_digits
@@ -45,6 +47,7 @@ MODIFIERS |= guards.FRACTION_WORDS | {"ruoi", "phay"}  # 'rưỡi', 'phẩy' as 
 DASHES = {"-", "–", "−", "~"}
 NEIGHBOURHOOD = 8
 MIN_QUOTE_CHARS = 6
+PARAPHRASE_SCORE = 85  # ruling P2: a claim this close to its own quote, in its language, is not a paraphrase
 
 
 def normalize(text: str) -> str:
@@ -440,6 +443,17 @@ def _states_number(item) -> bool:
     return units.has_digit(*texts) or any(_spells_number(t) for t in texts)
 
 
+def _own_words(item, source: str, source_language: str | None, text_language: str | None) -> bool:
+    """Ruling P2: a matched quote proves a claim only when the claim says it in the quote's own words:
+    the same language and token_set_ratio >= 85. Otherwise the claim is a paraphrase (`quote_matched`).
+    Materials, parameters and exact inputs carry their own checked values and are not affected."""
+    if not isinstance(item, GroundedClaim):
+        return True
+    if not _same_language(text_language, source_language):
+        return False
+    return fuzz.token_set_ratio(normalize(item.text), normalize(source)) >= PARAPHRASE_SCORE
+
+
 def _result(status, method, reason=None, **rest) -> ItemVerification:
     return ItemVerification(status=status, method=method, reason=reason, **rest)
 
@@ -493,6 +507,8 @@ def verify_item(
         return _result("not_checked", method, "không có kết quả OCR")
     if spoken and not exact and len(source.split()) < 2 and len(normalize(source)) < MIN_QUOTE_CHARS:
         return _result("unverified", method, "nguyên văn quá ngắn")
+    # ruling P2: the language the quote was heard or read in; on screen, only known from speech with words
+    source_language = language if spoken else transcript.language if transcript and transcript.words else None
     pad = settings.verify_window_seconds
     wanted = ("audio", "both") if spoken else ("visual", "both")
     spans = [s for s in item.evidence_spans if s.source in wanted]
@@ -526,9 +542,12 @@ def verify_item(
             ]
         for matched, sec, values_ok in hits:
             if values_ok:
-                return _result(
-                    "verified", method, matched_text=matched, matched_sec=sec, checked_range=checked
+                status = (
+                    "verified"
+                    if _own_words(item, source, source_language, text_language)
+                    else "quote_matched"
                 )
+                return _result(status, method, matched_text=matched, matched_sec=sec, checked_range=checked)
             numbers_differ = True
     where = "bản ghi lời nói" if spoken else "chữ OCR"
     if numbers_differ:

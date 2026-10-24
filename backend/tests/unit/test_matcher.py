@@ -131,7 +131,8 @@ def test_digit_runs(text, lang, expected):
 def test_korean_quote_matches_korean_transcript():
     tr = transcript("네 이제 설탕 두 큰술 넣어주세요 그리고", language="ko")
     out = verify(claim(quote="설탕 두 큰술", text="Thêm đường"), tr)
-    assert (out.status, out.method) == ("verified", "asr")
+    # ruling P2: the claim text is not in the quote's language: the quote matched, the claim is unchecked
+    assert (out.status, out.method) == ("quote_matched", "asr")
     assert out.matched_text and "설탕" in out.matched_text
     assert out.matched_sec == pytest.approx(10.0 + 2 * 0.4)
 
@@ -219,14 +220,14 @@ def test_each_span_is_checked_separately():
     assert out.checked_range == (0.0, 66.0)
     near = [span(0, 1), span(29, 31)]
     out = verify(claim(spans=near), tr)
-    assert out.status == "verified"
+    assert out.status == "quote_matched"  # ruling P2: no draft language given
     assert out.matched_sec == 30.0
 
 
 def test_visual_only_spans_are_not_used_for_quotes():
     tr = transcript("cẩn thận nóng", at=10.0)
     out = verify(claim(spans=[span(source="both"), span(0, 1, "visual")]), tr)
-    assert out.status == "verified"
+    assert out.status == "quote_matched"  # ruling P2: no draft language given
     assert out.checked_range == (5.0, 17.0)
 
 
@@ -273,7 +274,10 @@ def test_inferred_and_unclear_are_unverified(basis):
 def test_vietnamese_diacritics_are_significant():
     tr = transcript("cho bot mi vào tô")
     assert verify(claim(quote="bột mì", text="Bột mì"), tr).status == "unverified"
-    assert verify(claim(quote="bột mì", text="Bột mì"), transcript("cho bột mì vào tô")).status == "verified"
+    item = claim(quote="bột mì", text="Bột mì")
+    assert verify(item, transcript("cho bột mì vào tô")).status == "quote_matched"  # P2: no draft language
+    out = verify_item("p", item, transcript("cho bột mì vào tô"), None, SETTINGS, text_language="vi")
+    assert out.status == "verified"
 
 
 def test_ocr_tolerates_dropped_diacritics_but_not_numbers():
@@ -522,7 +526,7 @@ def test_short_value_quote_is_too_short():
 def test_matches_snap_to_whole_words():
     assert verify(claim(quote="cho đường", text="x"), transcript("cho đường nhé")).matched_text == "cho đường"
     out = verify(claim(quote="ận nóng", text="x"), transcript("các bạn cẩn thận nóng nhé"))
-    assert out.status == "verified" and out.matched_text == "thận nóng"
+    assert out.status == "quote_matched" and out.matched_text == "thận nóng"  # P2: text "x" rewords it
     assert out.matched_sec == pytest.approx(10.0 + 3 * 0.4)
 
 
@@ -546,11 +550,11 @@ def test_claim_numbers_keep_their_shape(quote, spoken):
 def test_claim_numbers_equal_shape_verifies():
     assert (
         verify(claim(quote="cho 1,5 kg bột", text="1,5 kg"), transcript("cho 1.5 kg bột")).status
-        == "verified"
+        == "quote_matched"  # ruling P2: no draft language given
     )
     assert (
         verify(claim(quote="cho 1/2 chén đường", text="1/2 chén"), transcript("cho 1/2 chén đường")).status
-        == "verified"
+        == "quote_matched"
     )
     # ruling R4c: the claim's number needs the unit its quote gives it ('1/2' alone, quote '1/2 chén')
     bare = claim(quote="cho 1/2 chén đường", text="1/2")
@@ -716,9 +720,9 @@ def test_decimal_leading_zeros_equal_verifies():
         verify(
             claim(quote="pha loãng dung dịch 0,05%", text="x"), transcript("pha loãng dung dịch 0,05%")
         ).status
-        == "verified"
+        == "quote_matched"  # ruling P2: text "x" rewords the quote
     )
-    assert oclaim("Dùng 0.05 ml thuốc", "Dùng 0.05 ml thuốc").status == "verified"
+    assert oclaim("Dùng 0.05 ml thuốc", "Dùng 0.05 ml thuốc").status == "quote_matched"
     assert oclaim("Dùng 0.5 ml thuốc", "Dùng 0.05 ml thuốc").status == "unverified"
 
 
@@ -775,7 +779,7 @@ UNREAD_CLAIM_CASES = [
 def test_unread_number_runs_still_have_to_agree(quote, spoken, lang):
     assert verify(claim(quote=quote, text="x"), transcript(spoken, language=lang)).status == "unverified"
     same = verify(claim(quote=quote, text="x"), transcript(quote, language=lang))
-    assert same.status == "verified"
+    assert same.status == "quote_matched"  # ruling P2: text "x" rewords the quote
 
 
 @pytest.mark.parametrize(
@@ -828,7 +832,7 @@ def test_vietnamese_words_that_fold_to_number_words_do_not_block_speech():
 
 def test_bare_leading_separator_numbers_read_with_a_zero():
     assert oclaim("Dùng 5 ml thuốc", "Dùng .05 ml thuốc").status == "unverified"
-    assert oclaim("Dùng .05 ml thuốc", "Dùng .05 ml thuốc").status == "verified"
+    assert oclaim("Dùng .05 ml thuốc", "Dùng .05 ml thuốc").status == "quote_matched"  # P2: text "x"
     # ruling R3 reads '.05' as '0.05', but ruling R7 compares on-screen words as written
     assert oclaim("Dùng 0.05 ml thuốc", "Dùng .05 ml thuốc").status == "unverified"
     assert oclaim("Dùng 0.5 ml thuốc", "Dùng .05 ml thuốc").status == "unverified"
@@ -950,17 +954,25 @@ ROUND_4_POSITIVES = [
         stated_param("1020", "gram", "cho 1020 gram bột"),
         transcript("cho một nghìn không trăm hai mươi gram bột"),
     ),
+    lambda: verify(vi_mat("20", "gram", "cho hai chục gram muối"), transcript("cho hai chục gram muối")),
+]
+# ruling P2: these claims reword their quote (text "x"), so a match is only quote_matched
+ROUND_4_CLAIM_POSITIVES = [
     lambda: verify(
         claim(quote="pha loãng dung dịch 0,05%", text="x"), transcript("pha loãng dung dịch 0,05%")
     ),
     lambda: oclaim("Dùng.05 ml thuốc", "Dùng.05 ml thuốc"),
-    lambda: verify(vi_mat("20", "gram", "cho hai chục gram muối"), transcript("cho hai chục gram muối")),
 ]
 
 
 @pytest.mark.parametrize("case", ROUND_4_POSITIVES)
 def test_round_4_correct_readings_still_verify(case):
     assert case().status == "verified"
+
+
+@pytest.mark.parametrize("case", ROUND_4_CLAIM_POSITIVES)
+def test_round_4_correct_claim_readings_match_their_quote(case):
+    assert case().status == "quote_matched"
 
 
 def test_numbers_within_eight_tokens_block_a_correct_quote_recall_trade_off():

@@ -35,6 +35,8 @@ ASR nhận ngôn ngữ `en`, 431 từ, chép đúng lời người nói (kể c�
 
 Trên video này: 1/2 ✓ sai nghĩa (mục tiêu spec ≥ 95% ✓ đúng) và 4 mục đúng bị "?". Video phần mềm có ít định lượng nên phần kiểm chứng định lượng chưa được thử; cần một video nấu ăn hoặc sửa chữa. Một video không phải điểm rubric.
 
+**Kiểm chứng lại offline sau follow-up 2 (`docs/decisions.md` mục 47–48), không gọi Gemini.** Cùng draft, transcript ASR đã cache và PaddleOCR local trên các frame `ocr_seconds` của từng mục: `python --version` ✓ OCR 150 s, `print("Amit Diwan")` ✓ OCR 177 s; câu "Đã hoàn tất cài đặt Python" thành `quote_matched` (≈, chưa kiểm chứng câu diễn giải), không còn ✓. Lệnh `python` (13,5 s) lần này ra "?" cả với code trước thay đổi: OCR offline đọc hàng thành `α python` thay vì `python`, khác lượt live; không do thay đổi này.
+
 ## Cải tiến chất lượng ngày 21/10/2026
 
 Kết quả mới nhất: [báo cáo cải tiến](quality-improvements.md) và [audit JSON](verification/live-quality-improvement.json). Contract v7 giữ scope của các claim, chuyển phần suy luận sang review, truyền ngữ cảnh ba bước trước và chặn mốc ảnh mâu thuẫn. Repair nhận JSON gốc có giới hạn trong bộ nhớ, không lưu raw vào audit.

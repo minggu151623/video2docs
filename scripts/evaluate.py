@@ -122,6 +122,7 @@ def evaluate(draft, report: VerificationReport | dict, truth: dict) -> dict:
         "verified_false_negative_rate": None,
         "step_coverage": None,
         "not_tutorial_correct": draft.is_tutorial == truth["is_tutorial"],
+        "quote_matched": {"count": 0, "paths": []},
     }
     truth_steps = truth.get("steps", [])
     matched = match_steps(draft.steps, truth_steps)
@@ -129,6 +130,12 @@ def evaluate(draft, report: VerificationReport | dict, truth: dict) -> dict:
 
     verified_total = verified_correct = wrong = wrong_inputs = 0
     unmatched: list[str] = []
+    # ruling P2: quote_matched (quote found, paraphrase unchecked) is not verified; it is only counted
+    paraphrased = [
+        p
+        for p, _, _ in iter_grounded_items(draft)
+        if p in report.items and report.items[p].status == "quote_matched"
+    ]
     reached: dict[tuple, bool] = {}  # annotated quantity -> some matching draft item is verified
     for path, collection, item in iter_grounded_items(draft):
         kind, found, right = _counterparts(collection, item, path, truth, matched, draft.language)
@@ -151,6 +158,7 @@ def evaluate(draft, report: VerificationReport | dict, truth: dict) -> dict:
     result["wrong_verified_quantities"] = wrong
     result["wrong_verified_exact_inputs"] = wrong_inputs
     result["verified_unmatched"] = {"count": len(unmatched), "paths": unmatched}
+    result["quote_matched"] = {"count": len(paraphrased), "paths": paraphrased}
     expected = {("m", i) for i, m in enumerate(truth.get("materials", [])) if m.get("quantity")}
     expected |= {("p", i) for i in range(len(truth.get("parameters", [])))}
     present = [k for k in reached if k in expected]
@@ -178,6 +186,7 @@ def blocked_result(truth: dict) -> dict:
         "verified_false_negative_rate": None,
         "step_coverage": None,
         "not_tutorial_correct": truth["is_tutorial"] is False,
+        "quote_matched": {"count": 0, "paths": []},
     }
 
 

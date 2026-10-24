@@ -52,6 +52,8 @@ export default function VerificationSummary({
             {sum.total
               ? `${sum.verified}/${sum.total} mục đã kiểm chứng`
               : "Không có mục nào cần kiểm chứng"}
+            {sum.quoteMatched > 0 &&
+              ` · ${sum.quoteMatched} mục chỉ khớp nguyên văn, câu diễn giải chưa kiểm chứng`}
             {sum.notCheckable > 0 &&
               ` · ${sum.notCheckable} mục không có văn bản để đối chiếu`}
           </p>

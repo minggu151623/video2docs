@@ -72,8 +72,13 @@ export interface Generation {
   quality_status: string;
   job_id: string;
 }
+/** `quote_matched`: a claim's quote matched, but its paraphrase is not verified (ruling P2). */
 export type VerificationStatus =
-  "verified" | "unverified" | "not_checkable" | "not_checked";
+  | "verified"
+  | "quote_matched"
+  | "unverified"
+  | "not_checkable"
+  | "not_checked";
 export interface VerificationItem {
   status: VerificationStatus;
   method: "asr" | "ocr" | "none";

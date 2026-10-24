@@ -52,6 +52,7 @@ Các mục được chấm: `materials`, `parameters`, `warnings` (bước), `sa
 | `wrong_verified_quantities` | số mục `verified` thuộc `materials` hoặc `parameters` có tên khớp đáp án nhưng giá trị hoặc đơn vị khác, cộng các câu có số khớp nội dung đáp án nhưng khác số | 0 |
 | `wrong_verified_exact_inputs` | số `exact_inputs` `verified` gần giống một lệnh đáp án nhưng không bằng | 0 |
 | `verified_unmatched` | `{"count", "paths"}`: các mục `verified` được chấm mà không ghép được với đáp án nào | xem bằng mắt |
+| `quote_matched` | `{"count", "paths"}`: mọi mục `quote_matched` (nguyên văn khớp nhưng câu diễn giải chưa kiểm chứng, mục 48 `docs/decisions.md`); không tính là `verified`, không vào tử hay mẫu của `verified_precision` | báo cáo |
 | `verified_false_negative_rate` | định lượng đáp án có mặt đúng trong output mà mục đó không `verified` / số định lượng đáp án có mặt đúng; `null` khi không có | báo cáo, chưa đặt ngưỡng |
 | `step_coverage` | số bước đáp án ghép được / số bước đáp án; `null` khi đáp án không có bước | báo cáo, chưa đặt ngưỡng |
 | `not_tutorial_correct` | `is_tutorial` của output bằng của đáp án (với `--blocked-by-gate`: đáp án phải là `false`) | 2/2 video không phải tutorial bị chặn |

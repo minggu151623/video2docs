@@ -24,6 +24,7 @@ ITEM_LABELS = {
     "tips": ("Mẹo", "Tip"),
 }
 NOT_CHECKED = ("unverified", "not_checked")
+QUOTE_CHARS = 80  # ruling P2: matched text shown in a quote_matched badge
 
 
 def stamp(seconds):
@@ -81,6 +82,16 @@ def render_markdown(draft, asset, model, generation, evidence, verification=None
                 where = t("khớp chữ trên màn hình", "matches on-screen text")
             at = f" {link(result.matched_sec)}" if result.matched_sec is not None else ""
             return f" · ✓ {where}{at}"
+        if state == "quote_matched":  # ruling P2: the quote exists; the claim's own words were not checked
+            result = found[paths[id(item)]]
+            where = t("khớp nguyên văn lời nói", "quote matches speech")
+            if result.method == "ocr":
+                where = t("khớp nguyên văn chữ trên màn hình", "quote matches on-screen text")
+            at = f" {link(result.matched_sec)}" if result.matched_sec is not None else ""
+            quoted = result.matched_text or ""
+            if len(quoted) > QUOTE_CHARS:
+                quoted = quoted[:QUOTE_CHARS] + "…"
+            return f" · ≈ {where}{at}: “{escape(quoted)}”"
         if state == "not_checkable":
             return " · " + t("không có văn bản để đối chiếu", "no text to check against")
         return " · ? " + t("chưa kiểm chứng", "not verified")
@@ -190,9 +201,12 @@ def render_markdown(draft, asset, model, generation, evidence, verification=None
     }
     for _, name, item in iter_grounded_items(draft):
         if name == "exact_inputs" or supported_claim(item):
-            if status(item) not in NOT_CHECKED:
+            if status(item) == "quote_matched":
+                reason = t("câu diễn giải chưa kiểm chứng", "paraphrase not verified")
+            elif status(item) in NOT_CHECKED:
+                reason = t("chưa kiểm chứng", "not verified")
+            else:
                 continue
-            reason = t("chưa kiểm chứng", "not verified")
         else:
             reason = t("chưa đủ bằng chứng", "insufficient evidence")
         label = materials_label if name == "materials" else t(*ITEM_LABELS[name])

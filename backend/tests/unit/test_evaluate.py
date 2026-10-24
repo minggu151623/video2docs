@@ -376,3 +376,18 @@ def test_exact_inputs_are_scored_against_annotated_inputs():
     assert result["wrong_verified_exact_inputs"] == 1
     assert result["verified_unmatched"] == {"count": 1, "paths": ["steps/0/exact_inputs/2"]}
     assert result["verified_precision"] == pytest.approx(1 / 3)
+
+
+def test_quote_matched_is_not_verified_and_is_counted():
+    """Ruling P2: a claim whose quote matched but whose paraphrase was not checked is not verified."""
+    steps = [step("Nướng", 0, warnings=[warning("Cẩn thận, khay rất nóng"), warning("Đeo kính bảo hộ")])]
+    truth = annotation(warnings=["Cẩn thận khay rất nóng"])
+    report = make_report(**{"steps/0/warnings/0": "verified", "steps/0/warnings/1": "quote_matched"})
+    result = run(make_draft(steps=steps), report, truth)
+    assert result["verified_precision"] == 1.0
+    assert result["verified_unmatched"]["count"] == 0
+    assert result["counts"]["verified_items"] == 1
+    assert result["quote_matched"] == {"count": 1, "paths": ["steps/0/warnings/1"]}
+    only = run(make_draft(steps=steps), make_report(**{"steps/0/warnings/0": "quote_matched"}), truth)
+    assert only["verified_precision"] is None and only["quote_matched"]["count"] == 1
+    assert evaluate.blocked_result(truth)["quote_matched"] == {"count": 0, "paths": []}

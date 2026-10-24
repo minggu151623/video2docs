@@ -25,7 +25,7 @@ from app.services.verification.ocr import get_ocr
 LOG = logging.getLogger("video2docs.verification")
 Status = Literal["ok", "skipped", "failed"]
 STOP = {"CANCELLED", "LEASE_LOST", "JOB_TIMEOUT", "DISK_FULL", "STORAGE_LIMIT"}
-REVIEW = {"unverified", "not_checked"}
+REVIEW = {"unverified", "quote_matched", "not_checked"}  # ruling P2: a paraphrase needs review
 EOF_MARGIN = 0.5  # same distance from the end as screenshot fallbacks; frame timing tolerates 0.5 s
 NO_FRAME = "không trích được khung hình để OCR"
 TIMEOUTS = {"ASR_TIMEOUT", "MEDIA_TIMEOUT"}

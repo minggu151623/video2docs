@@ -33,7 +33,9 @@ RANGE_GAP = 4  # words allowed between two numbers joined by a range word ('2 ph
 STOP_WORDS = {"và", "của", "cho", "các", "những", "với", "loại", "the", "of", "and", "for", "to", "with"}
 NAME_SCORE = 80
 OCR_WORD_SCORE = 80
-PROMPT = re.compile(r"^\s*(?:[$#>](?=\s)|PS\s[^>\n]*>)")
+# ruling P1: one leading prompt: POSIX `$ # >`, PowerShell `PS ...>`, Windows `C:\...>`, Python `>>>`
+# and `...`, IPython `In [n]:`
+PROMPT = re.compile(r"^\s*(?:>>>|\.\.\.(?=\s)|In\s?\[\d+\]:|[$#>](?=\s)|PS\s[^>\n]*>|[A-Za-z]:\\[^>\n]*>)")
 PUNCT = ".,;:!?()[]{}\"'"
 SPEECH_GAP_SEC = 0.7  # Transcript has no segments: a pause this long between words is a boundary
 
@@ -221,11 +223,13 @@ def _squash(text: str) -> str:
 
 
 def exact_rows(text: str, ocr_text: str) -> str | None:
-    """C4: a command on screen is one or more whole OCR rows, after at most one leading prompt token."""
+    """C4 + P1: a command on screen is one or more whole OCR rows, after at most one leading prompt
+    (only when command text follows it on the same row)."""
     want = _squash(text)
     rows = [r for r in ocr_text.split("\n") if r.strip()]
     for i, row in enumerate(rows):
-        for head in dict.fromkeys((row, PROMPT.sub("", row, count=1))):
+        bare = PROMPT.sub("", row, count=1)
+        for head in dict.fromkeys((row, bare) if bare.strip() else (row,)):  # P1: a command follows
             got, j = _squash(head), i + 1
             while len(got) < len(want) and j < len(rows):
                 got, j = got + _squash(rows[j]), j + 1

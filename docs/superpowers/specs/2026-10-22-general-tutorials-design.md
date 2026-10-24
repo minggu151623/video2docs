@@ -85,13 +85,15 @@ App ghi, model không điền. Lưu tách khỏi draft của model, gắn theo �
 
 | Trường | Giá trị |
 | --- | --- |
-| `status` | `verified`: ASR/OCR khớp quanh mốc bằng chứng. `unverified`: đã kiểm tra nhưng không khớp. `not_checkable`: hành động không có lời nói hay chữ để đối chiếu. `not_checked`: bộ kiểm chứng lỗi hoặc không chạy |
+| `status` | `verified`: ASR/OCR khớp quanh mốc bằng chứng (với câu nhận định: cả câu cũng đã được đối chiếu, xem dưới). `quote_matched`: chỉ với câu nhận định (`prerequisites`, `safety`, `troubleshooting`, `warnings`, `tips`): nguyên văn qua mọi bước kiểm tra nhưng câu diễn giải chưa được kiểm chứng. `unverified`: đã kiểm tra nhưng không khớp. `not_checkable`: hành động không có lời nói hay chữ để đối chiếu. `not_checked`: bộ kiểm chứng lỗi hoặc không chạy |
 | `method` | `asr`, `ocr`, `none` |
 | `matched_text` | Đoạn khớp được, hoặc null |
 | `checked_range` | Khoảng thời gian đã đối chiếu |
 | `reason` | Lý do khi không phải `verified` |
 
-Có `unverified` hoặc `not_checked` thì generation mang `needs_review`. Bước kiểm chứng chạy lại được mà không gọi Gemini.
+Câu nhận định có nguyên văn khớp chỉ được `verified` khi `text` cùng ngôn ngữ với nguồn (so mã ngôn ngữ chính, không phân biệt hoa thường: `vi-VN` = `vi`; nguồn ASR: `transcript.language`; nguồn OCR: `transcript.language` khi transcript có từ, nếu không là không rõ) và `token_set_ratio(normalize(text), normalize(nguyên văn)) ≥ 85`; nếu không thì `quote_matched` (cùng `method`, `matched_text`, `matched_sec`, `checked_range`). `Material`, `Parameter`, `ExactInput` không đổi. `quote_matched` không phải `verified` (quyết định 48).
+
+Có `unverified`, `quote_matched` hoặc `not_checked` thì generation mang `needs_review`. Bước kiểm chứng chạy lại được mà không gọi Gemini.
 
 ### 2.5. Tương thích
 
@@ -130,7 +132,7 @@ Hai tầng, đều là thuật toán, không gọi LLM.
    - `on_screen_text` so với kết quả OCR của các frame đã trích.
    - Chuẩn hóa: Unicode NFKC, bỏ khác biệt hoa/thường và khoảng trắng; giữ dấu tiếng Việt.
    - Con số phải khớp chính xác. Phần chữ khớp gần đúng theo ngưỡng cấu hình (khởi điểm 85/100, chỉnh theo bộ đánh giá).
-   - `exact_inputs` dùng ngưỡng cao (khởi điểm 95/100), chỉ bỏ qua khác biệt khoảng trắng.
+   - `exact_inputs` dùng ngưỡng cao (khởi điểm 95/100), chỉ bỏ qua khác biệt khoảng trắng. Trên OCR phải bằng trọn hàng, sau khi bỏ tối đa một dấu nhắc (`$ # >`, `PS …>`, `X:\…>`, `>>>`, `...`, `In [n]:`) khi có chữ lệnh theo sau (quyết định 34, 47).
    - Số đọc bằng chữ: chuẩn hóa sang chữ số cho tiếng Việt và tiếng Anh. Ngôn ngữ khác không khớp thì rơi về `unverified` (báo nhầm theo hướng an toàn).
 3. Mục `observed` chỉ có hành động: `not_checkable`, `method = none`.
 
@@ -181,15 +183,19 @@ Huy hiệu kiểm chứng bằng chữ (font DejaVu hỗ trợ ✓):
 | --- | --- |
 | `verified` ASR | ✓ khớp lời nói [mốc] |
 | `verified` OCR | ✓ khớp chữ trên màn hình [mốc] |
+| `quote_matched` ASR | ≈ khớp nguyên văn lời nói [mốc]: “<matched_text>” (en: ≈ quote matches speech [t]: “…”) |
+| `quote_matched` OCR | ≈ khớp nguyên văn chữ trên màn hình [mốc]: “<matched_text>” (en: ≈ quote matches on-screen text [t]: “…”) |
 | `unverified`, `not_checked` | ? chưa kiểm chứng |
 | `not_checkable` | không có văn bản để đối chiếu |
 
-Mục `unverified`/`not_checked` vẫn nằm đúng chỗ trong bước và được liệt kê thêm ở "Điểm chưa rõ". Mục `inferred`/`unclear` chỉ ở "Điểm chưa rõ".
+`matched_text` trong huy hiệu `quote_matched` được escape Markdown, cắt còn 80 ký tự kèm "…".
+
+Mục `unverified`/`not_checked` vẫn nằm đúng chỗ trong bước và được liệt kê thêm ở "Điểm chưa rõ". Mục `quote_matched` cũng vậy, dòng "<nhãn mục>, câu diễn giải chưa kiểm chứng: <text>" (en "<label>, paraphrase not verified: …"). Mục `inferred`/`unclear` chỉ ở "Điểm chưa rõ".
 
 ### 4.4. Giao diện
 
 - Câu chữ upload: "Video hướng dẫn: nấu ăn, sửa chữa, phần mềm…". Bỏ "command" trong lời nhắc kiểm tra.
-- Màn hình kết quả: nhãn lĩnh vực, tóm tắt "N/M mục đã kiểm chứng", bộ lọc "chỉ hiện mục chưa kiểm chứng", huy hiệu trong danh sách bước.
+- Màn hình kết quả: nhãn lĩnh vực, tóm tắt "N/M mục đã kiểm chứng" (N không gồm `quote_matched`, được đếm riêng), bộ lọc "chỉ hiện mục chưa kiểm chứng", huy hiệu trong danh sách bước; `quote_matched` tính là chưa kiểm chứng ở huy hiệu bước và bộ lọc.
 - Màn hình `not_tutorial` như mục 4.2.
 - Kiểu TypeScript sinh lại từ Pydantic (`scripts/generate_schema.py`, `npm --prefix frontend run types`).
 

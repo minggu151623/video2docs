@@ -108,11 +108,14 @@ def test_r2b_ocr_text_without_numbers_must_match_token_for_token(case):
 
 
 def test_r2_exact_text_still_verifies():
+    # ruling P2: without the draft language (or in another language) a claim's match is only quote_matched
     item = cl("Cuire", ost="Cuire pendant trois minutes")
-    assert show(item, "Recette\nCuire pendant trois minutes").status == "verified"
-    assert show(cl("Chạm vào chảo nóng", ost="Chạm vào chảo nóng"), "Cham vao chao nong").status == "verified"
+    assert show(item, "Recette\nCuire pendant trois minutes").status == "quote_matched"
+    item = cl("Chạm vào chảo nóng", ost="Chạm vào chảo nóng")
+    assert show(item, "Cham vao chao nong").status == "quote_matched"
+    assert show(item, "Cham vao chao nong", text_language="vi").status == "verified"
     item = cl("Cuire", "faites cuire pendant trois minutes")
-    assert say(item, "alors faites cuire pendant trois minutes", "fr", "vi").status == "verified"
+    assert say(item, "alors faites cuire pendant trois minutes", "fr", "vi").status == "quote_matched"
 
 
 def test_r2b_recall_cost_vietnamese_ocr_needs_every_word():
@@ -248,7 +251,9 @@ def test_r4_same_units_and_symbols_verify():
     assert say(cl("Tỉ lệ 1:30", "tỉ lệ 1:30 nhé"), "tỉ lệ 1:30 nhé", "vi", "vi").status == "unverified"
     item = cl("The kit costs $5 per bag", "the kit costs $5 per bag")
     assert say(item, "so the kit costs $5 per bag here", "en", "en").status == "verified"
-    assert show(cl("Speed x2", ost="Playback speed x2"), "Playback speed x2").status == "verified"
+    item = cl("Speed x2", ost="Playback speed x2")
+    assert show(item, "Playback speed x2").status == "quote_matched"  # ruling P2: no draft language
+    assert ocr_lang(item, "Playback speed x2", "en").status == "quote_matched"  # P2: draft vi, video en
     item = cl("Cho 2 muỗng canh muối", "cho 2 muỗng canh muối")
     assert say(item, "bây giờ cho 2 muỗng canh muối", "vi", "vi").status == "verified"
 
@@ -289,16 +294,19 @@ def test_residual_positives_still_verify():
         say(cl("Rest 30 minutes", "rest 30 minutes"), "now rest 30 minutes", "en", "en").status == "verified"
     )
     assert (
-        say(cl("Rest 30 minutes", "rest 30 minutes"), "now rest 30 minutes", "en", None).status == "verified"
+        say(cl("Rest 30 minutes", "rest 30 minutes"), "now rest 30 minutes", "en", None).status
+        == "quote_matched"  # ruling P2: no draft language given
     )
-    # different languages, units from the table
+    # different languages, units from the table: every guard passes, but by ruling P2 a translated claim
+    # is only quote_matched
     assert (
         say(cl("Nấu ba phút", "cook for three minutes"), "now cook for three minutes", "en", "vi").status
-        == "verified"
+        == "quote_matched"
     )
-    assert say(cl("Cook for 3 minutes", "nấu 3 phút"), "giờ nấu 3 phút nhé", "vi", "en").status == "verified"
+    item = cl("Cook for 3 minutes", "nấu 3 phút")
+    assert say(item, "giờ nấu 3 phút nhé", "vi", "en").status == "quote_matched"
     item = cl("Add 2 tablespoons of salt", "cho 2 muỗng canh muối")
-    assert say(item, "cho 2 muỗng canh muối", "vi", "en").status == "verified"
+    assert say(item, "cho 2 muỗng canh muối", "vi", "en").status == "quote_matched"
     assert (
         say(
             par("1:30", "giờ", "nướng bánh 1:30 giờ", name="nướng bánh"),
@@ -349,7 +357,8 @@ def test_r6_positives_unaffected():
     item = mat("2", "cups", "add 2 cups of flour", name="flour")
     assert say(item, "now add 2 cups of flour", "en", "en").status == "verified"
     # a foreign fraction word in a text without numbers is not a fraction
-    assert show(cl("Ouvrir le menu", ost="Ouvrir le menu demi"), "Ouvrir le menu demi").status == "verified"
+    item = cl("Ouvrir le menu", ost="Ouvrir le menu demi")
+    assert show(item, "Ouvrir le menu demi").status == "quote_matched"  # ruling P2: no draft language
 
 
 R6_NEGATION_CASES = [
@@ -625,8 +634,10 @@ def test_r13_other_transcript_languages_keep_r2a(language):
 
 def test_r13_vietnamese_or_english_transcript_lets_ocr_numbers_verify():
     for language in ("vi", "en", "vi-VN", "EN"):
+        # ruling P2: the draft is vi, so the claim is verified only beside a vi transcript (primary subtag)
+        expected = "verified" if language.lower().startswith("vi") else "quote_matched"
         assert ocr_lang(cl("Cuire 2 minutes", ost="Cuire 2 minutes"), "Cuire 2 minutes", language).status == (
-            "verified"
+            expected
         )
         item = par("180", "°C", ost="Nướng ở 180°C", name="Nướng")
         assert ocr_lang(item, "Nướng ở 180°C", language).status == "verified"
@@ -637,7 +648,8 @@ def test_r13_vietnamese_or_english_transcript_lets_ocr_numbers_verify():
 
 
 def test_r13_text_without_numbers_still_verifies_without_a_transcript():
-    assert ocr_lang(cl("Bấm nút Lưu", ost="Bấm nút Lưu"), "Bấm nút Lưu", False).status == "verified"
+    # ruling P2: without a transcript the screen's language is unknown, so a claim is only quote_matched
+    assert ocr_lang(cl("Bấm nút Lưu", ost="Bấm nút Lưu"), "Bấm nút Lưu", False).status == "quote_matched"
     item = exact("git status", on_screen_text="git status")
     assert ocr_lang(item, "git status", False).status == "verified"
     assert ocr_lang(mat(None, None, ost="Muối", name="Muối"), "Muối", False).status == "verified"
@@ -839,7 +851,8 @@ def test_round4_positives():
     cuire = cl("Cuire 2 minutes", ost="Cuire 2 minutes")
     assert ocr_lang(cuire, "Cuire 2 minutes", False).reason == NO_LANGUAGE
     assert ocr_lang(cuire, "Cuire 2 minutes", "fr").reason == NO_DIGITS
-    assert ocr_lang(cuire, "Cuire 2 minutes", "en").status == "verified"
+    assert ocr_lang(cuire, "Cuire 2 minutes", "en").status == "quote_matched"  # P2: draft vi, video en
+    assert ocr_lang(cuire, "Cuire 2 minutes", "vi").status == "verified"
     item = mat("0,5", "lít", "dùng không phẩy năm lít nước", name="nước")
     assert say(item, "các bạn dùng không phẩy năm lít nước nhé", "vi", "vi").status == "verified"
 
@@ -983,8 +996,12 @@ def test_r16_gate_needs_words_for_every_numeric_item():
     for language in ("vi", "en"):
         assert ocr_silent(item, "Nướng ở 180°C", language).reason == NO_LANGUAGE
         assert ocr_lang(item, "Nướng ở 180°C", language).status == "verified"
-    # text without numbers still verifies on a silent video
-    assert ocr_silent(cl("Bấm nút Lưu", ost="Bấm nút Lưu"), "Bấm nút Lưu", "en").status == "verified"
+    # text without numbers still matches on a silent video; with no words the screen's language is
+    # unknown, so by ruling P2 the claim is only quote_matched
+    assert ocr_silent(cl("Bấm nút Lưu", ost="Bấm nút Lưu"), "Bấm nút Lưu", "en").status == "quote_matched"
+    assert (
+        ocr_silent(exact("git status", on_screen_text="git status"), "git status", "en").status == "verified"
+    )
 
 
 # R16c: the symbol-only tokens (and a standalone x) within 3 tokens before each number must agree

@@ -101,7 +101,9 @@ def test_c1_recall_cost_two_numbers_in_one_quote():
 
 def test_c1_equal_numbers_still_verify():
     assert say(par("3", "phút", "nấu 3 phút nhé"), "bây giờ nấu 3 phút nhé").status == "verified"
-    assert say(cl("Nấu 3 phút", "nấu 3 phút nhé"), "bây giờ nấu 3 phút nhé").status == "verified"
+    item = cl("Nấu 3 phút", "nấu 3 phút nhé")
+    assert say(item, "bây giờ nấu 3 phút nhé").status == "quote_matched"  # P2: no draft language given
+    assert say(item, "bây giờ nấu 3 phút nhé", text_language="vi").status == "verified"
     assert say(par("2-3", "phút", "nấu khoảng 2-3 phút"), "nấu khoảng 2-3 phút nhé").status == "verified"
 
 
@@ -137,8 +139,10 @@ def test_c2_unit_word_after_a_number_must_match(case):
 
 def test_c2_same_unit_word_verifies():
     item = cl("Add 2 tablespoons of salt", "add 2 tablespoons of salt")
-    assert say(item, "now add 2 tablespoons of salt to it", "en").status == "verified"
-    assert show(cl("Add 2 tbsp salt", ost="Add 2 tbsp salt"), "Add 2 tbsp salt").status == "verified"
+    # ruling P2: without the draft language a claim's match is only quote_matched
+    assert say(item, "now add 2 tablespoons of salt to it", "en").status == "quote_matched"
+    assert say(item, "now add 2 tablespoons of salt to it", "en", "en").status == "verified"
+    assert show(cl("Add 2 tbsp salt", ost="Add 2 tbsp salt"), "Add 2 tbsp salt").status == "quote_matched"
     assert show(par("200", "g", ost="Bột 200 g", name="Bột"), "Nguyên liệu: Bột 200 g").status == "verified"
 
 
@@ -151,7 +155,8 @@ def test_c3a_claim_text_is_read_in_the_draft_language():
     item = cl("Nấu ba phút", "faites cuire pendant trois minutes")
     assert say(item, "faites cuire pendant quatre minutes", "fr", "vi").status == "unverified"
     item = cl("Nấu trong ba phút", "cook for three minutes")
-    assert say(item, "now cook for three minutes and stir", "en", "vi").status == "verified"
+    # ruling P2: a Vietnamese claim from an English quote is a translation, so only the quote matched
+    assert say(item, "now cook for three minutes and stir", "en", "vi").status == "quote_matched"
 
 
 @pytest.mark.parametrize(
@@ -167,7 +172,7 @@ def test_c3a_claim_text_is_read_in_the_draft_language():
 )
 def test_c3b_spelled_numbers_on_screen_must_match(text, ost, screen):
     assert show(cl(text, ost=ost), screen).status == "unverified"
-    assert show(cl(text, ost=ost), ost).status == "verified"
+    assert show(cl(text, ost=ost), ost).status == "quote_matched"  # ruling P2: no draft language given
 
 
 C3C_CASES = [
@@ -188,9 +193,14 @@ def test_c3c_languages_without_number_words_need_an_exact_segment(case):
 
 
 def test_c3c_exact_segment_still_verifies():
-    assert say(cl("Thêm đường", "설탕 두 큰술 넣어요"), "이제 설탕 두 큰술 넣어요", "ko").status == "verified"
+    # ruling P2: claim text not in the quote's language (or no draft language): only quote_matched
+    assert (
+        say(cl("Thêm đường", "설탕 두 큰술 넣어요"), "이제 설탕 두 큰술 넣어요", "ko").status
+        == "quote_matched"
+    )
     item = cl("Cuire", "faites cuire pendant trois minutes")
-    assert say(item, "alors faites cuire pendant trois minutes", "fr").status == "verified"
+    assert say(item, "alors faites cuire pendant trois minutes", "fr").status == "quote_matched"
+    assert say(item, "alors faites cuire pendant trois minutes", "fr", "fr").status == "verified"
 
 
 # ---- C4: commands must be a whole OCR row or an isolated stretch of speech -----------------------
@@ -279,7 +289,8 @@ def test_i1_khong_is_negation_unless_a_number_word_follows():
     assert number_tokens("không chạm vào chảo", "vi") == []
     assert number_tokens("một nghìn không trăm hai mươi", "vi") == ["1020"]
     item = cl("You do not need to unplug", "you don't need to unplug it before opening")
-    assert say(item, "you don't need to unplug it before opening", "en").status == "verified"
+    # ruling P2: no draft language given, and the claim rewords its quote (token_set_ratio 84 < 85)
+    assert say(item, "you don't need to unplug it before opening", "en").status == "quote_matched"
 
 
 # ---- I2: the item's name must be in its own quote ------------------------------------------------
@@ -303,4 +314,5 @@ def test_c3b_spelled_numbers_on_screen_also_get_the_neighbour_check():
     # probe7: a spelled range on screen used to verify its second endpoint
     item = cl("Nấu ba phút cho chín", ost="Nấu ba phút cho chín")
     assert show(item, "Nấu hai đến ba phút cho chín").status == "unverified"
-    assert show(item, "Nấu ba phút cho chín").status == "verified"
+    assert show(item, "Nấu ba phút cho chín").status == "quote_matched"  # ruling P2: no draft language
+    assert show(item, "Nấu ba phút cho chín", text_language="vi").status == "verified"
