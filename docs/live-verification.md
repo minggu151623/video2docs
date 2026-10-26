@@ -2,6 +2,35 @@
 
 Khởi tạo: 20/10/2026; cập nhật: 21/10/2026, Asia/Ho_Chi_Minh. Đây là báo cáo live, tách khỏi các test mock trước đó.
 
+## Video nấu ăn ngày 26/10/2026
+
+Người dùng đồng ý phí. Video do người dùng cung cấp: làm bánh pancake souffle từ 2 trứng, 5 phút 26, 1280×720, lời thuyết minh tiếng Anh, chữ chèn định lượng bằng tiếng Anh; video không đưa vào repo. Nhánh tại `9002802`, `gemini-3.1-flash-lite`, đoạn 120 giây, tài liệu tiếng Việt. Đáp án chuẩn được ghi **trước** khi xem output, từ crop vùng chữ chèn mỗi giây và ảnh mỗi 4 giây (chỉ lưu local vì video chưa rõ quyền). [Tóm tắt số liệu](verification/live-cooking.json), không kèm lời thoại.
+
+**Pipeline.** 3 request analyze, không repair, 12 bước, 12 ảnh, MD/ZIP; PDF lần đầu lỗi `PDF_DEPENDENCY` vì cache Chromium của Playwright đã bị xóa khỏi máy, xuất lại 15 trang sau `uv run playwright install chromium`. Cleanup pending 0. Gemini xếp `cooking`, khẩu phần "2 trứng".
+
+| Giai đoạn | Thời gian |
+| --- | --- |
+| ASR (754 từ, `en`) | 56 s |
+| Chuẩn bị + upload 3 đoạn | 252 s (upload 212 s) |
+| Gemini 3 đoạn | 56 s |
+| Trích ảnh | 43 s |
+| Kiểm chứng | 9 s |
+| Tổng, video 5 phút 26 | 418 s |
+
+**Nội dung so với đáp án.** Gemini chép đúng 4/4 định lượng trên màn hình (2 trứng, sữa 4 tsp, vani 1/2 tsp, bột mì 3 tbsp), "đường" không ghi lượng, thời gian nấu 7–10 phút và 5 phút, mẹo để lòng trắng vào tủ đông 10–15 phút, các cảnh báo đều khớp lời nói. Ảnh đúng nội dung 12/12. Bước: 12 so với 14 của đáp án; Gemini gộp sữa/vani/bột vào một bước, đường gộp vào bước đánh bông, bỏ bước bày đĩa; bước "Đánh bông lòng trắng trứng" bị lặp ở ranh giới đoạn 1/2 (77–119 s và 115–133 s). `step_coverage` của script là 5/14 vì ghép tiêu đề chặt (±10 s, token_set ≥ 60).
+
+**Kiểm chứng: 28 mục, 1 ✓, 7 ≈, 15 ?, 5 không có văn bản.** ✓ duy nhất (vani 1/2 tsp, OCR 36 s) đúng; script báo `verified_precision` 0 chỉ vì đáp án ghi vani là nguyên liệu còn output ghi là thông số của bước. 0 định lượng sai mang ✓. Nhưng `verified_false_negative_rate` = 1,0: cả 4 định lượng đúng đều không được ✓. Nguyên nhân, theo lý do trong báo cáo:
+
+| Nguyên nhân | Mục bị ảnh hưởng |
+| --- | --- |
+| Luật tên mục (I2) luôn áp cho OCR: tên tiếng Việt ("Sữa", "Bột mì") không xuất hiện trong chữ tiếng Anh trên màn hình | sữa, bột mì, đường, 2 thông số |
+| Đơn vị đã dịch ("phút") không có trong câu trích tiếng Anh ("minutes"); luật đơn vị cho nguyên liệu/thông số không dùng bảng quy đổi | thời gian 5 phút |
+| Giá trị là một khoảng ("7-10") bị luật khoảng giá trị chặn dù câu trích nói đúng "7 to 10 minutes" | thời gian 7–10 phút |
+| Model ghi trứng là `stated` với câu trích không chứa số, dù có chữ "2 eggs" trên màn hình | trứng |
+| Mô tả tiếng Việt diễn giải câu tiếng Anh: được ≈ nếu qua mọi kiểm tra; bị ? khi số/phủ định giữa bản dịch và câu gốc lệch | 7 ≈, 6 ? |
+
+Kết luận cho video này: phần trích nội dung của Gemini tốt; phần kiểm chứng an toàn (không có ✓ sai) nhưng gần như không xác nhận được gì khi tài liệu khác ngôn ngữ video. Một video, chưa phải điểm rubric.
+
 ## Schema v2 và kiểm chứng ASR/OCR ngày 24/10/2026
 
 Người dùng đồng ý phí. Nhánh `feat/general-tutorials` tại `72006e2`, model `gemini-3.1-flash-lite`, đoạn 120 giây.
