@@ -23,7 +23,8 @@ Safety rules, every doubt ends as `unverified`:
   name is proven (word for word, or a material through the ingredient dictionary), else `quote_matched`;
   units are the word right after the value's number, as written in one language and through the unit
   table across languages; a range value ('7-10') meets 'A to B' / 'A đến B' with the same two ends; a
-  quote or on-screen text with a negation never verifies a quantity."""
+  negation in the quote, the spoken clause or the OCR rows never verifies a quantity (X5a); a name only
+  proves an item next to the item's own number (X6, names.py)."""
 
 import re
 import unicodedata
@@ -36,7 +37,7 @@ from typing import Any
 from rapidfuzz import fuzz
 from app.schemas.tutorial_v2 import ExactInput, GroundedClaim, Material, Parameter, TutorialDraftV2
 from app.schemas.verification import ItemVerification, Transcript, Word
-from app.services.verification import guards, lexicon, units
+from app.services.verification import guards, lexicon, names, units
 from app.services.verification.numbers import (
     NUMBER,
     is_range,
@@ -319,22 +320,27 @@ def _match_screen(
     ok = found[2] and all(_bounded(_fold(r), segment) for r in required)
     ok = ok and (unit is None or unit(haystack, found[0], found[1], True))
     a, b = (found[0], found[1]) if starts is None else (starts[found[0]], ends[found[1] - 1])
-    return shown[a:b], ok, _rows(ocr_text, shown, a, b)
+    rows, scope = _rows(ocr_text, shown, a, b)
+    return shown[a:b], ok, ("\n".join(rows), "\n".join(scope), " ".join(rows))
 
 
-def _rows(ocr_text: str, shown: str, start: int, end: int) -> str:
-    """X1a: the whole OCR rows (as read) that the match [start, end) of `shown` (the normalized text)
-    touches, so a reader sees the row the number came from ('Sugar 200g' for on_screen_text '200g')."""
+def _rows(ocr_text: str, shown: str, start: int, end: int) -> tuple[list[str], list[str]]:
+    """X1a, X5a, X6: every whole OCR row (as read) that the match [start, end) of `shown` (the normalized
+    text) touches, so a reader sees the row the number came from ('Sugar 200g' for on_screen_text '200g')
+    and the name check sees the whole row ('Cook 7 to' + '10 min' for a range over two rows); and those
+    rows with the row right above and right below, where a negation also counts ('Do not add' / 'Sugar
+    200g')."""
     rows = [(r.strip(), normalize(r)) for r in ocr_text.split("\n")]
     rows = [(raw, norm) for raw, norm in rows if norm]
     if " ".join(norm for _, norm in rows) != shown:
-        return shown[start:end]
-    out, at = [], 0
-    for raw, norm in rows:
+        return [shown[start:end]], [ocr_text]
+    touched, at = [], 0
+    for k, (_, norm) in enumerate(rows):
         if at < end and start < at + len(norm):
-            out.append(raw)
+            touched.append(k)
         at += len(norm) + 1
-    return " ".join(out)
+    lo, hi = max(0, touched[0] - 1), touched[-1] + 2
+    return [rows[k][0] for k in touched], [raw for raw, _ in rows[lo:hi]]
 
 
 def _speech_base(words: list[Word]) -> tuple[list[Word], str, list[int]]:
@@ -378,7 +384,29 @@ def _match_speech(
     # R12e: 'không chấm 2' reads as 0.2, but its 'không' still negates, so compare the words as spoken
     ok = ok and guards.negations_agree(normalize(quote), base, begin, end, _number_words(False), quantity)
     wider = " ".join(base[:begin].split()[-1:] + [base[begin:end]] + base[end:].split()[:1])
-    return base[begin:end], spoken[bisect_right(word_starts, begin) - 1].start, ok, wider
+    context = (wider, _clause(base, begin, end), base[begin:end])
+    return base[begin:end], spoken[bisect_right(word_starts, begin) - 1].start, ok, context
+
+
+CLAUSE_END = ".!?;"
+CLAUSE_WORDS = 6
+
+
+def _clause(base: str, begin: int, end: int) -> str:
+    """X5a: the spoken clause around base[begin:end]: words before and after it up to a sentence or clause
+    end (. ! ? ;) or CLAUSE_WORDS words on each side, whichever is nearer."""
+    left = []
+    for word in reversed(base[:begin].split()[-CLAUSE_WORDS:]):
+        if word[-1] in CLAUSE_END:
+            break
+        left.insert(0, word)
+    right = []
+    if base[end - 1 : end] not in tuple(CLAUSE_END):
+        for word in base[end:].split()[:CLAUSE_WORDS]:
+            right.append(word)
+            if word[-1] in CLAUSE_END:
+                break
+    return " ".join([*left, base[begin:end], *right])
 
 
 def _match_speech_exact(source: str, words: list[Word], all_words: list[Word]):
@@ -393,7 +421,7 @@ def _match_speech_exact(source: str, words: list[Word], all_words: list[Word]):
             continue
         alone = guards.isolated_in_speech(all_words, index[id(words[i])], index[id(words[j - 1])])
         said = " ".join(w.text.strip() for w in words[i:j])
-        hit = (said, words[i].start, alone, said)
+        hit = (said, words[i].start, alone, (said, said, said))
         if alone:
             return hit
     return hit
@@ -478,7 +506,7 @@ def _inconsistent(
         if lexicon.negation_pairs(source, _number_words(False), True):
             return NEGATED  # X5: 'đừng cho 2 chén đường', "don't cook 7 to 10 minutes"
         mode = _name_mode(spoken, language, text_language, screen_language)
-        if mode == "check" and not guards.name_in_source(item.name, source, normalize if spoken else _fold):
+        if mode == "check" and not _name_in_quote(item, source, spoken, language):
             return NO_NAME
     else:
         claimed, mode = Counter(number_tokens(item.text, None)), _unit_mode(spoken, language, text_language)
@@ -523,22 +551,68 @@ def _name_mode(spoken: bool, language, text_language, screen_language) -> str:
     return "cross"
 
 
-def _says_name(name: str, text: str, spoken: bool) -> bool:
-    """X1a: the item's own name, every word in order, as whole words of `text` (folded on screen)."""
-    read = normalize if spoken else _fold
-    want, words = re.findall(r"[^\W_]+", read(name)), re.findall(r"[^\W_]+", read(text))
-    return bool(want) and any(words[i : i + len(want)] == want for i in range(len(words) - len(want) + 1))
+def _shape(item) -> str | None:
+    """X6: the shape of the value's last number ('200', '1/2', '7-10' for a joined range), else None."""
+    shapes = number_tokens(_value(item) or "", None)
+    return shapes[-1] if shapes else None
 
 
-def _known_name(item, source: str, context: str, spoken: bool) -> bool:
-    """X1a: across languages the name is only proven when it is written in its quote/on-screen text and in
-    the matched source (OCR row, or the spoken segment with one word on each side): word for word (a
-    Vietnamese caption in an English video), or, for a material, as the ingredient dictionary's word."""
+def _unit_words(item, spoken: bool) -> list[str]:
+    """X6: the item's own unit words may stand between its number and its name ('2 quả trứng')."""
+    return [w for w in names.tokens(item.unit or "", not spoken) if w.isalpha()]
+
+
+def _words_of(item, text: str, spoken: bool, language: str | None) -> list[str]:
+    ranges = isinstance(item, (Material, Parameter)) and is_range(_value(item) or "")
+    return names.tokens(text, not spoken, language, spoken, ranges)
+
+
+def _name_in_quote(item, source: str, spoken: bool, language: str | None) -> bool:
+    """I2 + X6: every content word of the name in its own quote (fuzzily, as before), and, when the value
+    has a number and the name has words other than numbers and units, in the words right next to that
+    number ('Đường 200 g', '200 g đường', 'Nướng ở 180°C'), so 'cho 200 g đường và muối' does not prove
+    'Muối'."""
+    fold = normalize if spoken else _fold
+    shape = _shape(item)
+    table = units.UNITS if not spoken else units.WRITTEN
+    content = [
+        w
+        for w in re.findall(r"[^\W\d_]+", fold(item.name))
+        if len(w) >= 2 and w not in guards.STOP_WORDS and w not in table
+    ]
+    if shape is None or not content:
+        return guards.name_in_source(item.name, source, fold)
+    words = _words_of(item, source, spoken, language)
+    zones = names.zones(words, shape, len(content), not spoken, _unit_words(item, spoken))
+    return any(all(fuzz.partial_ratio(w, fold(zone)) >= guards.NAME_SCORE for w in content) for zone in zones)
+
+
+def _phrase_in(item, phrase: list[str], text: str, spoken: bool, language, neighbours: bool) -> bool:
+    """X1a + X6: `phrase` as whole words of `text`, next to the value's number when it has one."""
+    words = _words_of(item, text, spoken, language)
+    accept = names.phrase_at(phrase, neighbours, not spoken)
+    shape = _shape(item)
+    if shape is not None:
+        return names.by_number(words, shape, len(phrase), not spoken, accept, _unit_words(item, spoken))
+    return any(accept(words, i, i + len(phrase)) for i in range(len(words) - len(phrase) + 1))
+
+
+def _known_name(item, source: str, context: str, spoken: bool, language: str | None) -> bool:
+    """X1a + X6: across languages the name is only proven when it is written in its quote/on-screen text and
+    in the matched source (OCR rows, or the spoken segment with one word on each side), next to the item's
+    number: word for word (a Vietnamese caption in an English video), or, for a material, as the
+    ingredient dictionary's word with plain words around it."""
     texts = (source, context)
-    if all(_says_name(item.name, t, spoken) for t in texts):
+    own = [w for w in names.tokens(item.name, not spoken) if w.isalpha()]
+    if own and all(_phrase_in(item, own, t, spoken, language, False) for t in texts):
         return True
-    table = set(units.WRITTEN if spoken else units.UNITS)
-    return isinstance(item, Material) and all(lexicon.ingredient_in(item.name, t, table) for t in texts)
+    if not isinstance(item, Material):
+        return False
+    for phrase in lexicon.ingredient_words(item.name):
+        phrase = [units.fold(w) for w in phrase] if not spoken else phrase
+        if all(_phrase_in(item, phrase, t, spoken, language, True) for t in texts):
+            return True
+    return False
 
 
 def _spells_number(text: str | None) -> bool:
@@ -643,6 +717,16 @@ def _joined(item, source: str, spoken: bool, language: str | None):
     return item.model_copy(update=update), source
 
 
+def _negated(scope: str, source: str, spoken: bool) -> bool:
+    """X5a: a negation anywhere in the OCR rows of the match, or in the spoken clause around it ('Do NOT
+    add Salt 5g', 'không nên cho 2 chén đường', "don't ever add 2 cups"); OCR frame words may be misread
+    negations (R15/R16a), unless the model wrote that word itself."""
+    if spoken:
+        return bool(lexicon.negation_pairs(scope, _number_words(False), True))
+    seen = lexicon.written_words(source)
+    return bool(lexicon.negation_pairs(scope, _number_words(False), True, True, seen))
+
+
 def _result(status, method, reason=None, **rest) -> ItemVerification:
     return ItemVerification(status=status, method=method, reason=reason, **rest)
 
@@ -651,7 +735,7 @@ def _frame_hit(item, source: str, sec: float, ocr_text: str, settings, exact: bo
     """(matched text, frame second, values_ok) when this frame's text matches the on-screen text."""
     if isinstance(item, ExactInput):
         found = guards.exact_rows(source, ocr_text)
-        return (found, sec, True, found) if found else None
+        return (found, sec, True, (found, found, found)) if found else None
     # R16a: a claim's own text decides which frame words are as the model meant them; on_screen_text
     # may copy a misread 'Kh0ng' that the claim text then leaves out
     written = None if isinstance(item, (Material, Parameter)) else item.text
@@ -738,11 +822,12 @@ def verify_item(
                 for sec, text in in_window
                 if (h := _frame_hit(item, source, sec, text, settings, exact_text, unit, ranges))
             ]
-        for matched, sec, values_ok, context in hits:
-            if values_ok and cross and not _known_name(item, source, context, spoken):
+        for matched, sec, values_ok, (proof, scope, shown) in hits:
+            if values_ok and quantity and _negated(scope, source, spoken):
+                return _result("unverified", method, NEGATED, checked_range=checked)
+            if values_ok and cross and not _known_name(item, source, proof, spoken, language):
                 # X1a: the name is the model's translation; show the whole row / segment it came from,
                 # unless another frame proves the name through the ingredient dictionary
-                shown = matched if spoken else context
                 translated = translated or (shown, sec)
                 continue
             if values_ok:

@@ -120,6 +120,10 @@ NEIGHBOURS = set(
 )
 
 
+# X6: words that join two items, so a name past one of them belongs to another item
+CONJUNCTIONS = set("and plus then or with và va rồi roi hoặc hoac hay với voi sau cùng cung".split())
+
+
 def _phrases(spec: str) -> list[list[str]]:
     return [re.findall(r"[^\W_]+", p) for p in spec.split("|")]
 
@@ -135,27 +139,6 @@ def ingredient_words(name: str) -> list[list[str]]:
     """X1a: the other language's word sequences for a material name, [] when it is not in INGREDIENTS."""
     key = " ".join(re.findall(r"[^\W_]+", clean(name).casefold()))
     return _TO_EN.get(key) or _TO_VI.get(key, [])
-
-
-def _plain_neighbour(word: str | None, units: set[str]) -> bool:
-    return word is None or any(c.isdigit() for c in word) or word in NEIGHBOURS or word in units
-
-
-def ingredient_in(name: str, text: str, units: set[str]) -> bool:
-    """X1a: the dictionary word for `name` is a whole word sequence of `text`, and the words right before
-    and after it are numbers, units (`units`), kitchen verbs or articles, so a modifier cannot turn it into
-    another ingredient ('Coconut milk', 'Rice flour', 'egg yolks', 'Vanilla extract' for 'vani')."""
-    words = re.findall(r"[^\W_]+", clean(text).casefold())
-    for phrase in ingredient_words(name):
-        n = len(phrase)
-        for i in range(len(words) - n + 1):
-            if words[i : i + n] != phrase:
-                continue
-            before = words[i - 1] if i else None
-            after = words[i + n] if i + n < len(words) else None
-            if _plain_neighbour(before, units) and _plain_neighbour(after, units):
-                return True
-    return False
 
 
 def split_units(text: str) -> str:

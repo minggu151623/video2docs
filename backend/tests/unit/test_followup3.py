@@ -548,3 +548,148 @@ def test_x1a_material_review_line_says_the_name_is_unchecked():
     assert "≈ khớp nguyên văn chữ trên màn hình [00:00:02](#t=2.000): “Sugar 200g”" in main
     assert "tên mục chưa kiểm chứng: Muối" in review
     assert "câu diễn giải" not in review
+
+
+# ---- fix round 2, X6: a name proves an item only next to the item's number ---------------------------
+
+NOT_VERIFIED = ("quote_matched", "unverified")
+
+
+@pytest.mark.parametrize(
+    "quote",
+    [
+        "add 200 grams of sugar and a pinch of salt",
+        "200 grams of sugar then the salt",
+        "salt in after 200 grams of sugar",
+        "add 200 grams of sugar plus salt",
+    ],
+)
+def test_x6_spoken_dictionary_word_away_from_the_number(quote):
+    out = heard(mat("200", "g", quote=quote, name="Muối"), "now " + quote + " okay")
+    assert out.status in NOT_VERIFIED
+
+
+@pytest.mark.parametrize(
+    "ost,frame",
+    [
+        ("Sugar 200g, salt", "Sugar 200g, salt"),
+        ("Sugar 200g + salt", "Sugar 200g + salt"),
+        ("Sugar 200g then salt", "Sugar 200g then salt"),
+        ("200g sugar plus salt", "200g sugar plus salt"),
+        ("Sugar 200g Salt", "Sugar 200g\nSalt"),
+        ("Salt Sugar 200g", "Salt\nSugar 200g"),
+        ("200g", "Sugar\n200g\nSalt"),
+    ],
+)
+def test_x6_screen_dictionary_word_away_from_the_number(ost, frame):
+    assert screen(mat("200", "g", ost=ost, name="Muối"), frame).status in NOT_VERIFIED
+
+
+def test_x6_word_for_word_name_away_from_the_number():
+    out = heard(
+        mat("200", "g", quote="add 200 grams of sugar and salt", name="Salt"),
+        "now add 200 grams of sugar and salt",
+    )
+    assert out.status in NOT_VERIFIED
+
+
+def test_x6_same_language_name_away_from_the_number():
+    spoken = mat("200", "g", quote="cho 200 g đường và muối", name="Muối")
+    out = heard(spoken, "giờ cho 200 g đường và muối nhé", "vi", "vi")
+    assert (out.status, out.reason) == ("unverified", NO_NAME)
+    shown = mat("200", "g", ost="Đường 200g, muối", name="Muối")
+    out = screen(shown, "Đường 200g, muối", speech=VI_SPEECH)
+    assert (out.status, out.reason) == ("unverified", NO_NAME)
+
+
+@pytest.mark.parametrize(
+    "item,frame,speech",
+    [
+        (mat("4", "tsp", ost="Milk 4tsp", name="Sữa"), "Milk\n4tsp", EN_SPEECH),
+        (
+            mat("3", "tbsp", ost="All purpose flour 3 tbsp", name="Bột mì đa dụng"),
+            "All purpose flour 3 tbsp",
+            EN_SPEECH,
+        ),
+        (
+            mat("1/2", "tsp", ost="Vanilla extract 1/2 tsp", name="Chiết xuất vani"),
+            "Vanilla extract 1/2 tsp",
+            EN_SPEECH,
+        ),
+        (mat("200", "g", ost="Sugar 200g", name="Đường"), "Sugar\n200g\nSalt", EN_SPEECH),
+        (mat("200", "g", ost="Đường 200 g", name="Đường"), "Đường 200 g", VI_SPEECH),
+        (mat("200", "g", ost="200 g đường", name="Đường"), "200 g đường", VI_SPEECH),
+    ],
+)
+def test_x6_positives_next_to_the_number(item, frame, speech):
+    assert screen(item, frame, speech=speech).status == "verified"
+
+
+def test_x6_spoken_positives_next_to_the_number():
+    sugar = mat("200", "g", quote="add 200 grams of sugar", name="Đường")
+    assert heard(sugar, "now add 200 grams of sugar to the bowl").status == "verified"
+    vi = mat("200", "g", quote="cho 200 g đường", name="Đường")
+    assert heard(vi, "giờ cho 200 g đường vào", "vi", "vi").status == "verified"
+    eggs = mat("2", "quả", quote="cho 2 quả trứng", name="Trứng")  # the item's own unit stands between
+    assert heard(eggs, "giờ cho 2 quả trứng vào", "vi", "vi").status == "verified"
+
+
+# ---- fix round 2, X5a: a negation anywhere in the clause or OCR row ------------------------------------
+
+
+@pytest.mark.parametrize(
+    "neg", ["đừng có cho", "không nên cho", "không bao giờ cho", "đừng bao giờ cho", "chưa cần cho"]
+)
+def test_x5a_vietnamese_negation_a_few_words_before(neg):
+    item = mat("2", "chén", quote="cho 2 chén đường", name="Đường")
+    out = heard(item, f"bạn {neg} 2 chén đường nhé", "vi", "vi")
+    assert (out.status, out.reason) == ("unverified", NEGATED)
+
+
+def test_x5a_parameter_negation_a_few_words_before():
+    out = heard(par("10", "phút", quote="nấu 10 phút", name="nấu"), "bạn không cần nấu 10 phút", "vi", "vi")
+    assert (out.status, out.reason) == ("unverified", NEGATED)
+
+
+@pytest.mark.parametrize(
+    "item,spoken",
+    [
+        (mat("2", "chén", quote="add 2 cups of sugar", name="Đường"), "so don't ever add 2 cups of sugar"),
+        (mat("5", "g", quote="add 5 g salt", name="Muối"), "do not just add 5 g salt"),
+        (
+            mat("2", "chén", quote="add 2 cups of sugar", name="Đường"),
+            "you should not really add 2 cups of sugar",
+        ),
+    ],
+)
+def test_x5a_english_negation_a_few_words_before(item, spoken):
+    out = heard(item, spoken)
+    assert (out.status, out.reason) == ("unverified", NEGATED)
+
+
+@pytest.mark.parametrize(
+    "item,frame,speech",
+    [
+        (mat("5", "g", ost="Salt 5g", name="Muối"), "Do NOT add Salt 5g", EN_SPEECH),
+        (mat("5", "g", ost="Salt 5g", name="Muối"), "No added Salt 5g", EN_SPEECH),
+        (mat("200", "g", ost="Sugar 200g", name="Đường"), "Do not add\nSugar 200g", EN_SPEECH),
+        (mat("2", "chén", ost="2 chén đường", name="Đường"), "Không cho 2 chén đường", VI_SPEECH),
+        (mat("2", "chén", ost="2 chén đường", name="Đường"), "Đừng thêm 2 chén đường", VI_SPEECH),
+    ],
+)
+def test_x5a_negation_in_the_ocr_row(item, frame, speech):
+    out = screen(item, frame, speech=speech)
+    assert (out.status, out.reason) == ("unverified", NEGATED)
+
+
+def test_x5a_negation_in_another_sentence_does_not_count():
+    sugar = mat("2", "chén", quote="add 2 cups of sugar", name="Đường")
+    assert heard(sugar, "don't overmix. Now add 2 cups of sugar now").status == "verified"
+    item = par("7-10", "phút", quote="cook for 7 to 10 minutes", name="Thời gian nấu")
+    out = heard(item, "Cover and cook for 7 to 10 minutes. Try not to lift the lid.")
+    assert out.status == NAME_UNPROVEN
+
+
+def test_x5a_range_over_two_rows_shows_both_rows():
+    out = screen(par("7-10", "phút", ost="Cook 7-10 min", name="Nấu"), "Cook 7 to\n10 min")
+    assert (out.status, out.matched_text) == (NAME_UNPROVEN, "Cook 7 to 10 min")
