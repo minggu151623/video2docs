@@ -18,7 +18,8 @@ class Transcript(BaseModel):
 class ItemVerification(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # quote_matched (ruling P2): a claim's quote matched, but the claim paraphrases it and is not verified
+    # quote_matched (ruling P2): a claim's quote matched, but the claim paraphrases it and is not verified;
+    # (X1a) a material/parameter whose values matched a source in another language, name not proven
     status: Literal["verified", "quote_matched", "unverified", "not_checkable", "not_checked"]
     method: Literal["asr", "ocr", "none"]
     matched_text: str | None = None

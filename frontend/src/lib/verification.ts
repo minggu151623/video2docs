@@ -15,7 +15,8 @@ export const domainText: Record<Domain, string> = {
 export const domainLabel = (domain: string) =>
   domainText[domain as Domain] ?? domainText.other;
 
-/** A quote_matched claim still needs a person: only its quote was found (ruling P2). */
+/** A quote_matched item still needs a person: only its quote was found (ruling P2), or a material or
+ * parameter matched a source in another language without proving its name (ruling X1a). */
 const needsCheck = (item: VerificationItem) =>
   item.status === "unverified" ||
   item.status === "not_checked" ||

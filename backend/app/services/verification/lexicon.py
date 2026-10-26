@@ -57,6 +57,107 @@ GLUED_UNITS = {
 _GLUED = re.compile(r"(?<![^\W_])(\d+(?:[.,/:]\d+)*)([^\W\d_]+)(?![^\W_])")
 
 
+# ---- X1a: material names a dictionary can tie to the other language ---------------------------------
+# Strict 1:1 Vietnamese <-> English for common cooking ingredients. The whole normalized name must be a
+# key (or one of the English forms, for an English draft of a Vietnamese video). Left out on purpose:
+# words with more than one meaning in the kitchen ('bột' flour/powder/batter, 'bơ' butter/avocado,
+# 'dầu' oil/sauce base, 'chanh' lemon/lime, 'bột ngô' cornstarch/corn flour, 'kem' cream/ice cream) and
+# names wider than one English word ('sữa tươi', 'thịt'). 'bột mì' is wheat flour; 'bột mì đa dụng' is
+# all-purpose flour, its own entry.
+INGREDIENTS = {
+    "trứng": "egg|eggs",
+    "lòng đỏ trứng": "egg yolk|egg yolks",
+    "lòng trắng trứng": "egg white|egg whites",
+    "sữa": "milk",
+    "đường": "sugar",
+    "đường nâu": "brown sugar",
+    "muối": "salt",
+    "tiêu": "pepper",
+    "hạt tiêu": "pepper",
+    "tiêu đen": "black pepper",
+    "nước": "water",
+    "bột mì": "flour",
+    "bột mì đa dụng": "all purpose flour",
+    "chiết xuất vani": "vanilla extract",
+    "vani": "vanilla",
+    "men": "yeast",
+    "men nở": "yeast",
+    "bột nở": "baking powder",
+    "muối nở": "baking soda",
+    "mật ong": "honey",
+    "giấm": "vinegar",
+    "tỏi": "garlic",
+    "hành tây": "onion|onions",
+    "hành lá": "scallion|scallions|green onion|green onions",
+    "gừng": "ginger",
+    "quế": "cinnamon",
+    "gạo": "rice",
+    "cà chua": "tomato|tomatoes",
+    "khoai tây": "potato|potatoes",
+    "cà rốt": "carrot|carrots",
+    "nấm": "mushroom|mushrooms",
+    "thịt bò": "beef",
+    "thịt gà": "chicken",
+    "thịt heo": "pork",
+    "thịt lợn": "pork",
+    "tôm": "shrimp|shrimps|prawn|prawns",
+    "đậu phụ": "tofu",
+    "phô mai": "cheese",
+    "sô cô la": "chocolate",
+    "nước mắm": "fish sauce",
+    "nước tương": "soy sauce",
+    "xì dầu": "soy sauce",
+    "dầu hào": "oyster sauce",
+    "bột năng": "tapioca starch",
+}
+# words that may stand right before or after the ingredient in the source without changing which one it
+# is: numbers and units (checked separately), articles, 'of', and kitchen verbs; anything else ('coconut'
+# milk, 'rice' flour, 'bell' pepper, egg 'yolks', vanilla 'extract') may name another ingredient
+NEIGHBOURS = set(
+    "a an the of some more little bit few your our my this that these those it here now then just also "
+    "add adds adding added pour mix whisk stir put throw use using in into to for over on plus "
+    "cho thêm vào bỏ đổ rồi nhé là một ít chút các những này đó trong lên".split()
+)
+
+
+def _phrases(spec: str) -> list[list[str]]:
+    return [re.findall(r"[^\W_]+", p) for p in spec.split("|")]
+
+
+_TO_EN = {name: _phrases(en) for name, en in INGREDIENTS.items()}
+_TO_VI: dict[str, list[list[str]]] = {}
+for _vi, _en in INGREDIENTS.items():
+    for _form in _en.split("|"):
+        _TO_VI.setdefault(" ".join(re.findall(r"[^\W_]+", _form)), []).append(re.findall(r"[^\W_]+", _vi))
+
+
+def ingredient_words(name: str) -> list[list[str]]:
+    """X1a: the other language's word sequences for a material name, [] when it is not in INGREDIENTS."""
+    key = " ".join(re.findall(r"[^\W_]+", clean(name).casefold()))
+    return _TO_EN.get(key) or _TO_VI.get(key, [])
+
+
+def _plain_neighbour(word: str | None, units: set[str]) -> bool:
+    return word is None or any(c.isdigit() for c in word) or word in NEIGHBOURS or word in units
+
+
+def ingredient_in(name: str, text: str, units: set[str]) -> bool:
+    """X1a: the dictionary word for `name` is a whole word sequence of `text`, and the words right before
+    and after it are numbers, units (`units`), kitchen verbs or articles, so a modifier cannot turn it into
+    another ingredient ('Coconut milk', 'Rice flour', 'egg yolks', 'Vanilla extract' for 'vani')."""
+    words = re.findall(r"[^\W_]+", clean(text).casefold())
+    for phrase in ingredient_words(name):
+        n = len(phrase)
+        for i in range(len(words) - n + 1):
+            if words[i : i + n] != phrase:
+                continue
+            before = words[i - 1] if i else None
+            after = words[i + n] if i + n < len(words) else None
+            if _plain_neighbour(before, units) and _plain_neighbour(after, units):
+                return True
+    return False
+
+
 def split_units(text: str) -> str:
     """X2: a table unit glued to the number before it becomes its own word ('Milk 4tsp' -> 'Milk 4 tsp',
     '1/2tsp' -> '1/2 tsp'); the number is untouched, and a number glued to letters on its left ('mp3s'),

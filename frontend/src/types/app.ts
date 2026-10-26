@@ -72,7 +72,8 @@ export interface Generation {
   quality_status: string;
   job_id: string;
 }
-/** `quote_matched`: a claim's quote matched, but its paraphrase is not verified (ruling P2). */
+/** `quote_matched`: a claim's quote matched, but its paraphrase is not verified (ruling P2); or a material or
+ * parameter matched a source in another language, its name not proven (ruling X1a). */
 export type VerificationStatus =
   | "verified"
   | "quote_matched"

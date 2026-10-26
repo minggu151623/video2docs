@@ -726,12 +726,8 @@ def test_decimal_leading_zeros_equal_verifies():
     assert oclaim("Dùng 0.5 ml thuốc", "Dùng 0.05 ml thuốc").status == "unverified"
 
 
-def test_unit_g_meets_gram_through_the_unit_table():
-    # ruling X2 (follow-up 3): units compare through the canonical table, so 'g' is 'gram'; this was a
-    # recall trade-off ('g' not found in 'gram') before
+def test_unit_g_is_not_found_in_gram_recall_trade_off():
     out = verify(material(unit="g"), transcript("cho 200 gram bột vào"))
-    assert out.status == "verified"
-    out = verify(material(unit="kg"), transcript("cho 200 gram bột vào"))
     assert (out.status, out.reason) == ("unverified", NO_VALUE)
 
 

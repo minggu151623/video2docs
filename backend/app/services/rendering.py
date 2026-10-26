@@ -201,7 +201,10 @@ def render_markdown(draft, asset, model, generation, evidence, verification=None
     }
     for _, name, item in iter_grounded_items(draft):
         if name == "exact_inputs" or supported_claim(item):
-            if status(item) == "quote_matched":
+            if status(item) == "quote_matched" and name in ("materials", "parameters"):
+                # ruling X1a: values matched a source in another language; the translated name did not
+                reason = t("tên mục chưa kiểm chứng", "item name not verified")
+            elif status(item) == "quote_matched":
                 reason = t("câu diễn giải chưa kiểm chứng", "paraphrase not verified")
             elif status(item) in NOT_CHECKED:
                 reason = t("chưa kiểm chứng", "not verified")
