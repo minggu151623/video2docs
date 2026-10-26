@@ -693,3 +693,179 @@ def test_x5a_negation_in_another_sentence_does_not_count():
 def test_x5a_range_over_two_rows_shows_both_rows():
     out = screen(par("7-10", "phút", ost="Cook 7-10 min", name="Nấu"), "Cook 7 to\n10 min")
     assert (out.status, out.matched_text) == (NAME_UNPROVEN, "Cook 7 to 10 min")
+
+
+# ---- fix round 3, X7a: setting words stand between a number and its name, not beside a dictionary word --
+
+
+@pytest.mark.parametrize("ost", ["Sugar 200g at salt", "Sugar 200g about salt", "Salt at 200g Sugar"])
+def test_x7a_setting_words_are_not_plain_neighbours_on_screen(ost):
+    assert screen(mat("200", "g", ost=ost, name="Muối"), ost).status in NOT_VERIFIED
+
+
+@pytest.mark.parametrize("quote", ["add the salt about 200 grams of sugar", "add salt at 200 grams of sugar"])
+def test_x7a_setting_words_are_not_plain_neighbours_in_speech(quote):
+    assert heard(mat("200", "g", quote=quote, name="Muối"), "now " + quote).status in NOT_VERIFIED
+
+
+@pytest.mark.parametrize("quote", ["cho muối khoảng 200 g đường", "cho muối ở 200 g đường"])
+def test_x7a_english_draft_of_vietnamese_speech(quote):
+    item = mat("200", "g", quote=quote, name="Salt")
+    assert heard(item, "giờ " + quote + " nhé", "vi", "en").status in NOT_VERIFIED
+
+
+# ---- fix round 3, X7b/X7c: pauses and abbreviations do not end the clause; OCR rows above -----------
+
+
+@pytest.mark.parametrize(
+    "quote,spoken",
+    [
+        ("add 2 cups of sugar", "so don't ever... add 2 cups of sugar"),
+        ("add 2 cups of sugar", "so don't uh... add 2 cups of sugar"),
+        ("add 2 cups of sugar", "so don't, uh… add 2 cups of sugar"),
+        ("2 cups of sugar", "so don't add approx. 2 cups of sugar"),
+        ("add 2 cups of sugar", "never, Mr. Smith, add 2 cups of sugar"),
+    ],
+)
+def test_x7b_pauses_and_abbreviations_do_not_end_the_clause(quote, spoken):
+    out = heard(mat("2", "chén", quote=quote, name="Đường"), spoken)
+    assert (out.status, out.reason) == ("unverified", NEGATED)
+
+
+@pytest.mark.parametrize("spoken", ["bạn đừng có mà... cho 2 chén đường", "không, à... cho 2 chén đường"])
+def test_x7b_vietnamese_pauses_do_not_end_the_clause(spoken):
+    out = heard(mat("2", "chén", quote="cho 2 chén đường", name="Đường"), spoken, "vi", "vi")
+    assert (out.status, out.reason) == ("unverified", NEGATED)
+
+
+def test_x7b_a_real_sentence_end_still_ends_the_clause():
+    sugar = mat("2", "chén", quote="add 2 cups of sugar", name="Đường")
+    assert heard(sugar, "don't overmix. Now add 2 cups of sugar now").status == "verified"
+
+
+@pytest.mark.parametrize(
+    "item,frame,speech",
+    [
+        (mat("200", "g", ost="Sugar 200g", name="Đường"), "Do not\nadd\nSugar 200g", EN_SPEECH),
+        (mat("2", "chén", ost="2 chén đường", name="Đường"), "Đừng cho\nthêm\n2 chén đường", VI_SPEECH),
+        (mat("2", "chén", ost="2 chén đường", name="Đường"), "Không\n2 chén đường", VI_SPEECH),
+        (mat("2", "chén", ost="2 chén đường", name="Đường"), "Không 2 chén đường", VI_SPEECH),
+    ],
+)
+def test_x7c_negation_up_to_two_rows_above(item, frame, speech):
+    out = screen(item, frame, speech=speech)
+    assert (out.status, out.reason) == ("unverified", NEGATED)
+
+
+# ---- fix round 3, X7d: no competing name on the other side of the number ------------------------------
+
+
+@pytest.mark.parametrize(
+    "ost",
+    [
+        "Sugar 200g - Salt",
+        "Sugar 200g - Salt - Pepper",
+        "Sugar 200g: Salt",
+        "Sugar 200g (salt)",
+        "Sugar 200g … Salt",
+        "Sugar 200g of salt",
+    ],
+)
+def test_x7d_screen_competitor_across_the_number(ost):
+    assert screen(mat("200", "g", ost=ost, name="Muối"), ost).status in NOT_VERIFIED
+
+
+@pytest.mark.parametrize("quote", ["add salt 200 grams of sugar", "the salt 200 grams of sugar"])
+def test_x7d_spoken_competitor_across_the_number(quote):
+    assert heard(mat("200", "g", quote=quote, name="Muối"), "now " + quote + " okay").status in NOT_VERIFIED
+
+
+@pytest.mark.parametrize("ost", ["Đường 200g - muối", "Đường (200 g) muối", "Đường 200g của muối"])
+def test_x7d_same_language_screen_competitor(ost):
+    out = screen(mat("200", "g", ost=ost, name="Muối"), ost, speech=VI_SPEECH)
+    assert (out.status, out.reason) == ("unverified", NO_NAME)
+
+
+def test_x7d_same_language_spoken_competitor():
+    out = heard(
+        mat("200", "g", quote="cho muối 200 g đường", name="Muối"), "giờ cho muối 200 g đường nhé", "vi", "vi"
+    )
+    assert (out.status, out.reason) == ("unverified", NO_NAME)
+
+
+def test_x7d_word_for_word_and_parameter_across_a_symbol():
+    salt = mat("200", "g", ost="Sugar 200g - Salt", name="Salt")
+    assert screen(salt, "Sugar 200g - Salt", speech=VI_SPEECH, text_language="en").status in NOT_VERIFIED
+    bake = par("180", "°C", ost="Hấp 180°C - Nướng", name="Nướng")
+    assert screen(bake, "Hấp 180°C - Nướng").status in NOT_VERIFIED
+
+
+def test_x7d_other_material_names_of_the_draft_compete():
+    item = mat("200", "g", quote="cho muối 200 g bơ lạt", name="Muối")
+    spoken = "giờ cho muối 200 g bơ lạt nhé"
+    assert heard(item, spoken, "vi", "vi").status == "verified"  # 'bơ lạt' is not in the dictionary
+    out = verify_item(
+        "p",
+        item,
+        transcript(spoken, language="vi"),
+        None,
+        SETTINGS,
+        text_language="vi",
+        materials=("Muối", "Bơ lạt"),
+    )
+    assert (out.status, out.reason) == ("unverified", NO_NAME)
+
+
+@pytest.mark.parametrize(
+    "item,frame",
+    [
+        (mat("200", "ml", ost="Milk 200ml", name="Sữa"), "Coconut\nMilk 200ml"),
+        (mat("200", "g", ost="Sugar 200g", name="Đường"), "Brown\nSugar\n200g"),
+        (mat("200", "g", ost="Salt 200g", name="Muối"), "Sugar\nSalt\n200g"),
+    ],
+)
+def test_x7d_modifier_or_label_on_the_row_above(item, frame):
+    assert screen(item, frame).status in NOT_VERIFIED
+
+
+def test_x7d_positives_kept():
+    assert heard(
+        mat("200", "g", quote="add 200 grams of sugar", name="Đường"), "now add 200 grams of sugar"
+    ).status == ("verified")
+    for item, frame in [
+        (mat("4", "tsp", ost="Milk 4tsp", name="Sữa"), "Milk\n4tsp"),
+        (
+            mat("3", "tbsp", ost="All purpose flour 3 tbsp", name="Bột mì đa dụng"),
+            "All purpose flour\n3 tbsp",
+        ),
+        (
+            mat("1/2", "tsp", ost="Vanilla extract 1/2 tsp", name="Chiết xuất Vani"),
+            "Vanilla extract\n1/2 tsp",
+        ),
+    ]:
+        assert screen(item, frame).status == "verified", frame
+
+
+def test_x7d_pipeline_passes_the_draft_material_names(monkeypatch):
+    from types import SimpleNamespace as NS
+
+    from app.services.verification import pipeline
+
+    seen = []
+
+    def fake(path, item, transcript, ocr, settings, *, text_language=None, materials=()):
+        seen.append(materials)
+        return pipeline.ItemVerification(status="not_checkable", method="none")
+
+    monkeypatch.setattr(pipeline, "verify_item", fake)
+    draft = NS(
+        language="vi",
+        materials=[NS(name="Muối"), NS(name="Bơ lạt")],
+    )
+    monkeypatch.setattr(
+        pipeline, "iter_grounded_items", lambda d: [("materials/0", "materials", d.materials[0])]
+    )
+    pipeline.run_verification(
+        NS(asr_engine="none"), NS(has_audio=1), draft, None, "skipped", None, lambda: None
+    )
+    assert seen == [("Muối", "Bơ lạt")]

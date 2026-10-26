@@ -141,6 +141,12 @@ def ingredient_words(name: str) -> list[list[str]]:
     return _TO_EN.get(key) or _TO_VI.get(key, [])
 
 
+def khong_before_digit(text: str) -> bool:
+    """X5a: 'không' (or OCR 'khong', 'kh0ng') right before a digit: for a quantity it is 'not' ('Không
+    2 chén đường'); spoken zeros are read as number words ('không trăm', 'không phẩy năm'), not digits."""
+    return bool(re.search(r"(?<!\w)(?:không|khong|kh0ng)\s+\d", clean(text).casefold()))
+
+
 def split_units(text: str) -> str:
     """X2: a table unit glued to the number before it becomes its own word ('Milk 4tsp' -> 'Milk 4 tsp',
     '1/2tsp' -> '1/2 tsp'); the number is untouched, and a number glued to letters on its left ('mp3s'),

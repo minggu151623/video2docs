@@ -138,8 +138,9 @@ def run_verification(
 ) -> VerificationReport:
     items = list(iter_grounded_items(draft))
     lang = draft.language
+    names = tuple(m.name for m in draft.materials)  # ruling X7d: competing names across a number
     results = {
-        path: verify_item(path, item, transcript, None, settings, text_language=lang)
+        path: verify_item(path, item, transcript, None, settings, text_language=lang, materials=names)
         for path, _, item in items
     }
     if transcript is None:
@@ -170,7 +171,9 @@ def run_verification(
         for path, item in pending:
             seconds = ocr_seconds(item, asset.duration_sec, settings.verify_max_ocr_frames)
             if not seconds:  # no visual span: the matcher gives the precise `unverified` reason
-                results[path] = verify_item(path, item, transcript, [], settings, text_language=lang)
+                results[path] = verify_item(
+                    path, item, transcript, [], settings, text_language=lang, materials=names
+                )
                 continue
             if failure is None:
                 try:
@@ -207,7 +210,9 @@ def run_verification(
                 continue
             read = [texts[s] for s in seconds if texts.get(s) is not None]
             if read:
-                results[path] = verify_item(path, item, transcript, read, settings, text_language=lang)
+                results[path] = verify_item(
+                    path, item, transcript, read, settings, text_language=lang, materials=names
+                )
             else:
                 missing = True
                 results[path] = ItemVerification(status="not_checked", method="ocr", reason=NO_FRAME)
