@@ -315,3 +315,44 @@ def _glued(text: str, m) -> str:
     else:
         return ""
     return lead + m.group() if at and text[at - 1].isalpha() else ""
+
+
+# ---- X3: a range written with words, joined into one token -------------------------------------------
+RANGE_LINKS = r"(?:-|(?<!\w)(?:to|đến|tới|den|toi)(?!\w))"  # 'den'/'toi': OCR without diacritics
+_RANGE = re.compile(rf"(\d+(?:[.,]\d+)?)(\s*{RANGE_LINKS}\s*)(\d+(?:[.,]\d+)?)")
+_LINK_BEFORE = re.compile(rf"\d\s*{RANGE_LINKS}\s*$")
+_LINK_AFTER = re.compile(rf"\s*{RANGE_LINKS}\s*\d")
+RANGE_VALUE = re.compile(r"\d+(?:\.\d+)?-\d+(?:\.\d+)?")
+
+
+def join_ranges(text: str) -> tuple[str, list[int], list[int]]:
+    """X3: 'A to B', 'A đến B', 'A - B', 'A–B' (already '-' after normalizing) become 'A-B' in normalized,
+    digit-spelled text, so a range value meets the same range as one token and no single endpoint can.
+
+    A range is joined only when both ends are unsigned numbers standing alone: not glued to a letter,
+    sign or separator ('-7 to 10', 'x7 to 10', '7 to 10.5.1') and not part of a chain ('7 to 10 to 12').
+    Returns the new text plus, per new character, the start and end of the source span it came from
+    (as spell_digits)."""
+    out, starts, ends, pos = [], [], [], 0
+    for m in _RANGE.finditer(text):
+        before, after = text[: m.start()], text[m.end() :]
+        if before[-1:] and (before[-1].isalnum() or before[-1] in "-.,/:_"):
+            continue
+        if re.match(r"[^\W_]|[-.,/:]\d", after) or _LINK_BEFORE.search(before) or _LINK_AFTER.match(after):
+            continue
+        out.append(text[pos : m.start(1)])
+        starts.extend(range(pos, m.end(1))), ends.extend(range(pos + 1, m.end(1) + 1))
+        out.append(m[1] + "-" + m[3])
+        starts.append(m.end(1)), ends.append(m.start(3))
+        starts.extend(range(m.start(3), m.end(3))), ends.extend(range(m.start(3) + 1, m.end(3) + 1))
+        pos = m.end()
+    out.append(text[pos:])
+    starts.extend(range(pos, len(text))), ends.extend(range(pos + 1, len(text) + 1))
+    return "".join(out), starts, ends
+
+
+def is_range(value: str) -> bool:
+    """X3: the value is one range of two plain numbers ('7-10', '7 đến 10', 'seven to ten')."""
+    joined = join_ranges(spell_digits(" ".join(nfkc(value).casefold().split()), None)[0])[0]
+    tokens = number_tokens(joined, None)
+    return len(tokens) == 1 and bool(RANGE_VALUE.fullmatch(tokens[0]))

@@ -18,7 +18,10 @@ Safety rules, every doubt ends as `unverified`:
 - ruling R13: an on-screen number is only checked while a Vietnamese or English transcript with words
   exists (R16b);
 - rulings P2-P2e: a claim whose quote passed every check is `verified` only when its text is in the
-  quote's language and says the same words in the same order; otherwise it is `quote_matched`."""
+  quote's language and says the same words in the same order; otherwise it is `quote_matched`;
+- rulings X1-X3: on screen, a material/parameter name is only looked for when the draft shares the
+  video's language; units compare through the unit table, as the word right after the value's number;
+  a range value ('7-10') meets 'A to B' / 'A đến B' with the same two ends."""
 
 import re
 import unicodedata
@@ -32,7 +35,14 @@ from rapidfuzz import fuzz
 from app.schemas.tutorial_v2 import ExactInput, GroundedClaim, Material, Parameter, TutorialDraftV2
 from app.schemas.verification import ItemVerification, Transcript, Word
 from app.services.verification import guards, lexicon, units
-from app.services.verification.numbers import NUMBER, number_tokens, number_words, spell_digits
+from app.services.verification.numbers import (
+    NUMBER,
+    is_range,
+    join_ranges,
+    number_tokens,
+    number_words,
+    spell_digits,
+)
 
 NO_VALUE = "giá trị không có trong nguyên văn"
 NO_NAME = "tên mục không có trong nguyên văn"
@@ -282,14 +292,20 @@ def _match_screen(
     required: tuple[str, ...] = (),
     exact: bool = False,
     written: str | None = None,
+    unit=None,
+    ranges: bool = False,
 ) -> tuple[str, bool] | None:
     """PaddleOCR drops stacked Vietnamese diacritics, so both sides lose them; numbers stay exact.
 
     Ruling R7: the aligned segment holds the needle's words in order after folding; only a word written
     with a Vietnamese mark may be misread a little. R16a: a frame word that looks like a misread negation
-    only reads as written when `written` (the claim text, else the needle) holds that exact word."""
-    needle, haystack = _fold(expected), _fold(ocr_text)
-    plain = normalize(expected), normalize(ocr_text)
+    only reads as written when `written` (the claim text, else the needle) holds that exact word.
+    `unit` (X2): checks the unit after the value in the folded frame text; `ranges` (X3): the frame's
+    'A to B' reads as 'A-B', as the value's own range does."""
+    shown = normalize(ocr_text)
+    frame, starts, ends = join_ranges(shown) if ranges else (shown, None, None)
+    needle, haystack = _fold(expected), _fold(frame)
+    plain = normalize(expected), frame
     seen = lexicon.written_words(expected if written is None else written)
     found = _locate(needle, haystack, threshold, DIGITS_ONLY, True, exact, plain, seen)
     if not found:
@@ -298,7 +314,10 @@ def _match_screen(
     if not guards.ocr_words_agree(plain[0], needle, segment, _number_words(True)):
         return None
     ok = found[2] and all(_bounded(_fold(r), segment) for r in required)
-    return normalize(ocr_text)[found[0] : found[1]], ok
+    ok = ok and (unit is None or unit(haystack, found[0], found[1], True))
+    if starts is None:
+        return shown[found[0] : found[1]], ok
+    return shown[starts[found[0]] : ends[found[1] - 1]], ok
 
 
 def _speech_base(words: list[Word]) -> tuple[list[Word], str, list[int]]:
@@ -316,19 +335,29 @@ def _match_speech(
     required=(),
     exact: bool = False,
     quantity: bool = False,
+    unit=None,
+    ranges: bool = False,
 ):
     """(matched text, first matched word start, values_ok) or None; diacritics stay significant.
 
-    `quantity` (Material/Parameter): 'không phẩy năm' is only a number, not also a negation (R12e)."""
+    `quantity` (Material/Parameter): 'không phẩy năm' is only a number, not also a negation (R12e).
+    `unit` (X2): checks the unit after the value in the spoken text; `ranges` (X3): 'seven to ten'
+    reads as '7-10', as the value's own range does."""
     spoken, base, word_starts = _speech_base(words)
     needle = spell_digits(normalize(quote), language)[0]
     haystack, starts, ends = spell_digits(base, language)
+    if ranges:
+        needle = join_ranges(needle)[0]
+        haystack, inner_starts, inner_ends = join_ranges(haystack)
+        starts = [starts[i] for i in inner_starts]
+        ends = [ends[i - 1] for i in inner_ends]
     found = _locate(needle, haystack, threshold, language, exact=exact)
     if not found:
         return None
     begin, end = starts[found[0]], ends[found[1] - 1]
     segment = haystack[found[0] : found[1]]
     ok = found[2] and all(_bounded(_canonical(r, True, language), segment) for r in required)
+    ok = ok and (unit is None or unit(haystack, found[0], found[1], False))
     # R12e: 'không chấm 2' reads as 0.2, but its 'không' still negates, so compare the words as spoken
     ok = ok and guards.negations_agree(normalize(quote), base, begin, end, _number_words(False), quantity)
     return base[begin:end], spoken[bisect_right(word_starts, begin) - 1].start, ok
@@ -358,14 +387,31 @@ def _value(item) -> str | None:
 
 
 def _required(item) -> tuple[str, ...]:
-    """Quantities, parameter values and units must appear as whole tokens in the source text."""
-    if isinstance(item, Material):
-        values = (item.quantity, item.unit)
-    elif isinstance(item, Parameter):
-        values = (item.value, item.unit)
-    else:
-        return ()
-    return tuple(v for v in values if v and v.strip())
+    """Quantities and parameter values must appear as whole tokens in the source text (units: `_unit_ok`)."""
+    value = _value(item) if isinstance(item, (Material, Parameter)) else None
+    return (value,) if value and value.strip() else ()
+
+
+def _unit_ok(item, cross: bool, language: str | None):
+    """X2: a check of the item's unit against the source text, or None for an item without one.
+
+    The returned function takes (text, start, end, folded): canonical text (digit-spelled speech, or
+    folded OCR text) and the span holding the value. When the value has a number, the unit is the word
+    after that number in the span ('5 minutes', '4 tsp', '180°c') and both must map to the same table
+    unit; a unit outside the table on either side must be written the same and only in one language
+    (`cross` False). A value without a number keeps the old check: the unit as a whole token."""
+    unit = (item.unit or "").strip() if isinstance(item, (Material, Parameter)) else ""
+    if not unit:
+        return None
+    shapes = number_tokens(_value(item) or "", None)
+
+    def check(text: str, start: int, end: int, folded: bool) -> bool:
+        field = _fold(unit) if folded else _canonical(unit, True, language)
+        if not shapes:
+            return _bounded(field, text[start:end])
+        return units.unit_follows(field, shapes[-1], text, start, end, cross)
+
+    return check
 
 
 def _code(language: str | None) -> str:
@@ -384,10 +430,18 @@ def _unit_mode(spoken: bool, language: str | None, text_language: str | None) ->
     return "same" if _same_language(text_language, language) else "cross"
 
 
-def _inconsistent(item, source: str, spoken: bool, language: str | None, text_language: str | None):
+def _inconsistent(
+    item,
+    source: str,
+    spoken: bool,
+    language: str | None,
+    text_language: str | None,
+    screen_language: str | None = None,
+):
     """Spec 3.3 tier 1: the item's own values must be in the verbatim text it was extracted from.
 
-    Returns the reason when they are not, else None. OCR text is read with both vi and en number words."""
+    Returns the reason when they are not, else None. OCR text is read with both vi and en number words.
+    `screen_language` (X1, X2): the transcript's language, standing in for the on-screen text's."""
     if guards.fraction_or_range(source, language if spoken else None, folded=not spoken):
         return RANGE
     if isinstance(item, ExactInput):
@@ -402,8 +456,9 @@ def _inconsistent(item, source: str, spoken: bool, language: str | None, text_la
             return NO_VALUE
         if not units.value_prefixes_agree(_value(item) or "", source, source_language):
             return NO_VALUE  # R12c: 'Freezer - 18°C' or '<=5' for a bare value
-        check_name = not spoken or _same_language(text_language, language)
-        if check_name and not guards.name_in_source(item.name, source, normalize if spoken else _fold):
+        if _check_name(item, spoken, language, text_language, screen_language) and not guards.name_in_source(
+            item.name, source, normalize if spoken else _fold
+        ):
             return NO_NAME
     else:
         claimed, mode = Counter(number_tokens(item.text, None)), _unit_mode(spoken, language, text_language)
@@ -420,7 +475,30 @@ def _inconsistent(item, source: str, spoken: bool, language: str | None, text_la
     text = _canonical(source, spoken, language)
     if not all(_bounded(_canonical(r, spoken, language), text) for r in _required(item)):
         return NO_VALUE
+    unit = _unit_ok(item, _cross(text_language, language if spoken else screen_language), language)
+    if unit is not None and not unit(text, 0, len(text), not spoken):
+        return NO_VALUE
     return None
+
+
+def _cross(text_language: str | None, source_language: str | None) -> bool:
+    """X2: the draft and the video are both known and in different languages."""
+    return (
+        bool(_code(text_language))
+        and bool(_code(source_language))
+        and not _same_language(text_language, source_language)
+    )
+
+
+def _check_name(item, spoken: bool, language, text_language, screen_language) -> bool:
+    """I2 + X1: the name is looked for in its quote only when draft and source share a language. On screen
+    it is also looked for when the draft language is unknown, and always for an item without a value,
+    whose name is then all there is to check ('Muối' must not verify from a 'Sugar' caption)."""
+    if spoken:
+        return _same_language(text_language, language)
+    if not _code(text_language) or not (_value(item) or "").strip():
+        return True
+    return _same_language(text_language, screen_language)
 
 
 def _spells_number(text: str | None) -> bool:
@@ -514,11 +592,22 @@ def _own_words(item, source: str, source_language: str | None, text_language: st
     return _word_sequence(item.text) == _word_sequence(source)
 
 
+def _joined(item, source: str, spoken: bool, language: str | None):
+    """X3: the item with its range value as 'A-B' and its quote or on-screen text with every range of two
+    plain numbers joined the same way (speech read with its number words first: 'seven to ten')."""
+    text = spell_digits(normalize(source), language)[0] if spoken else normalize(source)
+    source = join_ranges(text)[0]
+    value = join_ranges(spell_digits(normalize(_value(item) or ""), None)[0])[0]
+    field = "quantity" if isinstance(item, Material) else "value"
+    update = {field: value, "quote" if spoken else "on_screen_text": source}
+    return item.model_copy(update=update), source
+
+
 def _result(status, method, reason=None, **rest) -> ItemVerification:
     return ItemVerification(status=status, method=method, reason=reason, **rest)
 
 
-def _frame_hit(item, source: str, sec: float, ocr_text: str, settings, exact: bool):
+def _frame_hit(item, source: str, sec: float, ocr_text: str, settings, exact: bool, unit=None, ranges=False):
     """(matched text, frame second, values_ok) when this frame's text matches the on-screen text."""
     if isinstance(item, ExactInput):
         found = guards.exact_rows(source, ocr_text)
@@ -526,7 +615,8 @@ def _frame_hit(item, source: str, sec: float, ocr_text: str, settings, exact: bo
     # R16a: a claim's own text decides which frame words are as the model meant them; on_screen_text
     # may copy a misread 'Kh0ng' that the claim text then leaves out
     written = None if isinstance(item, (Material, Parameter)) else item.text
-    found = _match_screen(source, ocr_text, settings.verify_text_threshold, _required(item), exact, written)
+    threshold = settings.verify_text_threshold
+    found = _match_screen(source, ocr_text, threshold, _required(item), exact, written, unit, ranges)
     return (found[0], sec, found[1]) if found else None
 
 
@@ -550,6 +640,9 @@ def verify_item(
     if not (source or "").strip():
         return _result("not_checkable", "none", "chỉ có hành động, không có lời nói hay chữ để đối chiếu")
     language = transcript.language if spoken and transcript else None
+    ranges = isinstance(item, (Material, Parameter)) and is_range(_value(item) or "")
+    if ranges:  # X3: value, quote and the text they are matched in read 'A to B' as 'A-B'
+        item, source = _joined(item, source, spoken, language)
     fields = (_value(item), getattr(item, "text", None), item.quote, item.on_screen_text)
     if transcript is not None and not guards.has_vocabulary(transcript.language) and units.has_digit(*fields):
         return _result("unverified", "none", NO_DIGITS)  # ruling R2a: digits we cannot tie to speech
@@ -557,7 +650,8 @@ def verify_item(
     heard = transcript is not None and bool(transcript.words) and _code(transcript.language) in VI_EN
     if not spoken and _states_number(item) and not heard:
         return _result("unverified", "none", NO_LANGUAGE)
-    reason = _inconsistent(item, source, spoken, language, text_language)
+    screen_language = transcript.language if transcript else None
+    reason = _inconsistent(item, source, spoken, language, text_language, screen_language)
     if reason:
         return _result("unverified", "none", reason)
     method = "asr" if spoken else "ocr"
@@ -581,6 +675,7 @@ def verify_item(
         unread = transcript is not None and not guards.has_vocabulary(transcript.language)
         exact_text = unread or guards.non_latin(source)
     numbers_differ, frames = False, 0
+    unit = _unit_ok(item, _cross(text_language, language if spoken else screen_language), language)
     for s in spans:
         if spoken:
             words = _window_words(transcript, s.start_sec, s.end_sec, pad)
@@ -589,7 +684,9 @@ def verify_item(
             else:
                 threshold, required = settings.verify_text_threshold, _required(item)
                 quantity = isinstance(item, (Material, Parameter))
-                hit = _match_speech(source, words, language, threshold, required, exact_text, quantity)
+                hit = _match_speech(
+                    source, words, language, threshold, required, exact_text, quantity, unit, ranges
+                )
             hits = [hit] if hit else []
         else:
             low, high = max(0.0, s.start_sec - pad), s.end_sec + pad
@@ -598,7 +695,7 @@ def verify_item(
             hits = [
                 h
                 for sec, text in in_window
-                if (h := _frame_hit(item, source, sec, text, settings, exact_text))
+                if (h := _frame_hit(item, source, sec, text, settings, exact_text, unit, ranges))
             ]
         for matched, sec, values_ok in hits:
             if values_ok:

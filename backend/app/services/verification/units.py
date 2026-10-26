@@ -5,7 +5,7 @@ Each check only ever turns a match into `unverified`; none of them can make a ma
 import re
 import unicodedata
 
-from app.services.verification.lexicon import clean
+from app.services.verification.lexicon import UNIT_TABLE, clean
 from app.services.verification.numbers import NUMBER, number_shape, spell_digits
 
 PUNCT = ".,;:!?()[]{}\"'"
@@ -14,30 +14,6 @@ SENTENCE = ".,;:!?)]}\"'”’»›」…"  # a token ending in these ends a sen
 POSTFIX = "%°‰′″"  # unit marks written after a number ('10% 5')
 BRACKETS = OPENERS + ")]}”’»›」"
 LOOKBACK = 3  # R16c: tokens before a number whose symbols must agree ('Bake ≤ about 5')
-# canonical unit -> spellings, '|' between spellings. Only unambiguous ones: 'cân' (also 'scale'),
-# 'lạng' (100 g), 'phân' (cm or manure), 'ly' and 'in' are left out, so they compare only as written.
-_TABLE = {
-    "sec": "giây|second|seconds|sec|secs|s",
-    "min": "phút|minute|minutes|min|mins",
-    "hour": "giờ|tiếng|hour|hours|hr|hrs|h",
-    "day": "ngày|day|days",
-    "week": "tuần|week|weeks",
-    "g": "g|gram|grams|gam|gr",
-    "kg": "kg|kilogram|kilograms|kilo|kilos|ký|kí",
-    "ml": "ml|milliliter|milliliters|millilitre|millilitres|mililít",
-    "l": "l|lít|liter|liters|litre|litres",
-    "tbsp": "muỗng canh|thìa canh|tablespoon|tablespoons|tbsp|tbs",
-    "tsp": "muỗng cà phê|thìa cà phê|teaspoon|teaspoons|tsp",
-    "cup": "chén|cốc|cup|cups",
-    "deg": "độ|degree|degrees|°",
-    "degC": "°c|độ c|degree c|degrees c|degree celsius|degrees celsius|celsius",
-    "degF": "°f|độ f|degree f|degrees f|degree fahrenheit|degrees fahrenheit|fahrenheit",
-    "mm": "mm|millimeter|millimeters|millimetre|millimetres",
-    "cm": "cm|centimeter|centimeters|centimetre|centimetres",
-    "m": "m|mét|meter|meters|metre|metres",
-    "inch": "inch|inches",
-    "pct": "%|phần trăm|percent|per cent",
-}
 
 
 def fold(text: str) -> str:
@@ -46,7 +22,9 @@ def fold(text: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn")
 
 
-UNITS = {fold(s) if f else s: unit for unit, spec in _TABLE.items() for s in spec.split("|") for f in (0, 1)}
+UNITS = {
+    fold(s) if f else s: unit for unit, spec in UNIT_TABLE.items() for s in spec.split("|") for f in (0, 1)
+}
 LONGEST = max(len(s.split()) for s in UNITS)
 
 
@@ -150,6 +128,34 @@ def unit_at(text: str, end: int) -> tuple[str, str | None]:
             return phrase, UNITS[phrase]
     word = words[0] if words else ""
     return word, UNITS.get(word)
+
+
+def _written_after(field: str, text: str, end: int) -> bool:
+    """X2: the words right after a number are the unit as written (a glued one is its whole word)."""
+    want = [w.strip(PUNCT) for w in field.split()]
+    rest = text[end:]
+    if rest[:1] and not rest[:1].isspace():
+        got = [rest.split()[0].strip(PUNCT)]
+    else:
+        got = [w.strip(PUNCT) for w in rest.split()[: len(want)]]
+    return bool(want) and got == want
+
+
+def unit_follows(field: str, shape: str, text: str, start: int, end: int, cross: bool) -> bool:
+    """X2: after every number of text[start:end] shaped like the value's last number, the unit maps to
+    the same table unit as `field` ('phút' = 'minutes', 'tsp' = 'teaspoons'); when either one is not in
+    the table, the unit must be written as `field` and the draft must be in the video's language (`cross`
+    False). No such number: False."""
+    want = UNITS.get(field)
+    spots = [m for m in NUMBER.finditer(text, start, end) if number_shape(m.group()) == shape]
+    for m in spots:
+        canon = unit_at(text, m.end())[1]
+        if want is not None and canon is not None:
+            if want != canon:
+                return False
+        elif cross or not _written_after(field, text, m.end()):
+            return False
+    return bool(spots)
 
 
 def around(text: str, spans: list[tuple[int, int]], shape) -> list[tuple]:

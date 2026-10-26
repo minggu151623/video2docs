@@ -13,14 +13,65 @@ from app.services.verification.numbers import nfkc
 PUNCT = ".,;:!?()[]{}\"'"
 
 
-def clean(text: str) -> str:
-    """R12b + R15: NFKC with superscripts kept apart ('10²' is '10^2'), every dash ('‐', '—', '−') as '-'."""
-    return nfkc(text)
-
-
 def fold(text: str) -> str:
     text = text.replace("đ", "d").replace("Đ", "D")
     return "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn")
+
+
+# ---- R4c + X2: units -------------------------------------------------------------------------------
+# canonical unit -> spellings, '|' between spellings. Only unambiguous ones: 'cân' (also 'scale'),
+# 'lạng' (100 g), 'phân' (cm or manure), 'ly' and 'in' are left out, so they compare only as written.
+UNIT_TABLE = {
+    "sec": "giây|second|seconds|sec|secs|s",
+    "min": "phút|minute|minutes|min|mins",
+    "hour": "giờ|tiếng|hour|hours|hr|hrs|h",
+    "day": "ngày|day|days",
+    "week": "tuần|week|weeks",
+    "g": "g|gram|grams|gam|gr",
+    "kg": "kg|kilogram|kilograms|kilo|kilos|ký|kí",
+    "ml": "ml|milliliter|milliliters|millilitre|millilitres|mililít",
+    "l": "l|lít|liter|liters|litre|litres",
+    "tbsp": "muỗng canh|thìa canh|tablespoon|tablespoons|tbsp|tbs",
+    "tsp": "muỗng cà phê|thìa cà phê|teaspoon|teaspoons|tsp",
+    "cup": "chén|cốc|cup|cups",
+    "oz": "oz|ounce|ounces",  # X2: imperial units common in English recipes
+    "floz": "fl oz|fluid ounce|fluid ounces",
+    "lb": "lb|lbs",  # not 'pound', which is also money
+    "pint": "pint|pints",
+    "quart": "quart|quarts",
+    "gallon": "gallon|gallons",
+    "deg": "độ|degree|degrees|°",
+    "degC": "°c|độ c|degree c|degrees c|degree celsius|degrees celsius|celsius",
+    "degF": "°f|độ f|degree f|degrees f|degree fahrenheit|degrees fahrenheit|fahrenheit",
+    "mm": "mm|millimeter|millimeters|millimetre|millimetres",
+    "cm": "cm|centimeter|centimeters|centimetre|centimetres",
+    "m": "m|mét|meter|meters|metre|metres",
+    "inch": "inch|inches",
+    "pct": "%|phần trăm|percent|per cent",
+}
+# X2: one-word, letters-only spellings, as written and without marks: the units split off a number they
+# are glued to ('4tsp', '200g', '5phút'); 'x' ('2x'), ordinals ('1st') and 'k' are not units
+GLUED_UNITS = {
+    f for spec in UNIT_TABLE.values() for s in spec.split("|") if s.isalpha() for f in (s, fold(s))
+}
+_GLUED = re.compile(r"(?<![^\W_])(\d+(?:[.,/:]\d+)*)([^\W\d_]+)(?![^\W_])")
+
+
+def split_units(text: str) -> str:
+    """X2: a table unit glued to the number before it becomes its own word ('Milk 4tsp' -> 'Milk 4 tsp',
+    '1/2tsp' -> '1/2 tsp'); the number is untouched, and a number glued to letters on its left ('mp3s'),
+    a run continuing into digits ('1h30') or any other suffix ('2x', '4k', '1st') stays as written."""
+
+    def cut(m: re.Match) -> str:
+        return f"{m[1]} {m[2]}" if m[2].casefold() in GLUED_UNITS else m[0]
+
+    return _GLUED.sub(cut, text)
+
+
+def clean(text: str) -> str:
+    """R12b + R15: NFKC with superscripts kept apart ('10²' is '10^2'), every dash ('‐', '—', '−') as '-';
+    X2: a table unit glued to a number is split off it ('4tsp' is '4 tsp')."""
+    return split_units(nfkc(text))
 
 
 # ---- R12d: number words of languages numbers.py cannot read ---------------------------------------
