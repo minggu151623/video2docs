@@ -2,7 +2,13 @@
 
 Ứng dụng local chuyển video hướng dẫn (how-to) thuộc mọi lĩnh vực, từ phần mềm, nấu ăn, sửa chữa đến thể thao, thành bản nháp tài liệu có timestamp, ảnh bằng chứng và trạng thái kiểm chứng từng mục. Theo `PROJECT_SPEC.md` và `docs/superpowers/specs/2026-10-22-general-tutorials-design.md`; giao diện tiếng Việt, tài liệu có thể chọn tiếng Việt hoặc tiếng Anh.
 
-**Trạng thái:** 26/10/2026: video nấu ăn tiếng Anh, tài liệu tiếng Việt: Gemini chép đúng 4/4 định lượng nhưng kiểm chứng chỉ 1 ✓/28 mục (0 ✓ sai) do khác ngôn ngữ — xem `docs/live-verification.md`; sau đó cho định lượng khác ngôn ngữ khớp qua bảng đơn vị, khoảng giá trị và từ điển nguyên liệu (tên dịch không chứng minh được thì ≈), chỉ nhận tên nằm cạnh số, chặn định lượng có phủ định trong mệnh đề/hàng và yêu cầu prompt chép định lượng trên màn hình (`docs/decisions.md` mục 49–58); chạy lại offline cùng draft/transcript/OCR: 4 ✓ (đều đúng), 12 ≈, 7 ?, chưa chạy lại live.  24/10/2026: schema v2 được Google chấp nhận; chạy thật toàn video Python pass (11 bước, 237 s gồm ASR/OCR), kiểm chứng ban đầu 2 ✓/6 mục và 1 ✓ sai nghĩa; sau sửa dấu nhắc lệnh và nhãn mô tả, kiểm chứng lại cho 3 ✓ đúng, 1 ≈, 2 ? — xem `docs/live-verification.md`; sau đó bỏ dấu nhắc Windows/Python trên hàng OCR và thêm trạng thái `quote_matched` cho câu diễn giải chưa kiểm chứng (`docs/decisions.md` mục 47–48, chưa chạy lại live).  ngày 22/10/2026 mở rộng từ tutorial phần mềm sang mọi video how-to: schema v2 (vật liệu, thông số, cảnh báo, lệnh/văn bản nguyên văn), chặn video không phải tutorial ở đoạn đầu, và kiểm chứng độc lập các trích dẫn bằng ASR (faster-whisper) và OCR (PaddleOCR) chạy local; contract provider v9. 1363 tests pass (`uv run pytest -q`, 3 test `slow` chạy engine thật nằm ngoài lượt mặc định) và frontend build pass. **Chưa chạy bộ đánh giá 8 video nhiều lĩnh vực** (`docs/evaluation-template.md`): chưa có số đo độ chính xác của kiểm chứng, tỉ lệ chặn video không phải tutorial hay tỉ lệ mục đúng bị bỏ sót, và chưa kiểm tra Google chấp nhận schema v2 bằng request thật. Bộ khớp ưu tiên không để định lượng sai mang dấu ✓, nên có thể bỏ sót mục đúng (các luật và cái giá về recall ở `docs/decisions.md` mục 26–58). Lịch sử trước đó (contract `MM:SS` v8, lượt live trên một video cài Python, cải tiến ngữ cảnh giữa các đoạn) ở `docs/quality-improvements.md`, `docs/live-verification.md` và `docs/validation.md`; các lượt live này dùng schema v1 và chưa phải nghiệm thu chất lượng.
+**Trạng thái ngày 28/10/2026:** ứng dụng local đã có schema v2 cho video how-to nhiều lĩnh vực, kiểm chứng trích dẫn bằng ASR/OCR và giao diện rà soát. Google đã chấp nhận schema v2 trong probe ngày 24/10; đã chạy thật video cài Python và video nấu ăn. Xem [báo cáo live](docs/live-verification.md) để phân biệt kết quả từng phiên bản.
+
+- Video Python: 11 bước, 11 ảnh, PDF 12 trang; sau sửa nhãn kiểm chứng, lượt kiểm chứng lại ghi nhận 3 ✓, 1 ≈ và 2 ?. Video nấu ăn: 12 bước, 12 ảnh, PDF 15 trang; lượt live ban đầu chỉ 1 ✓/28 mục, không có ✓ sai trong đối chiếu đã ghi nhận.
+- Các sửa đổi khớp định lượng khác ngôn ngữ sau đó được thử offline trên dữ liệu cũ: 4 ✓, 12 ≈, 7 ? và 5 mục không có văn bản đối chiếu theo ghi nhận của lần sửa; chưa phải một lượt live mới hay số đo trên video mới.
+- Ghép bước qua ranh giới đoạn chỉ gộp nội dung trùng hoàn toàn khi giữ được mọi bằng chứng trong giới hạn schema. Bước giống nhau nhưng có chi tiết khác được giữ và đánh dấu; bộ lọc cũng giữ bước có cờ cần rà soát. Xem [kiểm tra ghép bước](docs/assembly-review.md).
+- Kiểm tra ngày 28/10: **1.380 tests pass**, 3 test `slow` không chạy; Ruff, frontend build và 22 nhóm kiểm tra trình duyệt pass.
+- **Chưa chạy đủ bộ đánh giá 8 video** và chưa nghiệm thu độ chính xác trên nhiều lĩnh vực. ✓ là kết quả đối chiếu mục văn bản, không bảo đảm toàn bộ thao tác trong video đúng. Ứng dụng vẫn dành cho một người dùng trên localhost.
 
 ## Cài và chạy trên macOS Apple Silicon
 
@@ -55,7 +61,7 @@ npm --prefix frontend run dev
 | Mode | Static, `store=false`, không tools, không background của provider |
 | Stack | React + TypeScript + Vite; FastAPI + SQLAlchemy/Alembic; SQLite và file local |
 | Biên tập/xuất | Markdown + preview; MD/ZIP/PDF; ảnh FFmpeg; tên mục theo lĩnh vực (Nguyên liệu, Vật liệu, Sản phẩm, Tài nguyên…) |
-| Kiểm chứng | ASR + OCR local đối chiếu trích dẫn của model (lời nói, chữ trên màn hình); trạng thái `verified`, `unverified`, `not_checkable`, `not_checked` ở `verification.json`; chạy lại không gọi Google. Bản ghi lời nói không gửi cho Gemini |
+| Kiểm chứng | ASR + OCR local đối chiếu trích dẫn của model (lời nói, chữ trên màn hình); trạng thái `verified`, `quote_matched`, `unverified`, `not_checkable`, `not_checked` ở `verification.json`; chạy lại không gọi Google. Bản ghi lời nói không gửi cho Gemini |
 | Ngôn ngữ | UI tiếng Việt; output vi/en |
 | Tài nguyên | 500 MiB, 1200 giây, 8.294.400 pixel/video; 5000 MiB/project |
 | Worker/chunk | Một job media/AI tại một thời điểm; clip 300 giây, overlap 5 giây |
@@ -117,7 +123,7 @@ Live smoke chủ động, có thể phát sinh phí: chạy app với Gemini/key
 uv run python scripts/provider_smoke.py --video /path/to/clip.mp4 --confirm-google-upload --accept-unknown-cost
 ```
 
-Báo cáo ghi `docs/live-smoke.json`, model/SDK/usage/cleanup; không ghi key. Nút **Kiểm tra kết nối** chỉ kiểm tra metadata model, không xác nhận khả năng hiểu video. Báo cáo hiện tại là lượt smoke thật đã pass (schema v1, trước khi mở rộng); bộ đánh giá 8 video nhiều lĩnh vực chưa chạy, và probe Gemini với schema v2 cần người dùng đồng ý phí.
+Báo cáo ghi `docs/live-smoke.json`, model/SDK/usage/cleanup; không ghi key. Nút **Kiểm tra kết nối** chỉ kiểm tra metadata model, không xác nhận khả năng hiểu video. Báo cáo hiện tại là lượt smoke thật đã pass (schema v1, trước khi mở rộng); bộ đánh giá 8 video nhiều lĩnh vực chưa chạy, probe schema v2 và hai lượt video thật mới hơn đã được ghi trong `docs/live-verification.md`.
 
 ## Backup, xóa và xử lý lỗi
 

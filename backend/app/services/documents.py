@@ -1,5 +1,5 @@
-from difflib import SequenceMatcher
 from app.schemas.tutorial_v2 import TutorialDraftV2
+from app.services.stitching import append_step
 from app.core.errors import AppError
 from app.services.rendering import escape, render_markdown, stamp, supported_claim  # noqa: F401
 from app.core.storage import sha256, uid
@@ -41,6 +41,7 @@ def assemble(parts, duration, max_steps=80):
         summary="",
     )
     summaries = []
+    origins = {}
     has_steps = False
     for chunk_index, (offset, draft) in enumerate(parts):
         data = draft.model_dump(by_alias=True)
@@ -100,22 +101,7 @@ def assemble(parts, duration, max_steps=80):
                 merge_evidence(same, tool)
         for step in data["steps"]:
             step["local_id"] = f"c{chunk_index + 1}-{step['local_id']}"
-            normalized = lambda s: " ".join((s["title"] + " " + " ".join(s["actions"])).lower().split())
-            duplicate = False
-            for previous in first["steps"]:
-                overlap = max(previous["start_sec"], step["start_sec"]) < min(
-                    previous["end_sec"], step["end_sec"]
-                )
-                if overlap and normalized(previous) == normalized(step):
-                    duplicate = True
-                    break
-                if overlap and SequenceMatcher(None, normalized(previous), normalized(step)).ratio() > 0.8:
-                    step["needs_review"] = True
-                    step["review_reason"] = (
-                        "Có thể trùng hoặc tiếp tục bước trước ở ranh giới đoạn; cần kiểm tra."
-                    )
-            if not duplicate:
-                first["steps"].append(step)
+            append_step(first["steps"], origins, step, chunk_index, first["language"])
     first["steps"].sort(key=lambda s: (s["start_sec"], s["end_sec"]))
     first["summary"] = "\n".join(summaries)
     if has_steps:

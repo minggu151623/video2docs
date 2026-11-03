@@ -81,6 +81,28 @@ with sync_playwright() as p:
     page.get_by_label("Chỉ hiện mục chưa kiểm chứng").uncheck()
     expect(steps).to_have_count(2)
     checked("unverified-only filter hides steps without unverified items")
+
+    def flag_step_review(route):
+        response = route.fetch()
+        data = response.json()
+        if "draft" in data:
+            data["draft"]["steps"][1].update(
+                needs_review=True,
+                review_reason="MOCK: bước có thể trùng ở ranh giới đoạn.",
+            )
+        route.fulfill(response=response, json=data)
+
+    page.route("**/api/v1/generations/*", flag_step_review)
+    page.reload()
+    expect(steps).to_have_count(2)
+    expect(steps.nth(1)).to_contain_text("MOCK: bước có thể trùng ở ranh giới đoạn.")
+    page.get_by_label("Chỉ hiện mục chưa kiểm chứng").check()
+    expect(steps).to_have_count(2)
+    expect(page.get_by_text("Không có bước nào còn mục chưa kiểm chứng.", exact=True)).to_have_count(0)
+    checked("review-only steps remain visible in the unverified filter")
+    page.unroute("**/api/v1/generations/*", flag_step_review)
+    page.reload()
+    expect(steps).to_have_count(2)
     page.route(
         "**/api/v1/generations/*/verify",
         lambda route: route.fulfill(

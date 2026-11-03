@@ -41,8 +41,8 @@ Tổng hợp: chưa có, vì chưa có lượt chạy nào.
 ## Trước khi chạy cần biết
 
 - Luật số lân cận 8 token và các luật còn lại của bộ khớp (`docs/decisions.md`, mục 26 đến 46) làm một số định lượng đúng bị `unverified`; cột "mục đúng bị `unverified`" có mặt để đo đúng cái giá đó, chưa có ngưỡng.
-- Chưa có chỗ hở đã biết nào cho "sai mang ✓" sau mục 37–46; nếu cột "sai mang ✓" không đạt, ghi nguyên số, không chỉnh ngưỡng. Từ mục 45 (R13) và 46(b), video không có lời nói vi/en (kể cả transcript có ngôn ngữ nhưng không có từ) không có mục OCR nào chứa số được ✓: ghi riêng số mục như vậy để thấy cái giá. Các luật 37–46 thêm cái giá về recall (OCR so từng từ theo thứ tự, thứ tự "fifth", "point"/"chấm" đứng trước số, câu nhận định khác ngôn ngữ với đơn vị ngoài bảng, chữ tiếng Việt trên màn hình phải trùng từng từ, "nữa" trên OCR, "media").
-- Probe schema v2 với Gemini bằng request text-only chưa chạy; lượt gửi video đầu tiên cũng là lần đầu xác nhận Google chấp nhận schema.
+- Chỗ hở đã biết cho "sai mang ✓": ba ca ở `docs/decisions.md` mục 60 ("..." sau đoạn khớp, tên cạnh tranh ngoài từ điển, "Đường và muối 200g"); nếu cột "sai mang ✓" không đạt, ghi nguyên số, không chỉnh ngưỡng. Từ mục 45 (R13) và 46(b), video không có lời nói vi/en (kể cả transcript có ngôn ngữ nhưng không có từ) không có mục OCR nào chứa số được ✓: ghi riêng số mục như vậy để thấy cái giá. Các luật 37–46 thêm cái giá về recall (OCR so từng từ theo thứ tự, thứ tự "fifth", "point"/"chấm" đứng trước số, câu nhận định khác ngôn ngữ với đơn vị ngoài bảng, chữ tiếng Việt trên màn hình phải trùng từng từ, "nữa" trên OCR, "media").
+- Probe schema v2 đã chạy ngày 24/10/2026: Google nhận cả 3 request, 2 kết quả qua Pydantic. Đã có lượt live Python và nấu ăn riêng lẻ; chúng không thay thế bộ 8 video trong bảng. Xem `docs/live-verification.md`.
 - Phép chấm khớp tên và số, và ghép bước bằng `token_set_ratio`, có sai số riêng (`fixtures/eval/README.md`).
 
 Không đạt thì sửa prompt/policy/bộ khớp rồi đo lại, không chỉnh báo cáo hoặc ngưỡng để coi là đạt.

@@ -1010,8 +1010,8 @@ export default function App() {
                     )}
                     {onlyPending &&
                       generation.verification &&
-                      !generation.draft.steps.some((_, i) =>
-                        pendingInStep(generation.verification, i),
+                      !generation.draft.steps.some((step, i) =>
+                        step.needs_review || pendingInStep(generation.verification, i),
                       ) && (
                         <p className="muted" role="status">
                           Không có bước nào còn mục chưa kiểm chứng.
@@ -1020,6 +1020,7 @@ export default function App() {
                     {generation.draft.steps.map((s, i) =>
                       onlyPending &&
                       generation.verification &&
+                      !s.needs_review &&
                       !pendingInStep(generation.verification, i) ? null : (
                         <div className="step" key={s.local_id}>
                           <div className="step-top">

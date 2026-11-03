@@ -1,0 +1,37 @@
+[
+  {
+    "video": "cooking",
+    "generation_id": "fa677617-00fb-483c-af25-1458c2a1cf0f",
+    "checkpoint_hashes_valid": true,
+    "original_draft_unchanged": true,
+    "steps_before": 12,
+    "steps_after": 12,
+    "changed_steps": [
+      {
+        "id": "c1-3",
+        "title": "Đánh bông lòng trắng trứng",
+        "needs_review": true,
+        "reason": "Có thể trùng hoặc tiếp tục bước c2-1 ở ranh giới đoạn; giữ cả hai để kiểm tra chi tiết khác nhau."
+      },
+      {
+        "id": "c2-1",
+        "title": "Đánh bông lòng trắng trứng",
+        "needs_review": true,
+        "reason": "Có thể trùng hoặc tiếp tục bước c1-3 ở ranh giới đoạn; giữ cả hai để kiểm tra chi tiết khác nhau."
+      }
+    ],
+    "provider_calls": 0,
+    "asr_ocr_rerun": false
+  },
+  {
+    "video": "python",
+    "generation_id": "42ac3de1-ebc5-46aa-96dc-f4bb3ab7818b",
+    "checkpoint_hashes_valid": true,
+    "original_draft_unchanged": true,
+    "steps_before": 11,
+    "steps_after": 11,
+    "changed_steps": [],
+    "provider_calls": 0,
+    "asr_ocr_rerun": false
+  }
+]

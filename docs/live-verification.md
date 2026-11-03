@@ -1,6 +1,6 @@
 # Kiểm tra Gemini thật với video người dùng
 
-Khởi tạo: 20/10/2026; cập nhật: 21/10/2026, Asia/Ho_Chi_Minh. Đây là báo cáo live, tách khỏi các test mock trước đó.
+Khởi tạo: 20/10/2026; cập nhật: 28/10/2026, Asia/Ho_Chi_Minh. Đây là báo cáo live, tách khỏi các test mock trước đó.
 
 ## Video nấu ăn ngày 26/10/2026
 
@@ -151,4 +151,4 @@ Chi phí tham chiếu Standard của riêng smoke pass là 0,0128565 USD cho hai
 
 ## Giới hạn đánh giá
 
-Chỉ một video người dùng được cung cấp. Chưa hoàn thành bộ 5 tutorial, chưa đo coverage/timestamp theo rubric đầy đủ, chưa thử thao tác cài đặt trong Windows. Không có command từ video được thực thi trên máy này.
+Các lượt live riêng lẻ hiện có video Python và video nấu ăn. Bộ đánh giá mới gồm 8 video nhiều lĩnh vực vẫn chưa hoàn thành; chưa đo đầy đủ coverage/timestamp trên bộ đó và chưa thử thao tác cài đặt trong Windows. Không có command từ video được thực thi trên máy này.
