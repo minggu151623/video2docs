@@ -8,7 +8,7 @@
 - Các sửa đổi khớp định lượng khác ngôn ngữ sau đó được thử offline trên dữ liệu cũ: 4 ✓, 12 ≈, 7 ? và 5 mục không có văn bản đối chiếu theo ghi nhận của lần sửa; chưa phải một lượt live mới hay số đo trên video mới.
 - Ghép bước qua ranh giới đoạn chỉ gộp nội dung trùng hoàn toàn khi giữ được mọi bằng chứng trong giới hạn schema. Bước giống nhau nhưng có chi tiết khác được giữ và đánh dấu; bộ lọc cũng giữ bước có cờ cần rà soát. Xem [kiểm tra ghép bước](docs/assembly-review.md).
 - Kiểm tra ngày 28/10: **1.380 tests pass**, 3 test `slow` không chạy; Ruff, frontend build và 22 nhóm kiểm tra trình duyệt pass.
-- **Chưa chạy đủ bộ đánh giá 8 video** và chưa nghiệm thu độ chính xác trên nhiều lĩnh vực. ✓ là kết quả đối chiếu mục văn bản, không bảo đảm toàn bộ thao tác trong video đúng. Ứng dụng vẫn dành cho một người dùng trên localhost.
+- **Đánh giá 8 video lượt 1 (05/11/2026)**, video CC BY từ Wikimedia Commons: 2/2 video không phải tutorial bị chặn ở đoạn 1; 0 ✓ sai, nhưng 6 video tutorial chỉ có 1 mục ✓ (đúng), nên chưa đo được độ chính xác của ✓ trên số lượng có ý nghĩa. 3/6 video tutorial không có lời nói nên số trên màn hình không được kiểm chứng (luật R13). Xem [báo cáo đánh giá](docs/evaluation-template.md); chưa nghiệm thu. ✓ là kết quả đối chiếu mục văn bản, không bảo đảm toàn bộ thao tác trong video đúng. Ứng dụng vẫn dành cho một người dùng trên localhost.
 
 ## Cài và chạy trên macOS Apple Silicon
 

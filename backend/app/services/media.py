@@ -114,7 +114,14 @@ def probe(path, settings):
     }
 
 
-def encode(source, target, start, end, check_cancel=lambda: None):
+UPLOAD_MAX_SIDE = 1280
+
+
+def encode(source, target, start, end, check_cancel=lambda: None, upload=False):
+    """Playback keeps full resolution for OCR and evidence frames; clips for the provider are downscaled,
+    since the model samples frames at low resolution; a 2-minute CRF 18 1080p clip (~77 MB) broke the
+    upload on a ~1 Mbps uplink while the same clip at 1280 px CRF 26 (~15 MB) went through."""
+    scale = f"scale=w='min({UPLOAD_MAX_SIDE},iw)':h='min({UPLOAD_MAX_SIDE},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,"
     target.parent.mkdir(parents=True, exist_ok=True)
     partial = target.with_suffix(".partial")
     try:
@@ -140,7 +147,7 @@ def encode(source, target, start, end, check_cancel=lambda: None):
                 "-map",
                 "0:a:0?",
                 "-vf",
-                "setpts=PTS-STARTPTS",
+                (scale if upload else "") + "setpts=PTS-STARTPTS",
                 "-af",
                 "asetpts=PTS-STARTPTS",
                 "-c:v",
@@ -150,11 +157,12 @@ def encode(source, target, start, end, check_cancel=lambda: None):
                 "-preset",
                 "veryfast",
                 "-crf",
-                "18",
+                "26" if upload else "18",
                 "-pix_fmt",
                 "yuv420p",
                 "-c:a",
                 "aac",
+                *(["-b:a", "96k"] if upload else []),
                 "-movflags",
                 "+faststart",
                 "-fs",

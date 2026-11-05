@@ -1,6 +1,6 @@
 # Bộ đánh giá nhiều lĩnh vực: định dạng đáp án
 
-Thư mục này mô tả cách ghi đáp án và chấm bằng `scripts/evaluate.py`. Chưa có video hay đáp án thật nào trong repo, và bộ 8 video chưa được chạy (xem `docs/evaluation-template.md`). Video riêng tư, raw output của provider và đáp án gắn với video có quyền sử dụng không đưa vào Git.
+Thư mục này mô tả cách ghi đáp án và chấm bằng `scripts/evaluate.py`. Video và đáp án thật không nằm trong repo; lượt 1 của bộ 8 video (05/11/2026) được ghi ở `docs/evaluation-template.md`. Video riêng tư, raw output của provider và đáp án gắn với video có quyền sử dụng không đưa vào Git.
 
 Người chấm ghi đáp án **trước** khi xem output của app, theo từng video, ra một file JSON:
 

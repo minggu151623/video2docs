@@ -361,7 +361,7 @@ class Worker:
                 clip_rel = f"projects/{job.project_id}/derived/{job.id}/{chunk.id}.mp4"
                 clip = safe_path(cfg.data_dir, clip_rel)
                 self.phase(job.id, "preparing")
-                encode(source, clip, chunk.start_sec, chunk.end_sec, Cancellation(self, job.id))
+                encode(source, clip, chunk.start_sec, chunk.end_sec, Cancellation(self, job.id), upload=True)
                 measured = probe(clip, cfg)["duration_sec"]
                 if abs(measured - (chunk.end_sec - chunk.start_sec)) > 0.5:
                     raise AppError("MEDIA_OUTPUT_LIMIT", "Chunk bị cắt thiếu do giới hạn output media.", 422)

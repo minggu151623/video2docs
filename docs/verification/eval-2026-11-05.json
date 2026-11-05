@@ -1,0 +1,339 @@
+{
+  "date": "2026-11-05",
+  "model": "gemini-3.1-flash-lite",
+  "output_language": "vi",
+  "chunk_seconds": 120,
+  "annotator": "Claude (same agent ran and scored; not independent)",
+  "annotations_hashed_before_output": true,
+  "videos": [
+    {
+      "id": "1-software",
+      "commons_file": "File:How to git commit and push (to GitHub).webm",
+      "commons_url": "https://commons.wikimedia.org/wiki/File:How_to_git_commit_and_push_(to_GitHub).webm",
+      "author": "Damien Murtagh",
+      "license": "CC BY 3.0",
+      "sha256": "a8e1a063c1f5e922cbded05f1682d52315e1cb761b810acc0791864c6747bf30",
+      "duration_sec": 193.3,
+      "job_state": "needs_review",
+      "retries": 0,
+      "verification_status": {
+        "not_checkable": 1,
+        "unverified": 5,
+        "quote_matched": 1
+      },
+      "asr_status": "ok",
+      "ocr_status": "ok",
+      "steps": 5,
+      "evaluate_py": {
+        "verified_precision": null,
+        "wrong_verified_quantities": 0,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {
+          "count": 0,
+          "paths": []
+        },
+        "verified_false_negative_rate": null,
+        "step_coverage": 0.5,
+        "not_tutorial_correct": true,
+        "quote_matched": {
+          "count": 1,
+          "paths": [
+            "steps/1/tips/0"
+          ]
+        },
+        "counts": {
+          "verified_items": 0,
+          "verified_correct": 0,
+          "annotated_quantities": 0,
+          "annotated_quantities_in_draft": 0,
+          "annotated_steps": 8,
+          "annotated_steps_matched": 4
+        }
+      }
+    },
+    {
+      "id": "2-cooking",
+      "commons_file": "File:How to Make Kombucha - Kombucha Recipe - Healthy Probiotic Drink.webm",
+      "commons_url": "https://commons.wikimedia.org/wiki/File:How_to_Make_Kombucha_-_Kombucha_Recipe_-_Healthy_Probiotic_Drink.webm",
+      "author": "Peepal Farm Products",
+      "license": "CC BY 3.0",
+      "sha256": "a0932d066127d47cead315088c67389238a19a389849200650e90e34df223f37",
+      "duration_sec": 138.9,
+      "job_state": "needs_review",
+      "retries": 0,
+      "verification_status": {
+        "unverified": 9
+      },
+      "asr_status": "ok",
+      "ocr_status": "skipped",
+      "steps": 15,
+      "evaluate_py": {
+        "verified_precision": null,
+        "wrong_verified_quantities": 0,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {
+          "count": 0,
+          "paths": []
+        },
+        "verified_false_negative_rate": 1.0,
+        "step_coverage": 0.7692307692307693,
+        "not_tutorial_correct": true,
+        "quote_matched": {
+          "count": 0,
+          "paths": []
+        },
+        "counts": {
+          "verified_items": 0,
+          "verified_correct": 0,
+          "annotated_quantities": 5,
+          "annotated_quantities_in_draft": 3,
+          "annotated_steps": 13,
+          "annotated_steps_matched": 10
+        }
+      }
+    },
+    {
+      "id": "3-repair",
+      "commons_file": "File:MSI Trident 3 9th Gen Teardown - GPU Swap - Storage.webm",
+      "commons_url": "https://commons.wikimedia.org/wiki/File:MSI_Trident_3_9th_Gen_Teardown_-_GPU_Swap_-_Storage.webm",
+      "author": "Humaam",
+      "license": "CC BY 3.0",
+      "sha256": "76af004284b0d6ab6d620f59be5f3e189f4cdbb695b19d6c0c18f40d4a9f11fe",
+      "duration_sec": 521.3,
+      "job_state": "needs_review",
+      "retries": 1,
+      "verification_status": {
+        "unverified": 9,
+        "not_checkable": 3,
+        "quote_matched": 2,
+        "not_checked": 3
+      },
+      "asr_status": "ok",
+      "ocr_status": "failed",
+      "steps": 23,
+      "evaluate_py": {
+        "verified_precision": null,
+        "wrong_verified_quantities": 0,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {
+          "count": 0,
+          "paths": []
+        },
+        "verified_false_negative_rate": null,
+        "step_coverage": 0.34782608695652173,
+        "not_tutorial_correct": true,
+        "quote_matched": {
+          "count": 2,
+          "paths": [
+            "prerequisites/4",
+            "safety/1"
+          ]
+        },
+        "counts": {
+          "verified_items": 0,
+          "verified_correct": 0,
+          "annotated_quantities": 4,
+          "annotated_quantities_in_draft": 0,
+          "annotated_steps": 23,
+          "annotated_steps_matched": 8
+        }
+      }
+    },
+    {
+      "id": "4-craft",
+      "commons_file": "File:Punch needle Tutorial - Keychains - No sewing!.webm",
+      "commons_url": "https://commons.wikimedia.org/wiki/File:Punch_needle_Tutorial_-_Keychains_-_No_sewing!.webm",
+      "author": "JustBeCreative",
+      "license": "CC BY 3.0",
+      "sha256": "ef36296b882ebb6b1578e60dc7d39c3f71bd5d96f5c42fb416d5594222f19620",
+      "duration_sec": 197.4,
+      "job_state": "needs_review",
+      "retries": 0,
+      "verification_status": {
+        "quote_matched": 2,
+        "not_checkable": 4,
+        "unverified": 1
+      },
+      "asr_status": "ok",
+      "ocr_status": "ok",
+      "steps": 8,
+      "evaluate_py": {
+        "verified_precision": null,
+        "wrong_verified_quantities": 0,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {
+          "count": 0,
+          "paths": []
+        },
+        "verified_false_negative_rate": null,
+        "step_coverage": 0.4,
+        "not_tutorial_correct": true,
+        "quote_matched": {
+          "count": 2,
+          "paths": [
+            "prerequisites/0",
+            "materials/0"
+          ]
+        },
+        "counts": {
+          "verified_items": 0,
+          "verified_correct": 0,
+          "annotated_quantities": 0,
+          "annotated_quantities_in_draft": 0,
+          "annotated_steps": 10,
+          "annotated_steps_matched": 4
+        }
+      }
+    },
+    {
+      "id": "5-sports",
+      "commons_file": "File:How To Properly Dumbbell Shoulder Press.webm",
+      "commons_url": "https://commons.wikimedia.org/wiki/File:How_To_Properly_Dumbbell_Shoulder_Press.webm",
+      "author": "Colossus Fitness",
+      "license": "CC BY 3.0",
+      "sha256": "0ce79a7d63b00a42c22a952d565d328708c98d4217d5bc33f149e3050cbd6637",
+      "duration_sec": 213.2,
+      "job_state": "needs_review",
+      "retries": 0,
+      "verification_status": {
+        "not_checkable": 6,
+        "quote_matched": 3,
+        "unverified": 7
+      },
+      "asr_status": "ok",
+      "ocr_status": "skipped",
+      "steps": 7,
+      "evaluate_py": {
+        "verified_precision": null,
+        "wrong_verified_quantities": 0,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {
+          "count": 0,
+          "paths": []
+        },
+        "verified_false_negative_rate": null,
+        "step_coverage": 0.0,
+        "not_tutorial_correct": true,
+        "quote_matched": {
+          "count": 3,
+          "paths": [
+            "safety/1",
+            "steps/1/warnings/0",
+            "steps/6/tips/0"
+          ]
+        },
+        "counts": {
+          "verified_items": 0,
+          "verified_correct": 0,
+          "annotated_quantities": 1,
+          "annotated_quantities_in_draft": 0,
+          "annotated_steps": 6,
+          "annotated_steps_matched": 0
+        }
+      }
+    },
+    {
+      "id": "6-beauty",
+      "commons_file": "File:How to make a natural Hair Growth Serum for thicker, fuller hair.webm",
+      "commons_url": "https://commons.wikimedia.org/wiki/File:How_to_make_a_natural_Hair_Growth_Serum_for_thicker,_fuller_hair.webm",
+      "author": "Vanessa Dixon",
+      "license": "CC BY 3.0",
+      "sha256": "da959222c5607841be06411fb1570dbc4d9ed1ce26029570bf7da394ba6d6944",
+      "duration_sec": 218.4,
+      "job_state": "needs_review",
+      "retries": 1,
+      "verification_status": {
+        "not_checkable": 1,
+        "quote_matched": 4,
+        "verified": 1,
+        "unverified": 8
+      },
+      "asr_status": "ok",
+      "ocr_status": "ok",
+      "steps": 6,
+      "evaluate_py": {
+        "verified_precision": 0.0,
+        "wrong_verified_quantities": 1,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {
+          "count": 0,
+          "paths": []
+        },
+        "verified_false_negative_rate": 1.0,
+        "step_coverage": 0.25,
+        "not_tutorial_correct": true,
+        "quote_matched": {
+          "count": 4,
+          "paths": [
+            "safety/0",
+            "steps/1/parameters/0",
+            "steps/2/parameters/0",
+            "steps/5/tips/0"
+          ]
+        },
+        "counts": {
+          "verified_items": 1,
+          "verified_correct": 0,
+          "annotated_quantities": 17,
+          "annotated_quantities_in_draft": 8,
+          "annotated_steps": 8,
+          "annotated_steps_matched": 2
+        }
+      }
+    },
+    {
+      "id": "7-vlog",
+      "commons_file": "File:Travel vlog Bled & Bohinj - Slovenia Travel Optician.webm",
+      "commons_url": "https://commons.wikimedia.org/wiki/File:Travel_vlog_Bled_&_Bohinj_-_Slovenia_Travel_Optician.webm",
+      "author": "Travel Optician",
+      "license": "CC BY 3.0",
+      "sha256": "e02e4a2888594a2ecb51d5a7ab60643116ae24dac5b73e23cbd90680832c0b31",
+      "duration_sec": 153.0,
+      "job_state": "not_tutorial",
+      "retries": 0,
+      "evaluate_py": {
+        "verified_precision": null,
+        "wrong_verified_quantities": 0,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {
+          "count": 0,
+          "paths": []
+        },
+        "verified_false_negative_rate": null,
+        "step_coverage": null,
+        "not_tutorial_correct": true,
+        "quote_matched": {
+          "count": 0,
+          "paths": []
+        }
+      }
+    },
+    {
+      "id": "8-review",
+      "commons_file": "File:Hawkeye Firefly 8S 4K Sports Action Camera Review.webm",
+      "commons_url": "https://commons.wikimedia.org/wiki/File:Hawkeye_Firefly_8S_4K_Sports_Action_Camera_Review.webm",
+      "author": "Products Geek",
+      "license": "CC BY 3.0",
+      "sha256": "df0552473080511590d2e02a8ef12ea9d004533b738689a620da82535f3d0afb",
+      "duration_sec": 275.7,
+      "job_state": "not_tutorial",
+      "retries": 0,
+      "evaluate_py": {
+        "verified_precision": null,
+        "wrong_verified_quantities": 0,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {
+          "count": 0,
+          "paths": []
+        },
+        "verified_false_negative_rate": null,
+        "step_coverage": null,
+        "not_tutorial_correct": true,
+        "quote_matched": {
+          "count": 0,
+          "paths": []
+        }
+      }
+    }
+  ]
+}

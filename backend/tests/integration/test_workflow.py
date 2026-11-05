@@ -1068,3 +1068,26 @@ def test_asr_failure_is_reported_with_code(env, voiced_clip, monkeypatch, caplog
     assert report["asr_status"] == "failed" and report["asr_error"] == "ASR_FAILED"
     item = report["items"]["steps/0/parameters/0"]
     assert (item["status"], item["reason"]) == ("not_checked", "ASR lỗi (ASR_FAILED)")
+
+
+def test_provider_clips_are_downscaled_but_playback_keeps_resolution(tmp_path):
+    from app.services.media import encode
+    import subprocess
+
+    source = tmp_path / "wide.mp4"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=1920x1080:rate=10", "-t", "2", "-pix_fmt", "yuv420p", str(source)],
+        check=True,
+    )
+
+    def size(path):
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", str(path)],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        return tuple(int(v) for v in out.split(","))
+
+    encode(source, tmp_path / "playback.mp4", 0, 2)
+    encode(source, tmp_path / "clip.mp4", 0, 2, upload=True)
+    assert size(tmp_path / "playback.mp4") == (1920, 1080)
+    assert size(tmp_path / "clip.mp4") == (1280, 720)
