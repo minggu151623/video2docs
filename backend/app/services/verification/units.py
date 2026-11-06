@@ -74,6 +74,8 @@ def _symbols(token: str) -> list[str]:
     when it has no letter or digit ('≤', '$', '-', '<='), a standalone 'x'/'×', else the symbols glued to
     its front ('≤about') or its end ('Bake≤'). Sentence punctuation and unit marks are not symbols."""
     word = "".join(c for c in token if c not in BRACKETS)
+    if re.fullmatch(r"@[^\W\d][\w.]*", word):
+        return []  # a handle ('@PEEPALFARM' watermark), not a symbol before a number
     if word in ("x", "×"):
         return [word]
     runs = [word] if not any(c.isalnum() for c in word) else _edges(word)

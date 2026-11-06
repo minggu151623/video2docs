@@ -147,6 +147,16 @@ def khong_before_digit(text: str) -> bool:
     return bool(re.search(r"(?<!\w)(?:không|khong|kh0ng)\s+\d", clean(text).casefold()))
 
 
+# A step label opening a line ('Step 1 - ', 'Bước 3: ', 'STEP 12)'): its number counts the steps, not
+# the item; the separator is required and may not be followed by a digit ('Step 1.5' stays)
+_STEP_LABEL = re.compile(r"(?im)^[ \t]*(?:step|bước|buoc)[ \t]*\d+[ \t]*[-–—:.)](?!\d)[ \t]*")
+
+
+def strip_step_labels(text: str) -> str:
+    """Drop the step label at the start of each line of on-screen text."""
+    return _STEP_LABEL.sub("", text)
+
+
 def split_units(text: str) -> str:
     """X2: a table unit glued to the number before it becomes its own word ('Milk 4tsp' -> 'Milk 4 tsp',
     '1/2tsp' -> '1/2 tsp'); the number is untouched, and a number glued to letters on its left ('mp3s'),

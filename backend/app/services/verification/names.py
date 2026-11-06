@@ -230,7 +230,8 @@ def plain(word: str | None, folded: bool) -> bool:
     table = units.UNITS if folded else units.WRITTEN
     if word is None or _number(word):
         return True
-    return word in lexicon.NEIGHBOURS or word in BETWEEN or word in table
+    # punctuation ends or separates; it cannot make 'water.' another ingredient the way 'coconut' does
+    return word in lexicon.NEIGHBOURS or word in BETWEEN or word in table or word in CLAUSE_TOKENS | {","}
 
 
 def _beside(words: list[str], i: int, step: int) -> str | None:

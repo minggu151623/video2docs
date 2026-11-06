@@ -42,15 +42,20 @@ Tổng cộng 18 request phân tích Gemini (kể cả các request ở lần ch
 
 Độ phủ "tay" ghép bước theo nghĩa trong cửa sổ 10 giây (riêng video 3 nới tới khoảng 20 giây), vì `token_set_ratio` không ghép được tiêu đề tiếng Việt diễn đạt khác. Định lượng đúng nhưng không ✓ chủ yếu do: video không có lời nói (R13), đơn vị/tên dịch sang tiếng Việt, và OCR đọc sai dấu nhắc.
 
-## Chạy lại kiểm chứng sau R13c (07/11/2026)
+## Chạy lại kiểm chứng sau R13c và mục 63 (07/11/2026)
 
-Sau khi nới R13 (`decisions.md` mục 62), chạy lại job kiểm chứng của 6 video tutorial (0 request Gemini, cùng draft). Kết quả: **vẫn 1 mục `verified`** (video 6, như trước), 0 ✓ sai, 0 lệnh sai mang ✓. Ba video không lời đã qua được cổng ngôn ngữ, nhưng gặp luật khác:
+Sau khi nới R13 (`decisions.md` mục 62) và bỏ nhãn bước, handle, dấu câu khỏi phép so (mục 63), chạy lại job kiểm chứng của 6 video tutorial (0 request Gemini, cùng draft):
 
-- Video 2 (kombucha): chú thích có dạng "Step 1 - Measure out 15 gms of Tea, and 45 gms of Sugar." Luật số lân cận (mục 29) thấy "1" và "45" quanh "15 gms of Tea" nên `unverified`; với "3-4 ngày", Gemini chép cả "Step 13 -" vào `on_screen_text` nên số của nguyên văn khác giá trị. Hai thông số Gemini ghi `stated` dù video không lời nên được so với lời nói và không khớp.
-- Video 3 (sửa máy): OCR vẫn hết ngân sách 300 s (3 mục `not_checked`); "2.5 inch" có dạng số-dấu-số và "once" trùng từ số tiếng Tây Ban Nha nên vẫn bị chặn.
-- Video 4 (thủ công): không có định lượng; 2 mục khớp chú thích là `quote_matched` vì tài liệu tiếng Việt.
+| # | Trước | Sau | Ghi chú |
+| --- | --- | --- | --- |
+| 1 Phần mềm | 0 ✓ | 0 ✓ | Không đổi: OCR đọc `$` thành `S`, chữ cửa sổ bên cạnh dính vào hàng lệnh |
+| 2 Kombucha | 0 ✓ | **1 ✓** ("Nước 2 liters", đúng), 4 ≈ | "15 gms of Tea, and 45 gms of Sugar" vẫn bị luật số lân cận (mục 29) chặn vì hai định lượng chung một câu; "2 lít" và "3-4 ngày" là ≈ vì tên thông số đã dịch; "2 tuần" Gemini ghi `stated` dù video không lời |
+| 3 Sửa máy | 0 ✓ | 0 ✓ | OCR vẫn hết ngân sách 300 s; "2.5 inch" có dạng số-dấu-số; "once" trùng từ số tiếng Tây Ban Nha |
+| 4 Thủ công | 0 ✓ | 0 ✓ | Không có định lượng; 2 mục ≈ vì tài liệu tiếng Việt |
+| 5 Thể thao | 0 ✓ | 0 ✓ | Không đổi |
+| 6 Làm đẹp | 1 ✓ | 1 ✓ | Không đổi ("Nước 1 cốc", đúng) |
 
-Như vậy R13 không còn là nút chặn chính; nút chặn tiếp theo cho video có chú thích là nhãn "Step N"/"Bước N" đầu dòng bị tính như một số của định lượng.
+Tổng: **2 mục `verified`, cả 2 đúng khi xem lại bằng tay**, 0 định lượng sai và 0 lệnh sai mang ✓. Script chấm video 2 là 1/1; video 6 vẫn là 0/1 vì đáp án ghi "cup" còn tài liệu ghi "cốc". Hai mục vẫn quá ít để nói ngưỡng 95% đạt. Nút chặn còn lại lớn nhất: nhiều định lượng trong một câu chú thích (luật số lân cận), tên thông số đã dịch, OCR lệnh terminal, và ngân sách OCR của video dài.
 
 ## Trước khi chạy cần biết
 

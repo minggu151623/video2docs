@@ -817,6 +817,9 @@ def verify_item(
     source = item.quote if spoken else item.on_screen_text
     if not (source or "").strip():
         return _result("not_checkable", "none", "chỉ có hành động, không có lời nói hay chữ để đối chiếu")
+    if not spoken:  # a caption's 'Step 1 - ' label is not a number of the item
+        source = lexicon.strip_step_labels(source)
+        item = item.model_copy(update={"on_screen_text": source})
     language = transcript.language if spoken and transcript else None
     ranges = isinstance(item, (Material, Parameter)) and is_range(_value(item) or "")
     if ranges:  # X3: value, quote and the text they are matched in read 'A to B' as 'A-B'
@@ -876,7 +879,9 @@ def verify_item(
             hits = [hit] if hit else []
         else:
             low, high = max(0.0, s.start_sec - pad), s.end_sec + pad
-            in_window = sorted((sec, text) for sec, text in ocr_texts if low <= sec <= high)
+            in_window = sorted(
+                (sec, lexicon.strip_step_labels(text)) for sec, text in ocr_texts if low <= sec <= high
+            )
             frames += len(in_window)
             hits = [
                 h

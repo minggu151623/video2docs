@@ -1098,3 +1098,43 @@ def test_r13c_claim_in_the_draft_language_reads_its_ascii_screen_text():
     item = cl("Đo 15 gms trà", ost="Measure out 15 gms of Tea")
     result = ocr_silent(item, "Measure out 15 gms of Tea", "en")
     assert result.reason != NO_LANGUAGE and result.status == "quote_matched"
+
+
+# step labels at the start of a caption line are not numbers of the item
+def test_step_label_is_not_a_number_of_the_item():
+    caption = "Step 2 - Boil 2 liters of water."
+    item = mat("2", "liters", ost=caption, name="Water")
+    assert ocr_silent(item, caption, "en").status == "verified"
+    days = par("3-4", "days", ost="Step 13 - Let the bottles sit for 3-4 days.", name="Wait")
+    assert ocr_silent(days, "Step 13 - Let the bottles sit for 3-4 days.", "en").status in ("verified", "quote_matched")
+    vi = mat("2", "lít", ost="Bước 3: Đun 2 lít nước", name="Nước")
+    assert ocr_vi(vi, "Bước 3: Đun 2 lít nước").status == "verified"
+
+
+def test_step_label_needs_a_separator_and_the_line_start():
+    # without a separator, or mid-line, the number may belong to the item: still a neighbour number
+    for screen in ("Step 2 Boil 3 liters of water", "Boil, step 2 - 3 liters of water"):
+        item = mat("3", "liters", ost=screen, name="Water")
+        assert ocr_silent(item, screen, "en").status == "unverified"
+    decimal = mat("2", "liters", ost="Step 1.5 Boil 2 liters", name="Water")
+    assert ocr_silent(decimal, "Step 1.5 Boil 2 liters", "en").status == "unverified"
+    # a wrong number is still wrong after the label goes
+    wrong = mat("3", "liters", ost="Step 2 - Boil 2 liters of water.", name="Water")
+    assert ocr_silent(wrong, "Step 2 - Boil 2 liters of water.", "en").status == "unverified"
+
+
+def test_watermark_handle_is_not_a_symbol_before_a_number():
+    caption = "@PEEPALFARM\nStep 2 - Boil 2 liters of water."
+    item = mat("2", "liters", ost="2 liters of water", name="Water")
+    assert ocr_silent(item, caption, "en").status == "verified"
+    # a lone '@' or one glued to the number is still a symbol
+    for screen in ("Boil @ 2 liters of water", "Boil @2 liters of water"):
+        assert ocr_silent(item, screen, "en").status == "unverified"
+
+
+def test_sentence_punctuation_beside_a_dictionary_name_is_plain():
+    item = mat("2", "liters", ost="Boil 2 liters of water.", name="Nước")
+    assert ocr_silent(item, "Boil 2 liters of water.", "en").status == "verified"
+    # a real modifier still stops the dictionary proof
+    coconut = mat("2", "cups", ost="Add 2 cups of coconut milk.", name="Sữa")
+    assert ocr_silent(coconut, "Add 2 cups of coconut milk.", "en").status != "verified"
