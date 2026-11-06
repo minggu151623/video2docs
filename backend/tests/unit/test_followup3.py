@@ -507,7 +507,7 @@ def test_x5_spoken_decimal_khong_is_not_a_negation_for_a_quantity():
 def test_x1_does_not_bypass_r13():
     silent = Transcript(language="en", words=[])
     item = mat("4", "tsp", ost="Milk 4tsp", name="Sữa")
-    assert screen(item, "Milk 4tsp", speech=silent).status == "unverified"
+    assert screen(item, "Milk 4tsp", speech=silent).status == "verified"  # R13c: plain ASCII screen
     shots = [(11.0, "Milk 4tsp")]
     assert verify_item("p", item, None, shots, SETTINGS, text_language="vi").status == "unverified"
     assert SCREEN_ONLY.language == "vi"

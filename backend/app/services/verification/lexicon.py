@@ -27,7 +27,7 @@ UNIT_TABLE = {
     "hour": "giờ|tiếng|hour|hours|hr|hrs|h",
     "day": "ngày|day|days",
     "week": "tuần|week|weeks",
-    "g": "g|gram|grams|gam|gr",
+    "g": "g|gram|grams|gam|gr|gm|gms",
     "kg": "kg|kilogram|kilograms|kilo|kilos|ký|kí",
     "ml": "ml|milliliter|milliliters|millilitre|millilitres|mililít",
     "l": "l|lít|liter|liters|litre|litres",

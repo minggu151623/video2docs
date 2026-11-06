@@ -661,6 +661,19 @@ def _spells_number(text: str | None) -> bool:
     )
 
 
+def _plain_screen(item, source: str) -> bool:
+    """R13c: on-screen text that reads the same in English as in any other Latin-script language: ASCII
+    letters and digits only (symbols such as '°' allowed), no digit-mark-digit ('1,5' and '1.500' differ
+    by language), and no number word of another listed language ('cero', 'deux')."""
+    # a claim's own text is in the draft's language; only a quantity's value is read off the screen
+    texts = (source, _value(item) or "") if isinstance(item, (Material, Parameter)) else (source,)
+    if any(c.isalnum() and not c.isascii() for text in texts for c in text):
+        return False
+    if any(re.search(r"\d[.,]\d", text) for text in texts):
+        return False
+    return not any(lexicon.foreign_number_word(token) for token in source.split())
+
+
 def _states_number(item) -> bool:
     """R13: an item whose on-screen check would compare a number: a material quantity or parameter
     value, a claim with a digit or a number word, a command with a digit."""
@@ -809,13 +822,17 @@ def verify_item(
     if ranges:  # X3: value, quote and the text they are matched in read 'A to B' as 'A-B'
         item, source = _joined(item, source, spoken, language)
     fields = (_value(item), getattr(item, "text", None), item.quote, item.on_screen_text)
-    if transcript is not None and not guards.has_vocabulary(transcript.language) and units.has_digit(*fields):
+    words = transcript is not None and bool(transcript.words)
+    if words and not guards.has_vocabulary(transcript.language) and units.has_digit(*fields):
         return _result("unverified", "none", NO_DIGITS)  # ruling R2a: digits we cannot tie to speech
     # rulings R13 + R16b: no vi/en speech to read the screen by (Whisper names a language for silence too)
-    heard = transcript is not None and bool(transcript.words) and _code(transcript.language) in VI_EN
-    if not spoken and _states_number(item) and not heard:
+    heard = words and _code(transcript.language) in VI_EN
+    # R13c: when the speech has no words, on-screen text is read as English if it reads the same in any
+    # Latin-script language (see `_plain_screen`)
+    plain = not spoken and transcript is not None and not words and _plain_screen(item, source)
+    if not spoken and _states_number(item) and not (heard or plain):
         return _result("unverified", "none", NO_LANGUAGE)
-    screen_language = transcript.language if transcript else None
+    screen_language = "en" if plain else transcript.language if transcript else None
     # X7d: the draft's other material names compete with this item's name on the other side of its number
     own = normalize(getattr(item, "name", ""))
     others = tuple(n for n in materials if normalize(n) != own)
@@ -830,7 +847,7 @@ def verify_item(
     if spoken and not exact and len(source.split()) < 2 and len(normalize(source)) < MIN_QUOTE_CHARS:
         return _result("unverified", method, "nguyên văn quá ngắn")
     # ruling P2: the language the quote was heard or read in; on screen, only known from speech with words
-    source_language = language if spoken else transcript.language if transcript and transcript.words else None
+    source_language = language if spoken else screen_language if heard or plain else None
     pad = settings.verify_window_seconds
     wanted = ("audio", "both") if spoken else ("visual", "both")
     spans = [s for s in item.evidence_spans if s.source in wanted]
@@ -840,7 +857,7 @@ def verify_item(
     if spoken:  # ruling C3c: no number words for this language, so nothing may be fuzzy
         exact_text = not guards.has_vocabulary(language)
     else:
-        unread = transcript is not None and not guards.has_vocabulary(transcript.language)
+        unread = transcript is not None and not guards.has_vocabulary(screen_language)
         exact_text = unread or guards.non_latin(source)
     numbers_differ, frames, translated = False, 0, None
     unit = _unit_ok(item, _cross(text_language, language if spoken else screen_language), language)

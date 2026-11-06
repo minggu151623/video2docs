@@ -186,9 +186,13 @@ def test_p2_cross_or_unknown_language_is_quote_matched():
     assert say(item, "please install now", "en", "en-US").status == "verified"
     screen = observed("Install now", "Install now", 10, 12)
     no_words = Transcript(language="en", words=[])
-    for transcript in (None, no_words):
-        out = verify_item("p", screen, transcript, [(11.0, "Install now")], SETTINGS, text_language="en")
-        assert out.status == "quote_matched"
+    out = verify_item("p", screen, None, [(11.0, "Install now")], SETTINGS, text_language="en")
+    assert out.status == "quote_matched"
+    # R13c: speech without words reads plain ASCII screen text as English
+    out = verify_item("p", screen, no_words, [(11.0, "Install now")], SETTINGS, text_language="en")
+    assert out.status == "verified"
+    out = verify_item("p", screen, no_words, [(11.0, "Install now")], SETTINGS, text_language="vi")
+    assert out.status == "quote_matched"
     # on screen, the language comes from the transcript as long as it has words, wherever they lie
     out = verify_item("p", screen, EN_SPEECH, [(11.0, "Install now")], SETTINGS, text_language="en")
     assert out.status == "verified"

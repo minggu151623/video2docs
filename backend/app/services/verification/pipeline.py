@@ -161,7 +161,7 @@ def run_verification(
         )
     failure = None  # (error code, item reason) once OCR has stopped
     missing = False  # some item got no frame at all
-    language = transcript.language if transcript else None
+    language = transcript.language if transcript and transcript.words else None  # R13c
     source = safe_path(settings.data_dir, asset.playback_path)
     workdir.mkdir(parents=True, exist_ok=True)
     frames = Path(tempfile.mkdtemp(prefix="ocr-", dir=workdir))

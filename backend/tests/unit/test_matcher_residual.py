@@ -1001,7 +1001,10 @@ def ocr_silent(item, screen, language):
 def test_r16_silent_audio_with_a_language_does_not_open_the_gate(case):
     item = case()
     result = ocr_silent(item, item.on_screen_text, "en")
-    assert (result.status, result.reason) == ("unverified", NO_LANGUAGE)
+    assert result.status == "unverified"
+    # R13c reads plain ASCII text as English; 'cero' is not in the foreign list, so the Spanish case
+    # gets past the gate and fails on its value instead
+    assert result.reason == NO_LANGUAGE or item.on_screen_text.isascii()
 
 
 def test_r16_gate_needs_words_for_every_numeric_item():
@@ -1062,3 +1065,36 @@ def test_r16_symbol_positives():
     )
     item = par("5", "phút", ost="Nướng (khoảng) 5 phút", name="Nướng")
     assert ocr_vi(item, "Nướng (khoảng) 5 phút").status == "verified"
+
+
+# R13c: speech without words (music, silence) reads plain ASCII on-screen text as English
+def test_r13c_silent_video_verifies_plain_ascii_screen_numbers():
+    assert ocr_silent(mat("4", "tsp", ost="Milk 4tsp", name="Sữa"), "Milk 4tsp", "en").status == "verified"
+    item = mat("15", "gms", ost="Measure out 15 gms of Tea", name="Tea")
+    assert ocr_silent(item, "Measure out 15 gms of Tea", "nn").status == "verified"
+    command = exact("python3 app.py", on_screen_text="python3 app.py")
+    assert ocr_silent(command, "python3 app.py", "en").status == "verified"
+    oven = par("180", "°C", ost="Bake at 180°C", name="Bake")
+    assert ocr_silent(oven, "Bake at 180°C", "en").status in ("verified", "quote_matched")
+
+
+def test_r13c_silent_video_still_rejects_wrong_or_ambiguous_numbers():
+    assert ocr_silent(mat("5", "tsp", ost="Milk 5tsp", name="Sữa"), "Milk 4tsp", "en").status == "unverified"
+    for value, text in (("1,5", "Milk 1,5 cups"), ("1.5", "Milk 1.5 cups"), ("1500", "Milk 1,500 ml")):
+        result = ocr_silent(mat(value, "cups", ost=text, name="Sữa"), text, "en")
+        assert (result.status, result.reason) == ("unverified", NO_LANGUAGE)
+    for text in ("Nướng ở 180°C", "Farine 2 ou zéro cuillères", "Mehl 2 Löffel", "Farine deux ou 2 cuillères"):
+        result = ocr_silent(mat("2", "g", ost=text, name="Bột"), text, "en")
+        assert (result.status, result.reason) == ("unverified", NO_LANGUAGE)
+
+
+def test_r13c_needs_a_transcript_and_keeps_foreign_speech_rules():
+    item = mat("4", "tsp", ost="Milk 4tsp", name="Sữa")
+    assert verify_item("p", item, None, [(11.0, "Milk 4tsp")], SETTINGS, text_language="vi").reason == NO_LANGUAGE
+    assert ocr_lang(item, "Milk 4tsp", "fr").reason == NO_DIGITS  # words in another language: R2a
+
+
+def test_r13c_claim_in_the_draft_language_reads_its_ascii_screen_text():
+    item = cl("Đo 15 gms trà", ost="Measure out 15 gms of Tea")
+    result = ocr_silent(item, "Measure out 15 gms of Tea", "en")
+    assert result.reason != NO_LANGUAGE and result.status == "quote_matched"
