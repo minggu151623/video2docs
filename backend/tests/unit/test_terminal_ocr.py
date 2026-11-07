@@ -121,3 +121,19 @@ def test_s1_needs_silence_and_on_screen_text():
     assert verify_item("p", item, speech, None, SETTINGS, text_language="en").method == "asr"
     quote_only = mat("15", "gms", quote="15 gms of Tea", name="Tea")
     assert verify_item("p", quote_only, SILENT, None, SETTINGS, text_language="en").method != "ocr"
+
+
+# ---- F1: frames about every two seconds inside a visual span, up to the frame limit -------------------
+
+
+def test_f1_default_limit_keeps_start_middle_end():
+    item = at(mat("2", "weeks", ost="for 2 weeks", name="weeks"), 68, 77)
+    assert ocr_seconds(item, 200.0, 3, 5.0) == [68.0, 72.5, 77.0]
+
+
+def test_f1_higher_limit_fills_a_long_span_every_two_seconds():
+    item = at(mat("2", "weeks", ost="for 2 weeks", name="weeks"), 68, 77)
+    assert ocr_seconds(item, 200.0, 5, 5.0) == [68.0, 70.25, 72.5, 74.75, 77.0]  # 70.25: caption at 69-71 s
+    assert ocr_seconds(item, 200.0, 10, 5.0) == [68.0, 69.8, 71.6, 73.4, 75.2, 77.0]  # never closer than 2 s
+    short = at(mat("2", "weeks", ost="for 2 weeks", name="weeks"), 10, 12)
+    assert ocr_seconds(short, 200.0, 10, 5.0) == [10.0, 11.0, 12.0]

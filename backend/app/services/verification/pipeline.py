@@ -5,6 +5,7 @@ never fails the job: the affected items become `not_checked` and the report says
 Only the worker's own stop signals (cancel, lost lease, job timeout, disk/storage guards) propagate."""
 
 import logging
+import math
 import shutil
 import tempfile
 import time
@@ -26,6 +27,7 @@ LOG = logging.getLogger("video2docs.verification")
 Status = Literal["ok", "skipped", "failed"]
 STOP = {"CANCELLED", "LEASE_LOST", "JOB_TIMEOUT", "DISK_FULL", "STORAGE_LIMIT"}
 REVIEW = {"unverified", "quote_matched", "not_checked"}  # ruling P2: a paraphrase needs review
+OCR_STEP = 2.0  # F1: about one OCR frame this often inside a visual span, within the frame limit
 FRAME_SLACK = 0.5  # extract_frame accepts a frame up to this late
 EOF_MARGIN = 0.5  # same distance from the end as screenshot fallbacks; frame timing tolerates 0.5 s
 NO_FRAME = "không trích được khung hình để OCR"
@@ -107,21 +109,31 @@ def no_transcript_reason(settings, asset, asr_status: Status, asr_error: str | N
     return "không có bản ghi lời nói"
 
 
-def ocr_seconds(item, duration: float, limit: int, pad: float = 0.0) -> list[float]:
-    """Start, middle and end of each visual span, inside the video, at most `limit` evenly spread.
+def _even(lo: float, hi: float, count: int) -> list[float]:
+    """`count` points from lo to hi, both ends included (the middle when count is 1)."""
+    if count <= 1 or hi <= lo:
+        return [(lo + hi) / 2]
+    return [lo + i * (hi - lo) / (count - 1) for i in range(count)]
 
-    T3: a command is typed during its span and stays in the terminal after it, so for an `ExactInput` the
-    frames are the middle, the end and `pad` seconds past the end less FRAME_SLACK: the frame found is the
-    first one at or after the mark, up to 0.5 s later, and must stay inside the matcher's window."""
+
+def ocr_seconds(item, duration: float, limit: int, pad: float = 0.0) -> list[float]:
+    """Frames to read for one item, inside the video, at most `limit` evenly spread over all its spans.
+
+    F1: each visual span gets its start, its end and points between them about every OCR_STEP seconds
+    (at least three: start, middle, end), so a caption shown for two seconds inside a nine-second span is
+    not missed when `limit` allows more frames. T3: a command is typed during its span and stays in the
+    terminal after it, so for an `ExactInput` the frames are the middle, the end and `pad` seconds past the
+    end less FRAME_SLACK (the frame found may be up to 0.5 s later and must stay in the matcher's window)."""
     last = max(0.0, duration - EOF_MARGIN)
     found = set()
     for span in item.evidence_spans:
         if span.source in ("visual", "both"):
             middle = (span.start_sec + span.end_sec) / 2
             if isinstance(item, ExactInput):
-                points = (middle, span.end_sec, span.end_sec + max(0.0, pad - FRAME_SLACK))
+                points = [middle, span.end_sec, span.end_sec + max(0.0, pad - FRAME_SLACK)]
             else:
-                points = (span.start_sec, middle, span.end_sec)
+                steps = math.ceil((span.end_sec - span.start_sec) / OCR_STEP) + 1
+                points = _even(span.start_sec, span.end_sec, min(limit, max(3, steps)))
             for t in points:
                 found.add(round(min(max(t, 0.0), last), 3))
     seconds = sorted(found)

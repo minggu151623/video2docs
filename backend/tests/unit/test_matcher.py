@@ -357,7 +357,7 @@ def test_iter_grounded_items_paths():
 def test_verify_settings_are_in_snapshot_and_bounded():
     snap = Settings(ai_provider="mock").snapshot()
     assert (snap["verify_window_seconds"], snap["verify_text_threshold"]) == (5, 85)
-    assert snap["verify_max_ocr_frames"] == 3
+    assert snap["verify_max_ocr_frames"] == 5
     assert "verify_input_threshold" not in snap
     with pytest.raises(ValueError):
         Settings(ai_provider="mock", verify_text_threshold=101)

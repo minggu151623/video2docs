@@ -102,6 +102,8 @@ Sau mục 68 (số của nguyên liệu khác trong cùng danh sách), 69 (mục
 
 Tổng: **6 mục `verified`, cả 6 đúng**, 0 định lượng sai và 0 lệnh sai mang ✓. Kombucha có 3/3 nguyên liệu có định lượng mang ✓. Vẫn quá ít để nói ngưỡng 95% đạt.
 
+Đo số khung OCR mỗi mục (mục 71): với 5 khung rải khoảng 2 giây, "Thời gian ủ 2 tuần" của kombucha được đọc ở 70,25 s và thành ≈; thời gian kiểm chứng tăng tối đa 7 s mỗi video; số ✓ không đổi (6, cả 6 đúng).
+
 ## Trước khi chạy cần biết
 
 - Luật số lân cận 8 token và các luật còn lại của bộ khớp (`docs/decisions.md`, mục 26 đến 46) làm một số định lượng đúng bị `unverified`; cột "mục đúng bị `unverified`" có mặt để đo đúng cái giá đó, chưa có ngưỡng.

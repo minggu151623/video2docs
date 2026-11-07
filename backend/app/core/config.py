@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     keep_raw_provider_output: bool = False
     verify_window_seconds: float = Field(default=5, ge=0, le=60)
     verify_text_threshold: int = Field(default=85, ge=0, le=100)
-    verify_max_ocr_frames: int = Field(default=3, ge=1, le=10)
+    verify_max_ocr_frames: int = Field(default=5, ge=1, le=10)
     asr_engine: Literal["faster-whisper", "none"] = "faster-whisper"
     asr_model: str = "small"
     asr_timeout_seconds: int = Field(default=1200, gt=0)

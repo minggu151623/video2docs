@@ -267,7 +267,7 @@ def test_asr_stop_signals_propagate(tmp_path, monkeypatch, media, code):
 def test_ocr_samples_at_most_three_frames_inside_evidence(tmp_path, monkeypatch, media):
     ocr = FakeOCR()
     use(monkeypatch, ocr=ocr)
-    cfg = settings(tmp_path)
+    cfg = settings(tmp_path, verify_max_ocr_frames=3)  # F1 with a limit of 3: start, middle, end
     same_span = material("Bơ", "200", "observed", screen="Bột mì 200 g")
     at_end = material("Bột mì", "200", "observed", screen="Bột mì 200 g", spans=[span("both", 6, 10)])
     report = pipeline.run_verification(
