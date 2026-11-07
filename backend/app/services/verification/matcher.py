@@ -415,7 +415,9 @@ def _clause(base: str, begin: int, end: int) -> str:
             break
         left.insert(0, word)
     right = []
-    last = (base[:end].split() or [""])[-1] + base[end : end + 1].strip()
+    # the whole word the match ends in: 'sugar...' is a pause (the speaker may go on 'no wait'), 'sugar.'
+    # ends the clause; one character past the match would read 'sugar...' as 'sugar.'
+    last = (base[:end].split() or [""])[-1] + re.match(r"\S*", base[end:]).group()
     if not (last and _ends_clause(last)):
         for word in base[end:].split()[:CLAUSE_WORDS]:
             right.append(word)
@@ -615,7 +617,8 @@ def _name_in_quote(item, source: str, spoken: bool, language: str | None, others
         return guards.name_in_source(item.name, source, fold)
     words = _words_of(item, source, spoken, language)
     rivals = _competitors(item, spoken, others)
-    zones = names.zones(words, shape, len(content), not spoken, _unit_words(item, spoken), rivals)
+    material = isinstance(item, Material)
+    zones = names.zones(words, shape, len(content), not spoken, _unit_words(item, spoken), rivals, material)
     return any(all(fuzz.partial_ratio(w, fold(zone)) >= guards.NAME_SCORE for w in content) for zone in zones)
 
 
@@ -629,9 +632,9 @@ def _phrase_in(
     shape = _shape(item)
     if shape is not None:
         rivals = _competitors(item, spoken, others)
-        return names.by_number(
-            words, shape, len(phrase), not spoken, accept, _unit_words(item, spoken), rivals
-        )
+        unit = _unit_words(item, spoken)
+        material = isinstance(item, Material)
+        return names.by_number(words, shape, len(phrase), not spoken, accept, unit, rivals, material)
     return any(accept(words, i, i + len(phrase)) for i in range(len(words) - len(phrase) + 1))
 
 

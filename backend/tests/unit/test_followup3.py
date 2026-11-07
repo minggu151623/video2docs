@@ -801,8 +801,8 @@ def test_x7d_word_for_word_and_parameter_across_a_symbol():
 
 
 def test_x7d_other_material_names_of_the_draft_compete():
-    item = mat("200", "g", quote="cho muối 200 g bơ lạt", name="Muối")
-    spoken = "giờ cho muối 200 g bơ lạt nhé"
+    item = mat("200", "g", quote="cho bơ lạt 200 g muối", name="Muối")
+    spoken = "giờ cho bơ lạt 200 g muối nhé"
     assert heard(item, spoken, "vi", "vi").status == "verified"  # 'bơ lạt' is not in the dictionary
     out = verify_item(
         "p",
@@ -869,3 +869,72 @@ def test_x7d_pipeline_passes_the_draft_material_names(monkeypatch):
         NS(asr_engine="none"), NS(has_audio=1), draft, None, "skipped", None, lambda: None
     )
     assert seen == [("Muối", "Bơ lạt")]
+
+
+# ---- decision 60 closed: X7b pause, X7e lists, X7f a word after the number ---------------------------
+
+
+@pytest.mark.parametrize(
+    "spoken",
+    [
+        "now add 2 cups of sugar... no wait",
+        "now add 2 cups of sugar… no wait",
+        "now add 2 cups of sugar... no, don't do that",
+        "add 2 cups of sugar... not now",
+    ],
+)
+def test_x7b_pause_right_after_the_match_does_not_end_the_clause(spoken):
+    out = heard(mat("2", "cups", quote="add 2 cups of sugar", name="sugar"), spoken, "en", "en")
+    assert (out.status, out.reason) == ("unverified", NEGATED)
+
+
+def test_x7b_pause_without_negation_and_a_full_stop_still_verify():
+    item = mat("2", "cups", quote="add 2 cups of sugar", name="sugar")
+    assert heard(item, "now add 2 cups of sugar... okay", "en", "en").status == "verified"
+    assert heard(item, "now add 2 cups of sugar. Then stir it well", "en", "en").status == "verified"
+    vi = mat("2", "chén", quote="cho 2 chén đường", name="Đường")
+    out = heard(vi, "giờ cho 2 chén đường... à không", "vi", "vi")
+    assert (out.status, out.reason) == ("unverified", NEGATED)
+
+
+@pytest.mark.parametrize(
+    "item,frame,speech",
+    [
+        (mat("200", "g", ost="Đường và muối 200g", name="Muối"), "Đường và muối 200g", VI_SPEECH),
+        (mat("200", "g", ost="Đường, muối 200g", name="Muối"), "Đường, muối 200g", VI_SPEECH),
+        (mat("200", "g", ost="200g muối và đường", name="Muối"), "200g muối và đường", VI_SPEECH),
+        (mat("200", "g", ost="Sugar & salt 200g", name="Muối"), "Sugar & salt 200g", EN_SPEECH),
+    ],
+)
+def test_x7e_a_name_in_a_list_is_not_proven(item, frame, speech):
+    assert screen(item, frame, speech=speech).status in NOT_VERIFIED
+
+
+def test_x7e_spoken_list_and_a_kitchen_verb_after_the_conjunction():
+    out = heard(mat("200", "g", quote="đường và muối 200 g", name="Muối"), "cho đường và muối 200 g nhé", "vi", "vi")
+    assert out.status in NOT_VERIFIED
+    ok = mat("200", "g", quote="cho 200 g muối rồi khuấy", name="Muối")
+    assert heard(ok, "giờ cho 200 g muối rồi khuấy đều", "vi", "vi").status == "verified"
+
+
+@pytest.mark.parametrize(
+    "item,spoken,lang,draft",
+    [
+        (mat("200", "g", quote="add salt 200 grams of butter", name="Muối"), "now add salt 200 grams of butter", "en", "vi"),
+        (mat("200", "g", quote="add salt 200 grams of butter", name="salt"), "now add salt 200 grams of butter", "en", "en"),
+        (mat("200", "g", quote="cho muối 200 g bơ lạt", name="Muối"), "giờ cho muối 200 g bơ lạt nhé", "vi", "vi"),
+    ],
+)
+def test_x7f_a_word_after_the_number_competes_with_a_name_before_it(item, spoken, lang, draft):
+    assert heard(item, spoken, lang, draft).status in NOT_VERIFIED
+
+
+def test_x7f_kitchen_words_after_the_number_and_parameters_are_unchanged():
+    salt = mat("200", "g", quote="cho muối 200 g nhé", name="Muối")
+    assert heard(salt, "giờ cho muối 200 g nhé", "vi", "vi").status == "verified"
+    stir = mat("200", "g", quote="cho muối 200 g rồi khuấy", name="Muối")
+    assert heard(stir, "giờ cho muối 200 g rồi khuấy", "vi", "vi").status == "verified"
+    cook = par("5", "phút", quote="nấu 5 phút nữa", name="nấu")
+    assert heard(cook, "giờ nấu 5 phút nữa nhé", "vi", "vi").status == "verified"
+    label = mat("4", "tsp", ost="Milk 4tsp", name="Sữa")
+    assert screen(label, "Milk 4tsp").status == "verified"

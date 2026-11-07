@@ -116,7 +116,7 @@ INGREDIENTS = {
 NEIGHBOURS = set(
     "a an the of some more little bit few your our my this that these those it here now then just also "
     "add adds adding added pour mix whisk stir put throw use using in into to for over on plus "
-    "cho thêm vào bỏ đổ rồi nhé là một ít chút các những này đó trong lên".split()
+    "cho thêm vào bỏ đổ khuấy trộn đánh rồi nhé nữa là một ít chút các những này đó trong lên".split()
 )
 
 

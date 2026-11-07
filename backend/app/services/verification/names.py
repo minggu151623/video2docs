@@ -148,12 +148,39 @@ def _phrase_in(words: list[str], phrases: list[list[str]]) -> bool:
     return any(words[i : i + len(p)] == p for p in phrases for i in range(len(words) - len(p) + 1))
 
 
-def opposite_clear(walk: _Walk, folded: bool, unit, competitors: list[list[str]]) -> bool:
+LIST_MARKS = {",", "&", "/", "+"}
+
+
+def shared(words: list[str], i: int, step: int) -> bool:
+    """X7e: the name is one of a list ('Đường và muối 200g', 'sugar, salt 200 g', '200 g of salt and
+    sugar'): index i, just past the name away from its number, is a conjunction or list mark with a word
+    past it that is not a kitchen verb or article, so the number may belong to either item or to both."""
+    if not 0 <= i < len(words) or words[i] not in lexicon.CONJUNCTIONS | LIST_MARKS:
+        return False
+    j = i + step
+    return 0 <= j < len(words) and _word(words[j]) and words[j] not in lexicon.NEIGHBOURS
+
+
+def _followed_by_word(walk: _Walk, folded: bool, unit) -> bool:
+    """X7f: a material named before its number ('add salt 200 grams ...') has a word right after the
+    number and its unit that is not a kitchen verb, article or conjunction ('salt 200 grams of butter',
+    'muối 200 g bơ'): that word may be what the quantity is of, whether or not it is in the dictionary."""
+    table = units.UNITS if folded else units.WRITTEN
+    other = _Walk(walk.words, walk.k, 1, table, _skips("", unit), False).first()
+    if other is None or not _word(walk.words[other]):
+        return False
+    return walk.words[other] not in lexicon.NEIGHBOURS | lexicon.CONJUNCTIONS
+
+
+def opposite_clear(walk: _Walk, folded: bool, unit, competitors: list[list[str]], material=False) -> bool:
     """X7d: nothing on the other side of the number competes with the name found by `walk`: no other
     ingredient (dictionary, either language) or other material name of the draft (`competitors`) in that
     direction up to the end of the row, clause or the next number ('add salt 200 grams of sugar' for
     'Đường', 'Sugar 200g - Salt' for 'Muối'); and, when the name is joined to the number by a symbol
-    ('Hấp 180°C - Nướng', 'Sugar 200g (salt)'), no other word but a kitchen verb or article right there."""
+    ('Hấp 180°C - Nướng', 'Sugar 200g (salt)'), no other word but a kitchen verb or article right there.
+    X7f: for a `material` named before its number, no other word right after it at all."""
+    if material and walk.step < 0 and _followed_by_word(walk, folded, unit):
+        return False
     step, words = -walk.step, walk.words
     seen, i = [], walk.k + step
     while (
@@ -170,10 +197,10 @@ def opposite_clear(walk: _Walk, folded: bool, unit, competitors: list[list[str]]
     return other is None or not _word(words[other]) or words[other] in lexicon.NEIGHBOURS
 
 
-def regions(words: list[str], shape: str, size: int, folded: bool, unit=(), competitors=()):
+def regions(words: list[str], shape: str, size: int, folded: bool, unit=(), competitors=(), material=False):
     """X6 + X7d: (start, end) of the `size` words right before and right after each number shaped `shape`,
-    past what may stand between, with nothing competing on the other side of the number; regions with
-    anything but words are left out."""
+    past what may stand between, with nothing competing on the other side of the number (X7f for a
+    `material`) and not one of a list (X7e); regions with anything but words are left out."""
     out = []
     for left, right in _spots(words, shape, folded, unit):
         for walk in (left, right):
@@ -183,16 +210,20 @@ def regions(words: list[str], shape: str, size: int, folded: bool, unit=(), comp
             a, b = (at - size + 1, at + 1) if walk.step < 0 else (at, at + size)
             if a < 0 or b > len(words) or not all(_word(w) for w in words[a:b]):
                 continue
-            if opposite_clear(walk, folded, unit, list(competitors)):
+            if shared(words, a - 1 if walk.step < 0 else b, walk.step):
+                continue
+            if opposite_clear(walk, folded, unit, list(competitors), material):
                 out.append((a, b))
     return out
 
 
-def zones(words: list[str], shape: str, count: int, folded: bool, unit=(), competitors=()) -> list[str]:
+def zones(
+    words: list[str], shape: str, count: int, folded: bool, unit=(), competitors=(), material=False
+) -> list[str]:
     """X6 + X7d for the fuzzy name check (I2): the text beside each number shaped `shape`, outward, holding
     what may stand between (kept: 'nướng ở' for 'Nướng ở 180°C') and then `count` other words; it stops at
     a conjunction, separator, line break or another number, and is dropped when something competes on
-    the other side of the number."""
+    the other side of the number or the name is one of a list (X7e, X7f as in `regions`)."""
     out = []
     for walk in (w for pair in _spots(words, shape, folded, unit) for w in pair):
         picked, found, gap = [], 0, 0
@@ -212,16 +243,20 @@ def zones(words: list[str], shape: str, count: int, folded: bool, unit=(), compe
                 break
             picked.append(word)
             found, walk.i = found + 1, walk.i + walk.step
-        if found and gap <= GAP and opposite_clear(walk, folded, unit, list(competitors)):
+        if found and shared(words, walk.i, walk.step):
+            continue
+        if found and gap <= GAP and opposite_clear(walk, folded, unit, list(competitors), material):
             out.append(" ".join(picked if walk.step > 0 else picked[::-1]))
     return out
 
 
 def by_number(
-    words: list[str], shape: str, size: int, folded: bool, accept: Callable, unit=(), competitors=()
+    words: list[str], shape: str, size: int, folded: bool, accept: Callable, unit=(), competitors=(),
+    material=False,
 ) -> bool:
     """Some region next to a number shaped `shape` satisfies accept(words, start, end)."""
-    return any(accept(words, a, b) for a, b in regions(words, shape, size, folded, unit, competitors))
+    found = regions(words, shape, size, folded, unit, competitors, material)
+    return any(accept(words, a, b) for a, b in found)
 
 
 def plain(word: str | None, folded: bool) -> bool:
