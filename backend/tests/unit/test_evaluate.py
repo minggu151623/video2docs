@@ -178,6 +178,19 @@ def test_unit_mismatch_is_wrong():
     assert result["wrong_verified_quantities"] == 1
 
 
+def test_units_of_one_table_entry_are_the_same_unit():
+    draft = make_draft([material("Nước", "1", "cốc"), material("Sữa", "200", "g")])
+    truth = annotation(
+        materials=[
+            {"name": "Nước", "quantity": "1", "unit": "cup"},
+            {"name": "Sữa", "quantity": "200", "unit": "ml"},
+        ]
+    )
+    result = run(draft, make_report(**{"materials/0": "verified", "materials/1": "verified"}), truth)
+    assert result["counts"]["verified_correct"] == 1
+    assert result["wrong_verified_quantities"] == 1
+
+
 def test_parameters_follow_the_matched_step():
     steps = [
         step("Nướng bánh", 100, [parameter("Nhiệt độ", "180")]),
@@ -214,7 +227,7 @@ def test_false_negative_counts_correct_items_left_unverified():
     assert result["verified_false_negative_rate"] == pytest.approx(2 / 3)
 
 
-def test_step_coverage_needs_time_and_title():
+def test_step_coverage_by_title_then_by_time():
     steps = [
         step("Trộn bột với đường", 40),
         step("Nướng bánh trong lò", 300),
@@ -223,13 +236,28 @@ def test_step_coverage_needs_time_and_title():
     truth = annotation(
         steps=[
             {"title": "Trộn đường với bột", "start_sec": 48},  # within 10 s, same words
-            {"title": "Nướng bánh trong lò", "start_sec": 330},  # right title, 30 s off
-            {"title": "Phết kem", "start_sec": 500},  # right time, different title
+            {"title": "Nướng bánh trong lò", "start_sec": 330},  # right title, after that step ends (320)
+            {"title": "Phết kem", "start_sec": 505},  # other words, inside the step 500-520
             {"title": "Dọn dẹp", "start_sec": 900},  # missing
         ]
     )
     result = run(make_draft(steps=steps), make_report(), truth)
-    assert result["step_coverage"] == 0.25
+    assert result["step_coverage"] == 0.5
+    assert result["counts"]["annotated_steps_matched_by_time_only"] == 1
+    assert result["steps_matched_by_time_only"] == [{"annotation": "Phết kem", "draft": "Trang trí"}]
+
+
+def test_time_match_takes_the_nearest_unused_step_and_a_title_match_first():
+    steps = [step("Đun nước", 100), step("Thả trà vào nồi", 112)]  # spans 100-120 and 112-132
+    truth = annotation(
+        steps=[
+            {"title": "Boil the water", "start_sec": 114},  # inside both: nearest start is 112
+            {"title": "Đun nước", "start_sec": 100},  # by title
+        ]
+    )
+    result = run(make_draft(steps=steps), make_report(), truth)
+    assert result["step_coverage"] == 1.0
+    assert result["steps_matched_by_time_only"] == [{"annotation": "Boil the water", "draft": "Thả trà vào nồi"}]
 
 
 def test_one_draft_step_is_not_used_twice():

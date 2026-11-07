@@ -20,6 +20,7 @@ from app.schemas.tutorial_v2 import load_draft
 from app.schemas.verification import VerificationReport
 from app.services.verification.matcher import iter_grounded_items, normalize
 from app.services.verification.numbers import number_tokens
+from app.services.verification.units import WRITTEN
 
 STEP_WINDOW_SEC = 10
 TITLE_SCORE = 60
@@ -38,11 +39,20 @@ def _same_value(item_value, item_unit, truth_value, truth_unit, language) -> boo
         return False
     if not ours and normalize(item_value or "") != normalize(truth_value or ""):
         return False
-    return not (truth_unit or "").strip() or normalize(item_unit or "") == normalize(truth_unit)
+    if not (truth_unit or "").strip():
+        return True
+    ours, theirs = normalize(item_unit or ""), normalize(truth_unit)
+    # a Vietnamese draft writes the video's 'cup' as 'cốc': the app's unit table says they are one unit
+    return ours == theirs or (WRITTEN.get(ours) is not None and WRITTEN.get(ours) == WRITTEN.get(theirs))
 
 
-def match_steps(draft_steps, truth_steps) -> dict[int, int]:
-    """Annotated step index -> draft step index. One draft step serves one annotated step."""
+def match_steps(draft_steps, truth_steps, by_time: dict | None = None) -> dict[int, int]:
+    """Annotated step index -> draft step index. One draft step serves one annotated step.
+
+    First by title: a draft step starting within STEP_WINDOW_SEC with a similar title. Then, for annotated
+    steps left over, by time: an unused draft step whose span holds the annotated start (from
+    STEP_WINDOW_SEC before it begins to its end), nearest start first, since a Vietnamese draft often
+    words a title differently from the annotation. `by_time` collects the second kind for the report."""
     used, matched = set(), {}
     for ti, truth in enumerate(truth_steps):
         best = None
@@ -55,6 +65,21 @@ def match_steps(draft_steps, truth_steps) -> dict[int, int]:
         if best:
             used.add(best[1])
             matched[ti] = best[1]
+    for ti, truth in enumerate(truth_steps):
+        if ti in matched:
+            continue
+        at = truth["start_sec"]
+        spans = [
+            (abs(step.start_sec - at), di)
+            for di, step in enumerate(draft_steps)
+            if di not in used and step.start_sec - STEP_WINDOW_SEC <= at < step.end_sec
+        ]
+        if spans:
+            di = min(spans)[1]
+            used.add(di)
+            matched[ti] = di
+            if by_time is not None:
+                by_time[ti] = di
     return matched
 
 
@@ -125,7 +150,8 @@ def evaluate(draft, report: VerificationReport | dict, truth: dict) -> dict:
         "quote_matched": {"count": 0, "paths": []},
     }
     truth_steps = truth.get("steps", [])
-    matched = match_steps(draft.steps, truth_steps)
+    by_time: dict[int, int] = {}
+    matched = match_steps(draft.steps, truth_steps, by_time)
     result["step_coverage"] = _ratio_or_none(len(matched), len(truth_steps))
 
     verified_total = verified_correct = wrong = wrong_inputs = 0
@@ -172,7 +198,12 @@ def evaluate(draft, report: VerificationReport | dict, truth: dict) -> dict:
         "annotated_quantities_in_draft": len(present),
         "annotated_steps": len(truth_steps),
         "annotated_steps_matched": len(matched),
+        "annotated_steps_matched_by_time_only": len(by_time),
     }
+    # time-only matches are the ones to check by hand: annotated title -> draft title
+    result["steps_matched_by_time_only"] = [
+        {"annotation": truth_steps[ti]["title"], "draft": draft.steps[di].title} for ti, di in by_time.items()
+    ]
     return result
 
 

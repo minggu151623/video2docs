@@ -57,10 +57,25 @@ Sau khi nới R13 (`decisions.md` mục 62) và bỏ nhãn bước, handle, dấ
 
 Tổng: **2 mục `verified`, cả 2 đúng khi xem lại bằng tay**, 0 định lượng sai và 0 lệnh sai mang ✓. Script chấm video 2 là 1/1; video 6 vẫn là 0/1 vì đáp án ghi "cup" còn tài liệu ghi "cốc". Hai mục vẫn quá ít để nói ngưỡng 95% đạt. Nút chặn còn lại lớn nhất: nhiều định lượng trong một câu chú thích (luật số lân cận), tên thông số đã dịch, OCR lệnh terminal, và ngân sách OCR của video dài.
 
+## Đóng ba ✓ sai đã biết và chấm lại bằng script mới (07/11/2026)
+
+Sau mục 64 (phủ định sau "...", tên trong danh sách "A và B", từ khác ngay sau số) và mục 65 (script ghép bước theo thời gian khi tiêu đề khác chữ, đơn vị cùng mục trong bảng là một), chạy lại job kiểm chứng của 6 video tutorial (0 request Gemini, cùng draft) rồi chấm bằng script:
+
+| # | Độ phủ bước: script (trong đó chỉ theo thời gian) / tay | ✓ đúng / ✓ | ≈ |
+| --- | --- | --- | --- |
+| 1 Phần mềm | 4/8 (0) / 4/8 | 0/0 | 1 |
+| 2 Kombucha | 13/13 (3) / 13/13 | 1/1 | 4 |
+| 3 Sửa máy | 18/23 (10) / khoảng 18/23 | 0/0 | 2 |
+| 4 Thủ công | 8/10 (4) / 8/10 | 0/0 | 2 |
+| 5 Thể thao | 4/6 (4) / 4/6 | 0/0 | 3 |
+| 6 Làm đẹp | 5/8 (3) / 4/8 | 1/1 | 4 |
+
+Không mục nào đổi trạng thái so với lượt trước: vẫn **2 mục `verified`, cả 2 đúng**, 0 định lượng sai và 0 lệnh sai mang ✓; ba luật mới không lấy mất ✓ đúng nào trên bộ này. Script giờ tự chấm đúng 2/2 (trước là 1/2 vì "cup"/"cốc"). Độ phủ của script trùng số đếm tay ở 5/6 video; ở video 6, cặp ghép theo thời gian "Lọc bỏ bã và đổ vào bình xịt" với "Trộn các thành phần dầu và gel" là sai, nên các cặp chỉ ghép theo thời gian vẫn phải xem lại bằng mắt (script in danh sách cặp đó).
+
 ## Trước khi chạy cần biết
 
 - Luật số lân cận 8 token và các luật còn lại của bộ khớp (`docs/decisions.md`, mục 26 đến 46) làm một số định lượng đúng bị `unverified`; cột "mục đúng bị `unverified`" có mặt để đo đúng cái giá đó, chưa có ngưỡng.
-- Chỗ hở đã biết cho "sai mang ✓": ba ca ở `docs/decisions.md` mục 60 ("..." sau đoạn khớp, tên cạnh tranh ngoài từ điển, "Đường và muối 200g"); nếu cột "sai mang ✓" không đạt, ghi nguyên số, không chỉnh ngưỡng. Từ mục 45 (R13) và 46(b), video không có lời nói vi/en (kể cả transcript có ngôn ngữ nhưng không có từ) không có mục OCR nào chứa số được ✓: ghi riêng số mục như vậy để thấy cái giá. Các luật 37–46 thêm cái giá về recall (OCR so từng từ theo thứ tự, thứ tự "fifth", "point"/"chấm" đứng trước số, câu nhận định khác ngôn ngữ với đơn vị ngoài bảng, chữ tiếng Việt trên màn hình phải trùng từng từ, "nữa" trên OCR, "media").
+- Ba chỗ hở cho "sai mang ✓" ở `docs/decisions.md` mục 60 đã đóng ở mục 64; nếu cột "sai mang ✓" không đạt, ghi nguyên số, không chỉnh ngưỡng. Từ mục 45 (R13) và 46(b), video không có lời nói vi/en (kể cả transcript có ngôn ngữ nhưng không có từ) không có mục OCR nào chứa số được ✓: ghi riêng số mục như vậy để thấy cái giá. Các luật 37–46 thêm cái giá về recall (OCR so từng từ theo thứ tự, thứ tự "fifth", "point"/"chấm" đứng trước số, câu nhận định khác ngôn ngữ với đơn vị ngoài bảng, chữ tiếng Việt trên màn hình phải trùng từng từ, "nữa" trên OCR, "media").
 - Probe schema v2 đã chạy ngày 24/10/2026: Google nhận cả 3 request, 2 kết quả qua Pydantic. Đã có lượt live Python và nấu ăn riêng lẻ; chúng không thay thế bộ 8 video trong bảng. Xem `docs/live-verification.md`.
 - Phép chấm khớp tên và số, và ghép bước bằng `token_set_ratio`, có sai số riêng (`fixtures/eval/README.md`).
 
