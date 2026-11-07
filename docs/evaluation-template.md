@@ -72,6 +72,21 @@ Sau mục 64 (phủ định sau "...", tên trong danh sách "A và B", từ kh�
 
 Không mục nào đổi trạng thái so với lượt trước: vẫn **2 mục `verified`, cả 2 đúng**, 0 định lượng sai và 0 lệnh sai mang ✓; ba luật mới không lấy mất ✓ đúng nào trên bộ này. Script giờ tự chấm đúng 2/2 (trước là 1/2 vì "cup"/"cốc"). Độ phủ của script trùng số đếm tay ở 5/6 video; ở video 6, cặp ghép theo thời gian "Lọc bỏ bã và đổ vào bình xịt" với "Trộn các thành phần dầu và gel" là sai, nên các cặp chỉ ghép theo thời gian vẫn phải xem lại bằng mắt (script in danh sách cặp đó).
 
+## Lệnh terminal và tốc độ trích khung (07/11/2026)
+
+Sau mục 66 (dấu nhắc `user@host`, chữ cửa sổ khác cùng hàng, khung OCR sau khi gõ lệnh) và mục 67 (trích khung bằng tua trước rồi giải mã), chạy lại job kiểm chứng của 6 video tutorial (0 request Gemini, cùng draft):
+
+| # | ✓ đúng / ✓ | Thay đổi | Thời gian job kiểm chứng |
+| --- | --- | --- | --- |
+| 1 Phần mềm | **2/2** (trước 0/0) | ✓ "cd 10DS-classwork" (khung 83,5 s) và "git push -u origin master" (khung 170,5 s); "git add --all" vẫn không ✓ vì OCR đọc "--al" ở các khung được chọn; "git commit -m "removed test.txt"" đúng là không ✓ (video viết hoa "Removed") | 203 s → 159 s |
+| 2 Kombucha | 1/1 | Không đổi | 68 s → 30 s |
+| 3 Sửa máy | 0/0 | OCR không còn hết thời gian: 3 mục "chưa kiểm" thành ≈ (chú thích tiếng Anh khớp, mô tả tiếng Việt) | 319 s → 66 s |
+| 4 Thủ công | 0/0 | Không đổi | 14 s |
+| 5 Thể thao | 0/0 | Không đổi (không có mục OCR) | 2 s |
+| 6 Làm đẹp | 1/1 | Không đổi | 94 s → 20 s |
+
+Tổng: **4 mục `verified`, cả 4 đúng** (script chấm 4/4, 0 định lượng sai, 0 lệnh sai mang ✓). Vẫn quá ít để nói ngưỡng 95% đạt; cần lượt 2 với nhiều video có lời nói.
+
 ## Trước khi chạy cần biết
 
 - Luật số lân cận 8 token và các luật còn lại của bộ khớp (`docs/decisions.md`, mục 26 đến 46) làm một số định lượng đúng bị `unverified`; cột "mục đúng bị `unverified`" có mặt để đo đúng cái giá đó, chưa có ngưỡng.

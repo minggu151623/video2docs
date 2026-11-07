@@ -15,7 +15,7 @@ from pydantic import ValidationError
 
 from app.core.errors import AppError
 from app.core.storage import atomic_write, safe_path, sha256
-from app.schemas.tutorial_v2 import TutorialDraftV2
+from app.schemas.tutorial_v2 import ExactInput, TutorialDraftV2
 from app.schemas.verification import ItemVerification, Transcript, VerificationReport
 from app.services.media import extract_audio, extract_frame
 from app.services.verification.asr import get_asr
@@ -26,6 +26,7 @@ LOG = logging.getLogger("video2docs.verification")
 Status = Literal["ok", "skipped", "failed"]
 STOP = {"CANCELLED", "LEASE_LOST", "JOB_TIMEOUT", "DISK_FULL", "STORAGE_LIMIT"}
 REVIEW = {"unverified", "quote_matched", "not_checked"}  # ruling P2: a paraphrase needs review
+FRAME_SLACK = 0.5  # extract_frame accepts a frame up to this late
 EOF_MARGIN = 0.5  # same distance from the end as screenshot fallbacks; frame timing tolerates 0.5 s
 NO_FRAME = "không trích được khung hình để OCR"
 TIMEOUTS = {"ASR_TIMEOUT", "MEDIA_TIMEOUT"}
@@ -106,13 +107,22 @@ def no_transcript_reason(settings, asset, asr_status: Status, asr_error: str | N
     return "không có bản ghi lời nói"
 
 
-def ocr_seconds(item, duration: float, limit: int) -> list[float]:
-    """Start, middle and end of each visual span, inside the video, at most `limit` evenly spread."""
+def ocr_seconds(item, duration: float, limit: int, pad: float = 0.0) -> list[float]:
+    """Start, middle and end of each visual span, inside the video, at most `limit` evenly spread.
+
+    T3: a command is typed during its span and stays in the terminal after it, so for an `ExactInput` the
+    frames are the middle, the end and `pad` seconds past the end less FRAME_SLACK: the frame found is the
+    first one at or after the mark, up to 0.5 s later, and must stay inside the matcher's window."""
     last = max(0.0, duration - EOF_MARGIN)
     found = set()
     for span in item.evidence_spans:
         if span.source in ("visual", "both"):
-            for t in (span.start_sec, (span.start_sec + span.end_sec) / 2, span.end_sec):
+            middle = (span.start_sec + span.end_sec) / 2
+            if isinstance(item, ExactInput):
+                points = (middle, span.end_sec, span.end_sec + max(0.0, pad - FRAME_SLACK))
+            else:
+                points = (span.start_sec, middle, span.end_sec)
+            for t in points:
                 found.add(round(min(max(t, 0.0), last), 3))
     seconds = sorted(found)
     if len(seconds) <= limit:
@@ -169,7 +179,9 @@ def run_verification(
     started = time.monotonic()
     try:
         for path, item in pending:
-            seconds = ocr_seconds(item, asset.duration_sec, settings.verify_max_ocr_frames)
+            seconds = ocr_seconds(
+                item, asset.duration_sec, settings.verify_max_ocr_frames, settings.verify_window_seconds
+            )
             if not seconds:  # no visual span: the matcher gives the precise `unverified` reason
                 results[path] = verify_item(
                     path, item, transcript, [], settings, text_language=lang, materials=names

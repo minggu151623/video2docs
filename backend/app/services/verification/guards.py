@@ -34,8 +34,13 @@ STOP_WORDS = {"và", "của", "cho", "các", "những", "với", "loại", "the"
 NAME_SCORE = 80
 OCR_WORD_SCORE = 80
 # ruling P1: one leading prompt: POSIX `$ # >`, PowerShell `PS ...>`, Windows `C:\...>`, Python `>>>`
-# and `...`, IPython `In [n]:`
-PROMPT = re.compile(r"^\s*(?:>>>|\.\.\.(?=\s)|In\s?\[\d+\]:|[$#>](?=\s)|PS\s[^>\n]*>|[A-Za-z]:\\[^>\n]*>)")
+# and `...`, IPython `In [n]:`; T1: a shell prompt with user and host ('pi@damo:~/repo $', 'me@mac dir %',
+# '[root@box tmp]#'), whose '$' OCR may read as 'S'/'s' (only after a user@host, never alone)
+USER_HOST = r"\[?[\w.-]+@[\w.-]+(?:\s?:\s?[^\s$#%\]]*|\s[^\s$#%\]]*)?\]?\s?[$#%Ss]"
+PROMPT = re.compile(
+    r"^\s*(?:>>>|\.\.\.(?=\s)|In\s?\[\d+\]:|[$#>](?=\s)|PS\s[^>\n]*>|[A-Za-z]:\\[^>\n]*>"
+    rf"|{USER_HOST}(?=\s))"
+)
 PUNCT = ".,;:!?()[]{}\"'"
 SPEECH_GAP_SEC = 0.7  # Transcript has no segments: a pause this long between words is a boundary
 
@@ -224,17 +229,23 @@ def _squash(text: str) -> str:
 
 def exact_rows(text: str, ocr_text: str) -> str | None:
     """C4 + P1: a command on screen is one or more whole OCR rows, after at most one leading prompt
-    (only when command text follows it on the same row)."""
+    (only when command text follows it on the same row). T2: a tab in a row (`ocr.reading_order`) is a
+    wide empty gap, where the terminal's line ends and another window begins: the command may end there,
+    and a row it runs on to counts up to its first tab."""
     want = _squash(text)
     rows = [r for r in ocr_text.split("\n") if r.strip()]
     for i, row in enumerate(rows):
-        bare = PROMPT.sub("", row, count=1)
-        for head in dict.fromkeys((row, bare) if bare.strip() else (row,)):  # P1: a command follows
-            got, j = _squash(head), i + 1
-            while len(got) < len(want) and j < len(rows):
-                got, j = got + _squash(rows[j]), j + 1
-            if want and got == want:
-                return "\n".join([head.strip(), *rows[i + 1 : j]])
+        cells = row.split("\t")
+        lines = ["\t".join(cells[:k]) for k in range(1, len(cells) + 1)]
+        for line in lines:
+            bare = PROMPT.sub("", line, count=1)
+            for head in dict.fromkeys((line, bare) if bare.strip() else (line,)):  # P1: a command follows
+                got, j = _squash(head), i + 1
+                while len(got) < len(want) and j < len(rows):
+                    got, j = got + _squash(rows[j].split("\t")[0]), j + 1
+                if want and got == want:
+                    shown = [head.strip(), *(r.split("\t")[0] for r in rows[i + 1 : j])]
+                    return "\n".join(" ".join(r.split()) for r in shown)
     return None
 
 

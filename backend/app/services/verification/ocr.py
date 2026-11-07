@@ -17,17 +17,32 @@ def recognition_model(language):
     return DEFAULT_RECOGNITION_MODEL
 
 
+COLUMN_GAP = 4  # row heights of empty space between two boxes of a row that mark another column/window
+
+
+def _join(items) -> str:
+    """Boxes of one row, left to right: a space between them, a tab across a gap wider than COLUMN_GAP
+    row heights (the terminal's line ends there and another window or column begins)."""
+    items = sorted(items, key=lambda i: i[1])
+    out = items[0][0]
+    for left, right in zip(items, items[1:]):
+        wide = right[1] - left[4] > COLUMN_GAP * min(left[3], right[3])
+        out += ("\t" if wide else " ") + right[0]
+    return out
+
+
 def reading_order(texts, boxes):
-    """One line per row, top to bottom; boxes in a row joined left to right by single spaces.
+    """One line per row, top to bottom; boxes in a row joined left to right (see `_join`).
 
     Boxes are (x1, y1, x2, y2). A row is one screen line, so a command split over two boxes of the same
-    line ('$ npm run build' + '--prod') reads as one line and cannot verify a shorter command."""
+    line ('$ npm run build' + '--prod') reads as one line and cannot verify a shorter command; only a gap
+    of several characters' width ('cd 10DS-classwork' ... a file manager's 'dev') splits it."""
     items = []
     for text, box in zip(texts, boxes):
         text = str(text).strip()
         if text:
             x1, y1, x2, y2 = (float(v) for v in box)
-            items.append((text, x1, (y1 + y2) / 2, max(y2 - y1, 1.0)))
+            items.append((text, x1, (y1 + y2) / 2, max(y2 - y1, 1.0), x2))
     items.sort(key=lambda item: item[2])
     rows = []
     for item in items:
@@ -38,7 +53,7 @@ def reading_order(texts, boxes):
             row["height"] = min(row["height"], item[3])
         else:
             rows.append({"items": [item], "y": item[2], "height": item[3]})
-    return [" ".join(item[0] for item in sorted(row["items"], key=lambda i: i[1])) for row in rows]
+    return [_join(row["items"]) for row in rows]
 
 
 class OCR:
