@@ -69,6 +69,7 @@ INGREDIENTS = {
     "lòng đỏ trứng": "egg yolk|egg yolks",
     "lòng trắng trứng": "egg white|egg whites",
     "sữa": "milk",
+    "trà": "tea",
     "đường": "sugar",
     "đường nâu": "brown sugar",
     "muối": "salt",

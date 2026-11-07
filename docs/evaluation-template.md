@@ -87,6 +87,21 @@ Sau mục 66 (dấu nhắc `user@host`, chữ cửa sổ khác cùng hàng, khun
 
 Tổng: **4 mục `verified`, cả 4 đúng** (script chấm 4/4, 0 định lượng sai, 0 lệnh sai mang ✓). Vẫn quá ít để nói ngưỡng 95% đạt; cần lượt 2 với nhiều video có lời nói.
 
+## Danh sách nguyên liệu, mục `stated` trên video không lời, chú thích xuống dòng (07/11/2026)
+
+Sau mục 68 (số của nguyên liệu khác trong cùng danh sách), 69 (mục `stated` trên video không lời) và 70 (chú thích xuống dòng sau "of"), chạy lại job kiểm chứng (0 request Gemini, cùng draft):
+
+| # | ✓ đúng / ✓ | Thay đổi |
+| --- | --- | --- |
+| 1 Phần mềm | 2/2 | Không đổi |
+| 2 Kombucha | **3/3** (trước 1/1) | ✓ "Trà 15 gms" và "Đường 45 gms" từ chú thích "15 gms of Tea, and 45 gms of Sugar."; "Thời gian ủ 3-4 ngày" (`stated`) thành ≈ vì tên thông số đã dịch; "2 tuần" vẫn không khớp vì chú thích chỉ hiện khoảng 69–71 s, giữa các khung OCR |
+| 3 Sửa máy | 0/0 | 2 cảnh báo `stated` thành ≈ (chú thích tiếng Anh, mô tả tiếng Việt) |
+| 4 Thủ công | 0/0 | Không đổi |
+| 5 Thể thao | 0/0 | Không đổi |
+| 6 Làm đẹp | 1/1 | Không đổi |
+
+Tổng: **6 mục `verified`, cả 6 đúng**, 0 định lượng sai và 0 lệnh sai mang ✓. Kombucha có 3/3 nguyên liệu có định lượng mang ✓. Vẫn quá ít để nói ngưỡng 95% đạt.
+
 ## Trước khi chạy cần biết
 
 - Luật số lân cận 8 token và các luật còn lại của bộ khớp (`docs/decisions.md`, mục 26 đến 46) làm một số định lượng đúng bị `unverified`; cột "mục đúng bị `unverified`" có mặt để đo đúng cái giá đó, chưa có ngưỡng.

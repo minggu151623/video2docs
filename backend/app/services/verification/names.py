@@ -25,6 +25,7 @@ BETWEEN |= set("()[]\"'“”‘’") | {"...", "…"}  # brackets, quotes, a sp
 SETTING = {"ở", "o", "at", "khoảng", "khoang", "about", "around", "approximately", "tầm", "tam", "chừng"}
 RANGE_START = {"từ", "tu", "from"}  # 'nấu từ 7 đến 10 phút', only before a range
 BREAK = "\n"
+WRAP_AFTER = {"of", "của", "cua"}  # W1: a row ending in one of these goes on in the next row
 
 
 def _line(line: str, folded: bool, language: str | None, spoken: bool, ranges: bool) -> str:
@@ -84,6 +85,17 @@ class _Walk:
         size = _unit(self.words, self.i, self.step, self.table)
         if size:
             return size
+        if self._wrapped():
+            return 1
+        return self._between()
+
+    def _wrapped(self) -> bool:
+        """W1: a line break right after 'of'/'của', going right: a caption wrapped mid-phrase ('15 gms of' /
+        'Tea, and 45 gms of Sugar.'); the name is the first word of the next row."""
+        i, words = self.i, self.words
+        return self.step > 0 and words[i] == BREAK and i > 0 and words[i - 1] in WRAP_AFTER
+
+    def _between(self) -> int:
         if self.words[self.i] in self.skip:
             self.symbol = self.symbol or not _word(self.words[self.i])
             return 1
@@ -155,9 +167,13 @@ def shared(words: list[str], i: int, step: int) -> bool:
     """X7e: the name is one of a list ('Đường và muối 200g', 'sugar, salt 200 g', '200 g of salt and
     sugar'): index i, just past the name away from its number, is a conjunction or list mark with a word
     past it that is not a kitchen verb or article, so the number may belong to either item or to both."""
-    if not 0 <= i < len(words) or words[i] not in lexicon.CONJUNCTIONS | LIST_MARKS:
+    joins = lexicon.CONJUNCTIONS | LIST_MARKS
+    if not 0 <= i < len(words) or words[i] not in joins:
         return False
     j = i + step
+    while 0 <= j < len(words) and words[j] in joins:  # ', and' / ', và': one list mark
+        j += step
+    # a number there starts another quantity ('15 gms of tea, and 45 gms of sugar'), not another name
     return 0 <= j < len(words) and _word(words[j]) and words[j] not in lexicon.NEIGHBOURS
 
 
@@ -172,6 +188,17 @@ def _followed_by_word(walk: _Walk, folded: bool, unit) -> bool:
     return walk.words[other] not in lexicon.NEIGHBOURS | lexicon.CONJUNCTIONS
 
 
+LIST_JOINS = {"and", "và", "va", "plus"}
+
+
+def _list_join(words: list[str], i: int) -> bool:
+    """N1: words[i] is part of ', and' / ', và' / ', plus': the list goes on to another item there, so a
+    name past it ('15 gms of tea, and 45 gms of sugar') belongs to that item, not to this number."""
+    if words[i] == ",":
+        return i + 1 < len(words) and words[i + 1] in LIST_JOINS
+    return words[i] in LIST_JOINS and i > 0 and words[i - 1] == ","
+
+
 def opposite_clear(walk: _Walk, folded: bool, unit, competitors: list[list[str]], material=False) -> bool:
     """X7d: nothing on the other side of the number competes with the name found by `walk`: no other
     ingredient (dictionary, either language) or other material name of the draft (`competitors`) in that
@@ -184,7 +211,11 @@ def opposite_clear(walk: _Walk, folded: bool, unit, competitors: list[list[str]]
     step, words = -walk.step, walk.words
     seen, i = [], walk.k + step
     while (
-        0 <= i < len(words) and words[i] != BREAK and words[i] not in CLAUSE_TOKENS and not _number(words[i])
+        0 <= i < len(words)
+        and words[i] != BREAK
+        and words[i] not in CLAUSE_TOKENS
+        and not _number(words[i])
+        and not _list_join(words, i)
     ):
         seen.append(words[i])
         i += step

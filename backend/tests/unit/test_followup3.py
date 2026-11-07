@@ -938,3 +938,84 @@ def test_x7f_kitchen_words_after_the_number_and_parameters_are_unchanged():
     assert heard(cook, "giờ nấu 5 phút nữa nhé", "vi", "vi").status == "verified"
     label = mat("4", "tsp", ost="Milk 4tsp", name="Sữa")
     assert screen(label, "Milk 4tsp").status == "verified"
+
+
+# ---- N1: a number of another list item is not a neighbour (evaluation round 1, kombucha caption) ----
+
+KOMBUCHA = "Step 1 - Measure out 15 gms of Tea, and 45 gms of Sugar."
+
+
+def test_n1_each_quantity_of_a_listed_caption_verifies():
+    assert screen(mat("15", "gms", ost="15 gms of Tea", name="Trà"), KOMBUCHA).status == "verified"
+    assert screen(mat("45", "gms", ost="45 gms of Sugar", name="Đường"), KOMBUCHA).status == "verified"
+    tea = mat("15", "gms", ost="15 gms of Tea", name="Tea")
+    assert screen(tea, KOMBUCHA, text_language="en").status == "verified"
+
+
+@pytest.mark.parametrize(
+    "spoken",
+    ["giờ cho 200 g bột, và 100 g đường nhé", "giờ cho 200 g bột; 100 g đường"],
+)
+def test_n1_spoken_list_of_two_ingredients(spoken):
+    assert heard(mat("200", "g", quote="cho 200 g bột", name="Bột"), spoken, "vi", "vi").status == "verified"
+
+
+@pytest.mark.parametrize(
+    "frame",
+    [
+        "Add 2 cups of flour, and 1 cup of flour",  # the same item again: 3 cups in all
+        "Add 2 cups of flour, or 3 cups of sugar",  # an alternative
+        "Add 2 cups of flour and 3 cups of sugar",  # no list mark
+        "Add 2 cups of flour, 3 cups of sugar",  # a bare comma
+        "Add 2 cups of flour, and 1 more cup",  # no unit right after the number, no name
+        "Add 2 cups of flour, and 3 cups",  # no name
+        "Add 2 - 3 cups of flour, and 1 cup of sugar",  # the item's own range
+    ],
+)
+def test_n1_never_hides_a_range_alternative_or_repeat(frame):
+    item = mat("2", "cups", ost="2 cups of flour", name="flour")
+    assert screen(item, frame, text_language="en").status != "verified"
+
+
+@pytest.mark.parametrize(
+    "frame",
+    [
+        "Add 15 gms of Tea, or 45 gms of Sugar",
+        "Add the 15, and 45 gms of Sugar",
+        "Add 45 gms of Sugar, and 45 gms of Sugar",
+    ],
+)
+def test_n1_left_side_needs_the_same_shape(frame):
+    item = mat("45", "gms", ost="45 gms of Sugar", name="Sugar")
+    assert screen(item, frame, text_language="en").status != "verified"
+
+
+@pytest.mark.parametrize(
+    "spoken",
+    ["giờ cho 200 g bột, và 100 g bột nữa", "giờ cho 200 g bột, hoặc 300 g đường", "giờ cho 200 g bột, và 300 g"],
+)
+def test_n1_spoken_repeat_or_alternative_stays_blocked(spoken):
+    assert heard(mat("200", "g", quote="cho 200 g bột", name="Bột"), spoken, "vi", "vi").status != "verified"
+
+
+def test_n1_a_name_past_a_list_join_is_another_item_but_a_bare_comma_is_not():
+    sugar = mat("200", "g", ost="Salt, and 200g of sugar", name="Đường")
+    assert screen(sugar, "Salt, and 200g of sugar").status == "verified"
+    bare = mat("200", "g", ost="Salt, 200g of sugar", name="Đường")
+    assert screen(bare, "Salt, 200g of sugar").status in NOT_VERIFIED
+
+
+WRAPPED = "@PEEPALFARM\nStep 1 - Measure out 15 gms of\nTea, and 45 gms of Sugar."
+
+
+def test_w1_caption_wrapped_after_of_keeps_the_name_beside_its_number():
+    assert screen(mat("15", "gms", ost="15 gms of Tea", name="Trà"), WRAPPED).status == "verified"
+    assert screen(mat("45", "gms", ost="45 gms of Sugar", name="Đường"), WRAPPED).status == "verified"
+
+
+@pytest.mark.parametrize(
+    "frame",
+    ["Measure out 15 gms\nTea, and 45 gms of Sugar.", "Measure out 15 gms of the\nTea", "Add 15 gms of\nSugar"],
+)
+def test_w1_only_a_row_ending_in_of_goes_on(frame):
+    assert screen(mat("15", "gms", ost="15 gms of Tea", name="Trà"), frame).status != "verified"

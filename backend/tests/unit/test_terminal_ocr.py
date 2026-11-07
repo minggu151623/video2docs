@@ -90,3 +90,34 @@ def test_t3_frame_after_the_span_verifies_the_finished_command():
     out = verify_item("p", command, speech, frames, SETTINGS)
     assert (out.status, out.matched_text, out.matched_sec) == ("verified", "cd 10DS-classwork", 83.53)
     assert Settings().verify_window_seconds == 5
+
+
+# ---- S1: a 'stated' item on a video without speech is checked against the screen ----------------------
+
+SILENT = Transcript(language="en", words=[])
+JAR = "Step 9 - Let the jar sit in a dark, warm place for 2 weeks."
+
+
+def test_s1_stated_item_on_a_silent_video_is_read_off_the_screen():
+    item = mat("2", "weeks", quote="warm place for 2 weeks", ost="2 weeks", name="weeks")
+    assert verify_item("p", item, SILENT, None, SETTINGS).status == "not_checked"  # waits for OCR
+    out = verify_item("p", mat("15", "gms", quote="15 gms of Tea", ost="15 gms of Tea", name="Tea"),
+                      SILENT, [(11.0, "Measure out 15 gms of Tea.")], SETTINGS, text_language="en")
+    assert (out.status, out.method) == ("verified", "ocr")
+
+
+def test_s1_keeps_every_on_screen_rule():
+    wrong = mat("3", "gms", quote="3 gms of Tea", ost="3 gms of Tea", name="Tea")
+    shown = [(11.0, "Measure out 15 gms of Tea.")]
+    assert verify_item("p", wrong, SILENT, shown, SETTINGS, text_language="en").status == "unverified"
+    accented = mat("15", "gms", quote="15 gms de Té", ost="15 gms de Té", name="Té")
+    out = verify_item("p", accented, SILENT, [(11.0, "15 gms de Té")], SETTINGS, text_language="en")
+    assert out.status == "unverified"  # R13c: not plain ASCII, no language to read it by
+
+
+def test_s1_needs_silence_and_on_screen_text():
+    item = mat("15", "gms", quote="15 gms of Tea", ost="15 gms of Tea", name="Tea")
+    speech = Transcript(language="en", words=[Word(start=0.0, end=0.3, text="hello")])
+    assert verify_item("p", item, speech, None, SETTINGS, text_language="en").method == "asr"
+    quote_only = mat("15", "gms", quote="15 gms of Tea", name="Tea")
+    assert verify_item("p", quote_only, SILENT, None, SETTINGS, text_language="en").method != "ocr"

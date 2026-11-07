@@ -138,6 +138,73 @@ def _spelled_number(token: str, folded: bool) -> bool:
     return _has_number(token, folded) or folded and lexicon.foreign_number_word(token)
 
 
+LIST_JOINS = {"and", "và", "va", "plus"}  # N1: words that add another item to a list, never an alternative
+OF_WORDS = {"of", "của", "cua"}
+
+
+def _unit_run(words: list[str], folded: bool) -> int:
+    """Length of the longest unit spelling at the start of `words` (in reading order), else 0."""
+    table = units.UNITS if folded else units.WRITTEN
+    for size in range(min(units.LONGEST, len(words)), 0, -1):
+        if " ".join(w.strip(".,;:!?") for w in words[:size]) in table:
+            return size
+    return 0
+
+
+def _quantity_name(tokens: list[str], folded: bool) -> str | None:
+    """N1: the name of a phrase written '<number> <unit> [of] <name>' ('15 gms of tea'), else None."""
+    if len(tokens) < 3 or not _has_number(tokens[0], folded):
+        return None
+    size = _unit_run(tokens[1:], folded)
+    rest = tokens[1 + size :]
+    if rest[:1] and rest[0] in OF_WORDS:
+        rest = rest[1:]
+    table = units.UNITS if folded else units.WRITTEN
+    if not size or len(rest) != 1 or not re.fullmatch(r"[^\W\d_]+", rest[0]) or rest[0] in table:
+        return None
+    return rest[0]
+
+
+def _other_quantity(words: list[str], own: str | None, folded: bool, left: bool) -> int:
+    """N1: how many of `words` (nearest the segment first) are one other item of a list, else 0.
+
+    '15 gms of tea' + ', and 45 gms of sugar' / '15 gms of tea, and' + '45 gms of sugar': a comma with
+    'and'/'và'/'plus', or a semicolon, then '<number> <unit> [of] <name>' with a name other than the
+    segment's own (`own`, which must have that shape too). Such a number is another ingredient of a list,
+    not a range or an alternative ('or', 'hoặc' never qualify); a repeated name ('2 cups of flour, and 1
+    cup of flour'), a number without unit or name, or a bare comma still counts as a neighbour."""
+    if own is None or not words:
+        return 0
+    plain = lambda w: w.rstrip(",;.!?")  # noqa: E731
+    if left:  # words read backwards: 'and' 'tea,' 'of' 'gms' '15'
+        if words[0] in LIST_JOINS and words[1:2] == [","]:
+            at = 2
+        elif words[0] in LIST_JOINS and words[1:2] and words[1].endswith(","):
+            at = 1
+        elif words[0] == ";":
+            at = 1
+        elif words[0].endswith(";") and len(words[0]) > 1:
+            at = 0
+        else:
+            return 0
+        for k in range(3, units.LONGEST + 4):
+            phrase = [plain(w) for w in reversed(words[at : at + k])]
+            if len(phrase) == k and _quantity_name(phrase, folded) not in (None, own):
+                return at + k
+        return 0
+    if words[0] == "," and words[1:2] and words[1] in LIST_JOINS:
+        at = 2
+    elif words[0] == ";":
+        at = 1
+    else:
+        return 0
+    for k in range(3, units.LONGEST + 4):
+        phrase = [plain(w) for w in words[at : at + k]]
+        if len(phrase) == k and _quantity_name(phrase, folded) not in (None, own):
+            return at + k
+    return 0
+
+
 def _beside_number(haystack: str, start: int, end: int, folded: bool) -> bool:
     """Another number, or a dash, near the first or last number of the segment: ranges and alternatives.
 
@@ -150,8 +217,12 @@ def _beside_number(haystack: str, start: int, end: int, folded: bool) -> bool:
     marks = [i for i, w in enumerate(tokens) if _spelled_number(w, folded)]
     if not marks:
         return False
+    # N1: the segment's own '<number> <unit> [of] <name>', from its only number on ('cho 200 g bột')
+    own = _quantity_name([w.rstrip(",;.!?") for w in tokens[marks[0] :]], folded) if len(marks) == 1 else None
 
-    def near(words: list[str], gap: int) -> bool:  # words nearest the segment first
+    def near(words: list[str], gap: int, left: bool) -> bool:  # words nearest the segment first
+        skipped = _other_quantity(words, own, folded, left)
+        gap, words = gap + skipped, words[skipped:]
         reach = words[: max(0, NEIGHBOURHOOD - gap)]
         # R6 'et demie'; R12d a number word of another language ('2 tazas, o tres')
         number = any(
@@ -161,7 +232,9 @@ def _beside_number(haystack: str, start: int, end: int, folded: bool) -> bool:
         return number or (bool(reach) and reach[0] in DASHES)
 
     before, after = haystack[:start].split()[::-1], haystack[end:].split()
-    return near(before, marks[0]) or near(after, len(tokens) - 1 - marks[-1])
+    if tokens[-1][-1] in ",;":  # the list mark ended up inside the segment: 'tea,' + 'and 45 ...'
+        after = [tokens[-1][-1], *after]
+    return near(before, marks[0], True) or near(after, len(tokens) - 1 - marks[-1], False)
 
 
 def _edges_ok(needle: str, haystack: str, start: int, end: int, language: str | None, folded: bool) -> bool:
@@ -816,6 +889,11 @@ def verify_item(
     a material or parameter name is checked against its quote when the transcript has the same language."""
     if item.basis in ("inferred", "unclear"):
         return _result("unverified", "none", f"basis {item.basis}")
+    silent = transcript is not None and not transcript.words
+    if item.basis == "stated" and silent and (item.on_screen_text or "").strip():
+        # S1: nothing was said, so a 'stated' item with on-screen text was read off the screen; it is
+        # checked as on-screen text, under every on-screen rule (R13c and the rest)
+        item = item.model_copy(update={"basis": "observed"})
     spoken, exact = item.basis == "stated", isinstance(item, ExactInput)
     source = item.quote if spoken else item.on_screen_text
     if not (source or "").strip():
