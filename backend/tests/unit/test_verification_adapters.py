@@ -421,3 +421,58 @@ def test_faster_whisper_tiny_transcribes_synthesized_speech(tmp_path):
 def test_paddleocr_reads_real_frame():
     text = OCR(Settings()).read(SPIKE_FRAMES / "vid_30.png", "en")
     assert "Welcome to Python.org" in text
+
+
+# ---- L1: a guessed language the matcher cannot read is rechecked against en/vi ----------------------
+
+
+class ScoredModel(FakeModel):
+    """FakeModel whose language guess is `guessed` and whose window decodes score per language."""
+
+    def __init__(self, guessed, scores):
+        super().__init__([FakeSegment([FakeWord(0.0, 0.5, "hi")])], language=guessed)
+        self.scores = scores
+
+    def transcribe(self, audio, **kwargs):
+        if kwargs.get("vad_filter") is False:  # a recheck window
+            self.calls.append(("window", kwargs))
+            score = self.scores[kwargs["language"]]
+            return iter([types.SimpleNamespace(avg_logprob=score)]), None
+        self.language = kwargs.get("language") or self.language
+        return super().transcribe(audio, **kwargs)
+
+
+def recheck(model, tmp_path, windows=2):
+    adapter = asr_with(model)
+    adapter._windows = lambda audio: [object()] * windows
+    return adapter.transcribe(tmp_path / "a.wav", lambda: None)
+
+
+@pytest.mark.parametrize(
+    "guessed,scores,expected",
+    [
+        ("ms", {"ms": -0.77, "en": -0.20, "vi": -1.5}, "en"),  # English with a Singapore accent
+        ("yo", {"yo": -1.11, "en": -0.31, "vi": -1.4}, "en"),  # English over music
+        ("ne", {"ne": -1.39, "en": -0.87, "vi": -2.46}, "ne"),  # Nepali dialect: English decode is poor
+        ("de", {"de": -0.25, "en": -0.45, "vi": -1.9}, "de"),  # English decode good, but worse than German
+        ("de", {"de": -0.70, "en": -0.45, "vi": -1.9}, "de"),  # better, but not by RECHECK_MARGIN
+    ],
+)
+def test_l1_guess_outside_vi_en_is_rechecked(tmp_path, guessed, scores, expected):
+    assert recheck(ScoredModel(guessed, scores), tmp_path).language == expected
+
+
+def test_l1_vi_en_guesses_and_silence_are_not_rechecked(tmp_path):
+    model = ScoredModel("en", {"en": -0.2, "vi": -0.1})
+    assert recheck(model, tmp_path).language == "en"
+    assert not [c for c in model.calls if c[0] == "window"]
+    quiet = ScoredModel("ms", {"ms": -2.0, "en": -0.1, "vi": -0.1})
+    assert recheck(quiet, tmp_path, windows=0).language == "ms"  # no speech found: the guess stays
+
+
+def test_l1_switch_decodes_again_in_the_chosen_language(tmp_path):
+    model = ScoredModel("ms", {"ms": -0.77, "en": -0.20, "vi": -1.5})
+    recheck(model, tmp_path)
+    full = [kwargs for audio, kwargs in model.calls if audio != "window"]
+    assert [k.get("language") for k in full] == [None, "en"]
+    assert all(k["word_timestamps"] and k["vad_filter"] for k in full)

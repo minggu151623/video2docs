@@ -65,3 +65,13 @@ Các cặp ghép chỉ theo thời gian có thể sai (mục 65), nên đây là
    - Định lượng trên màn hình của video cá hấp bị thiếu vì đáp án dựa vào lời nói mà không xem ảnh ghép.
    - "1 tbsp tomato puree" của video bò hầm hiện giữa hai khung của ảnh ghép.
    - Đáp án đã khóa nên không sửa; các mục này được xem lại bằng tay ở trên.
+
+## Sau khi kiểm lại ngôn ngữ (mục 72, 07/11/2026)
+
+Chạy lại job kiểm chứng của 10 video (0 request Gemini, cùng draft, bản ghi lời nói làm lại):
+
+- Video 5 (cá hấp) và 9 (may khăn) giờ có bản ghi lời nói tiếng Anh. Các video khác vẫn được nhận đúng như trước và không mục nào đổi trạng thái.
+- Video 5: 6 mục từ `unverified` thành ≈. Ví dụ "steam on high for around six to eight minutes", "one to two minutes" khớp giá trị nhưng tên thông số đã dịch.
+- Video 9: 5 mục thành ≈ ("10 Inches", "17 Inches", "9 inches"; tên đã dịch).
+- Số mục ✓ không đổi: **20, cả 20 đúng**, 0 ✓ sai.
+- Còn mở: chú thích song ngữ "10g Ginger 姜" của video 5. OCR (model tiếng Anh) đọc đúng "10g Ginger" nhưng chữ Hán thành ký tự rác, trong khi `on_screen_text` của Gemini chép cả chữ Hán. Vì vậy mục phải khớp nguyên văn và không khớp. Chú thích "1Tbsp Seasame Oil" sai chính tả ngay trong video, còn Gemini sửa thành "Sesame".

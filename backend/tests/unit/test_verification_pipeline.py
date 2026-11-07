@@ -150,7 +150,7 @@ def use(monkeypatch, asr=None, ocr=None):
 
 def test_transcript_cache_path_names_asset_and_asr_config(tmp_path):
     cfg = settings(tmp_path, asr_model="small")
-    key = sha256(b"faster-whispersmall")[:12]
+    key = sha256(b"faster-whispersmallL1")[:12]  # L1: transcripts from before the language recheck are not reused
     assert pipeline.transcript_cache_path(SHA, cfg) == f"transcripts/{SHA}-{key}.json"
 
 

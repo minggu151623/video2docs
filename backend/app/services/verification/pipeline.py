@@ -49,7 +49,8 @@ def _log(source: str, error: BaseException, code: str):
 
 
 def transcript_cache_path(asset_sha256: str, settings) -> str:
-    config = sha256((settings.asr_engine + settings.asr_model).encode())[:12]
+    # 'L1': transcripts made before the language recheck may carry a wrong language; do not reuse them
+    config = sha256((settings.asr_engine + settings.asr_model + "L1").encode())[:12]
     return f"transcripts/{asset_sha256}-{config}.json"
 
 
