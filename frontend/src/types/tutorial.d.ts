@@ -5,7 +5,12 @@
  * and run json-schema-to-typescript to regenerate this file.
  */
 
-export type SchemaVersion = "1.0";
+export type SchemaVersion = "2.0";
+export type IsTutorial = boolean;
+export type NotTutorialReason = string | null;
+export type Domain =
+  "software" | "cooking" | "repair" | "craft" | "fitness" | "beauty" | "gardening" | "music" | "other";
+export type Yield = string | null;
 export type Title = string;
 export type Summary = string;
 export type Language = "vi" | "en";
@@ -158,22 +163,45 @@ export type Source = "visual" | "audio" | "both";
 export type Description = string;
 export type Basis = "observed" | "stated" | "inferred" | "unclear";
 export type Scope = "tutorial" | "clip";
+export type Quote = string | null;
+export type OnScreenText = string | null;
 /**
  * @maxItems 30
  */
-export type Prerequisites = SourceClaim[];
+export type Prerequisites = GroundedClaim[];
+/**
+ * @maxItems 30
+ */
+export type Safety = GroundedClaim[];
 export type Name = string;
-export type Version = string | null;
+export type Quantity = string | null;
+export type Unit = string | null;
+export type Note = string | null;
 /**
  * @minItems 1
  * @maxItems 5
  */
 export type EvidenceSpans1 =
   [Span] | [Span, Span] | [Span, Span, Span] | [Span, Span, Span, Span] | [Span, Span, Span, Span, Span];
+export type Basis1 = "observed" | "stated" | "inferred" | "unclear";
+export type Quote1 = string | null;
+export type OnScreenText1 = string | null;
+/**
+ * @maxItems 60
+ */
+export type Materials = Material[];
+export type Name1 = string;
+export type Spec = string | null;
+/**
+ * @minItems 1
+ * @maxItems 5
+ */
+export type EvidenceSpans2 =
+  [Span] | [Span, Span] | [Span, Span, Span] | [Span, Span, Span, Span] | [Span, Span, Span, Span, Span];
 /**
  * @maxItems 30
  */
-export type Tools = ToolMention[];
+export type Equipment = Equipment1[];
 export type LocalId = string;
 export type Title1 = string;
 export type StartSec1 = number;
@@ -318,32 +346,94 @@ export type ExpectedResult = string | null;
 /**
  * @maxItems 10
  */
-export type Commands =
+export type Parameters =
   | []
-  | [Command]
-  | [Command, Command]
-  | [Command, Command, Command]
-  | [Command, Command, Command, Command]
-  | [Command, Command, Command, Command, Command]
-  | [Command, Command, Command, Command, Command, Command]
-  | [Command, Command, Command, Command, Command, Command, Command]
-  | [Command, Command, Command, Command, Command, Command, Command, Command]
-  | [Command, Command, Command, Command, Command, Command, Command, Command, Command]
-  | [Command, Command, Command, Command, Command, Command, Command, Command, Command, Command];
-export type Language1 = string;
+  | [Parameter]
+  | [Parameter, Parameter]
+  | [Parameter, Parameter, Parameter]
+  | [Parameter, Parameter, Parameter, Parameter]
+  | [Parameter, Parameter, Parameter, Parameter, Parameter]
+  | [Parameter, Parameter, Parameter, Parameter, Parameter, Parameter]
+  | [Parameter, Parameter, Parameter, Parameter, Parameter, Parameter, Parameter]
+  | [Parameter, Parameter, Parameter, Parameter, Parameter, Parameter, Parameter, Parameter]
+  | [Parameter, Parameter, Parameter, Parameter, Parameter, Parameter, Parameter, Parameter, Parameter]
+  | [Parameter, Parameter, Parameter, Parameter, Parameter, Parameter, Parameter, Parameter, Parameter, Parameter];
+export type Name2 = string;
+export type Value = string;
+export type Unit1 = string | null;
+/**
+ * @minItems 1
+ * @maxItems 5
+ */
+export type EvidenceSpans3 =
+  [Span] | [Span, Span] | [Span, Span, Span] | [Span, Span, Span, Span] | [Span, Span, Span, Span, Span];
+export type Basis2 = "observed" | "stated" | "inferred" | "unclear";
+export type Quote2 = string | null;
+export type OnScreenText2 = string | null;
+/**
+ * @maxItems 10
+ */
+export type ExactInputs =
+  | []
+  | [ExactInput]
+  | [ExactInput, ExactInput]
+  | [ExactInput, ExactInput, ExactInput]
+  | [ExactInput, ExactInput, ExactInput, ExactInput]
+  | [ExactInput, ExactInput, ExactInput, ExactInput, ExactInput]
+  | [ExactInput, ExactInput, ExactInput, ExactInput, ExactInput, ExactInput]
+  | [ExactInput, ExactInput, ExactInput, ExactInput, ExactInput, ExactInput, ExactInput]
+  | [ExactInput, ExactInput, ExactInput, ExactInput, ExactInput, ExactInput, ExactInput, ExactInput]
+  | [ExactInput, ExactInput, ExactInput, ExactInput, ExactInput, ExactInput, ExactInput, ExactInput, ExactInput]
+  | [
+      ExactInput,
+      ExactInput,
+      ExactInput,
+      ExactInput,
+      ExactInput,
+      ExactInput,
+      ExactInput,
+      ExactInput,
+      ExactInput,
+      ExactInput
+    ];
+export type Kind = "code" | "command" | "text";
+export type Language1 = string | null;
 export type Text1 = string;
 export type Completeness = "complete" | "partial" | "unclear";
 /**
  * @minItems 1
  * @maxItems 5
  */
-export type EvidenceSpans2 =
+export type EvidenceSpans4 =
   [Span] | [Span, Span] | [Span, Span, Span] | [Span, Span, Span, Span] | [Span, Span, Span, Span, Span];
+export type Basis3 = "observed" | "stated" | "inferred" | "unclear";
+export type Quote3 = string | null;
+export type OnScreenText3 = string | null;
+/**
+ * @maxItems 5
+ */
+export type Warnings =
+  | []
+  | [GroundedClaim]
+  | [GroundedClaim, GroundedClaim]
+  | [GroundedClaim, GroundedClaim, GroundedClaim]
+  | [GroundedClaim, GroundedClaim, GroundedClaim, GroundedClaim]
+  | [GroundedClaim, GroundedClaim, GroundedClaim, GroundedClaim, GroundedClaim];
+/**
+ * @maxItems 5
+ */
+export type Tips =
+  | []
+  | [GroundedClaim]
+  | [GroundedClaim, GroundedClaim]
+  | [GroundedClaim, GroundedClaim, GroundedClaim]
+  | [GroundedClaim, GroundedClaim, GroundedClaim, GroundedClaim]
+  | [GroundedClaim, GroundedClaim, GroundedClaim, GroundedClaim, GroundedClaim];
 /**
  * @minItems 1
  * @maxItems 5
  */
-export type EvidenceSpans3 =
+export type EvidenceSpans5 =
   [Span] | [Span, Span] | [Span, Span, Span] | [Span, Span, Span, Span] | [Span, Span, Span, Span, Span];
 /**
  * @maxItems 2
@@ -354,11 +444,11 @@ export type ReviewReason = string | null;
 /**
  * @maxItems 80
  */
-export type Steps = Step[];
+export type Steps = StepV2[];
 /**
  * @maxItems 30
  */
-export type Troubleshooting = SourceClaim[];
+export type Troubleshooting = GroundedClaim[];
 export type Description1 = string;
 export type StartSec2 = number | null;
 export type EndSec2 = number | null;
@@ -367,23 +457,31 @@ export type EndSec2 = number | null;
  */
 export type Uncertainties = Uncertainty[];
 
-export interface TutorialDraftV1 {
+export interface TutorialDraftV2 {
   schema_version: SchemaVersion;
+  is_tutorial: IsTutorial;
+  not_tutorial_reason: NotTutorialReason;
+  domain: Domain;
+  yield: Yield;
   title: Title;
   summary: Summary;
   language: Language;
   objectives: Objectives;
   prerequisites: Prerequisites;
-  tools: Tools;
+  safety: Safety;
+  materials: Materials;
+  equipment: Equipment;
   steps: Steps;
   troubleshooting: Troubleshooting;
   uncertainties: Uncertainties;
 }
-export interface SourceClaim {
+export interface GroundedClaim {
   text: Text;
   evidence_spans: EvidenceSpans;
   basis?: Basis;
   scope?: Scope;
+  quote?: Quote;
+  on_screen_text?: OnScreenText;
 }
 export interface Span {
   start_sec: StartSec;
@@ -391,29 +489,55 @@ export interface Span {
   source: Source;
   description: Description;
 }
-export interface ToolMention {
+export interface Material {
   name: Name;
-  version: Version;
+  quantity: Quantity;
+  unit: Unit;
+  note: Note;
   evidence_spans: EvidenceSpans1;
+  basis: Basis1;
+  quote: Quote1;
+  on_screen_text: OnScreenText1;
 }
-export interface Step {
+export interface Equipment1 {
+  name: Name1;
+  spec: Spec;
+  evidence_spans: EvidenceSpans2;
+}
+export interface StepV2 {
   local_id: LocalId;
   title: Title1;
   start_sec: StartSec1;
   end_sec: EndSec1;
   actions: Actions;
   expected_result: ExpectedResult;
-  commands: Commands;
-  evidence_spans: EvidenceSpans3;
+  parameters: Parameters;
+  exact_inputs: ExactInputs;
+  warnings: Warnings;
+  tips: Tips;
+  evidence_spans: EvidenceSpans5;
   screenshot_candidates_sec: ScreenshotCandidatesSec;
   needs_review: NeedsReview;
   review_reason: ReviewReason;
 }
-export interface Command {
+export interface Parameter {
+  name: Name2;
+  value: Value;
+  unit: Unit1;
+  evidence_spans: EvidenceSpans3;
+  basis: Basis2;
+  quote: Quote2;
+  on_screen_text: OnScreenText2;
+}
+export interface ExactInput {
+  kind: Kind;
   language: Language1;
   text: Text1;
   completeness: Completeness;
-  evidence_spans: EvidenceSpans2;
+  evidence_spans: EvidenceSpans4;
+  basis: Basis3;
+  quote: Quote3;
+  on_screen_text: OnScreenText3;
 }
 export interface Uncertainty {
   description: Description1;

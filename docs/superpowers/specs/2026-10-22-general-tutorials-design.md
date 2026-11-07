@@ -85,13 +85,17 @@ App ghi, model không điền. Lưu tách khỏi draft của model, gắn theo �
 
 | Trường | Giá trị |
 | --- | --- |
-| `status` | `verified`: ASR/OCR khớp quanh mốc bằng chứng. `unverified`: đã kiểm tra nhưng không khớp. `not_checkable`: hành động không có lời nói hay chữ để đối chiếu. `not_checked`: bộ kiểm chứng lỗi hoặc không chạy |
+| `status` | `verified`: ASR/OCR khớp quanh mốc bằng chứng (với câu nhận định: cả câu cũng đã được đối chiếu, xem dưới). `quote_matched`: chỉ với câu nhận định (`prerequisites`, `safety`, `troubleshooting`, `warnings`, `tips`): nguyên văn qua mọi bước kiểm tra nhưng câu diễn giải chưa được kiểm chứng. `unverified`: đã kiểm tra nhưng không khớp. `not_checkable`: hành động không có lời nói hay chữ để đối chiếu. `not_checked`: bộ kiểm chứng lỗi hoặc không chạy |
 | `method` | `asr`, `ocr`, `none` |
 | `matched_text` | Đoạn khớp được, hoặc null |
 | `checked_range` | Khoảng thời gian đã đối chiếu |
 | `reason` | Lý do khi không phải `verified` |
 
-Có `unverified` hoặc `not_checked` thì generation mang `needs_review`. Bước kiểm chứng chạy lại được mà không gọi Gemini.
+Câu nhận định có nguyên văn khớp chỉ được `verified` khi `text` cùng ngôn ngữ với nguồn (so mã ngôn ngữ chính, không phân biệt hoa thường: `vi-VN` = `vi`; nguồn ASR: `transcript.language`; nguồn OCR: `transcript.language` khi transcript có từ, nếu không là không rõ) và dãy từ của `text` bằng dãy từ của nguyên văn (`quote` hoặc `on_screen_text`) sau `normalize`: chỉ được khác hoa/thường, khoảng trắng, dấu `. , ; : ! ? …` ở cuối một từ, và nháy/ngoặc `" ' “ ” ‘ ’ « » ( ) [ ] { }` không có cặp ở bất kỳ đâu trong cả câu, khi nó nằm ở đầu từ đầu tiên hoặc cuối từ cuối cùng của câu (ruling P2d; "“Nhấn nút install." = "nhấn nút install", "Bột 200 g)" = "bột 200 g"). Nháy/ngoặc ở mọi chỗ khác đều tính, kể cả cặp trải qua nhiều từ: `grep "a b" f` ≠ `grep a b f`, `(cd a && make)` ≠ `cd a && make`, `f(x, y)` ≠ `f(x y`, `$(date +%s)` ≠ `$(date +%s`; `main()`, `arr[]` giữ nguyên; nháy ngay sau chữ số như `5"` là đơn vị, giữ nguyên. Dấu đầu từ như `-rf`, `.env`, `/etc`, `%PATH%`, dấu trong từ (`C#`, `1,5`, `don't`) và dấu tiếng Việt vẫn tính. Token không có chữ/số (`.`, `..`, `-`, `*`, `&`, `$`, `≤`, `{}`, `""`) luôn được giữ; nó chỉ nối vào token ngay sau khi nó chỉ gồm ký hiệu tiền tệ hoặc so sánh `$ € £ ¥ ₫ ≤ ≥ < > ≈` và token sau bắt đầu bằng chữ số (ruling P2e; "Giá $ 5" = "Giá $5", "≤ 5" = "≤5"), còn lại đứng riêng, nên "cd / 5" ≠ "cd /5", "ls ~ 1" ≠ "ls ~1", "chmod + 7" ≠ "chmod +7", "echo # 1" ≠ "echo #1", "x = 5" ≠ "x =5", "- 18°C" ≠ "-18°C", "rm -rf . /tmp" ≠ "rm -rf ./tmp", "rm - rf" ≠ "rm -rf", ". run foo" ≠ ".run foo", "git add ." ≠ "git add" và "apart" ≠ "a part". Mọi khác biệt khác (câu ngắn hơn hay dài hơn nguyên văn, một từ đổi như "bật"/"tắt", "enable"/"disable", "file"/"files") thì `quote_matched` (cùng `method`, `matched_text`, `matched_sec`, `checked_range`). `Material`, `Parameter`, `ExactInput` không đổi. `quote_matched` không phải `verified` (quyết định 48). Cái giá: câu nhận định nào viết lại nguyên văn, kể cả viết lại đúng nghĩa ("Không chạm vào chảo nóng" từ "đừng chạm vào chảo đang nóng"), chỉ còn `quote_matched`.
+
+`Material` và `Parameter` từ nguồn khác ngôn ngữ draft (video tiếng Anh, tài liệu tiếng Việt): khi giá trị, đơn vị (qua bảng quy đổi) và nguyên văn đều khớp, mục chỉ được `verified` khi tên được chứng minh trong nguyên văn và trong nguồn đã khớp (hàng OCR, hoặc đoạn lời nói thêm một từ mỗi bên): tên viết đúng từng từ, hoặc với `Material`, từ tương ứng trong từ điển nguyên liệu 1:1 (`lexicon.INGREDIENTS`) đứng cạnh số, đơn vị, mạo từ hoặc động từ bếp. Ngược lại là `quote_matched` với `matched_text` là trọn hàng OCR hoặc đoạn lời nói, để người đọc thấy nguyên liệu nguồn ghi ("Sugar 200g" cho "Muối 200 g"); "Điểm chưa rõ" ghi "tên mục chưa kiểm chứng". `Parameter` khác ngôn ngữ vì vậy gần như luôn `quote_matched` (quyết định 49, 53). Nguyên văn có phủ định thì `Material`/`Parameter` là `unverified` (quyết định 55).
+
+Có `unverified`, `quote_matched` hoặc `not_checked` thì generation mang `needs_review`. Bước kiểm chứng chạy lại được mà không gọi Gemini.
 
 ### 2.5. Tương thích
 
@@ -130,8 +134,14 @@ Hai tầng, đều là thuật toán, không gọi LLM.
    - `on_screen_text` so với kết quả OCR của các frame đã trích.
    - Chuẩn hóa: Unicode NFKC, bỏ khác biệt hoa/thường và khoảng trắng; giữ dấu tiếng Việt.
    - Con số phải khớp chính xác. Phần chữ khớp gần đúng theo ngưỡng cấu hình (khởi điểm 85/100, chỉnh theo bộ đánh giá).
-   - `exact_inputs` dùng ngưỡng cao (khởi điểm 95/100), chỉ bỏ qua khác biệt khoảng trắng.
+   - `exact_inputs` dùng ngưỡng cao (khởi điểm 95/100), chỉ bỏ qua khác biệt khoảng trắng. Trên OCR phải bằng trọn hàng, sau khi bỏ tối đa một dấu nhắc (`$ # >`, `PS …>`, `X:\…>`, `>>>`, `...`, `In [n]:`) khi có chữ lệnh theo sau (quyết định 34, 47).
    - Số đọc bằng chữ: chuẩn hóa sang chữ số cho tiếng Việt và tiếng Anh. Ngôn ngữ khác không khớp thì rơi về `unverified` (báo nhầm theo hướng an toàn).
+   - Tên mục (`Material`/`Parameter`) phải có trong nguyên văn khi draft và nguồn cùng ngôn ngữ (ASR: `transcript.language`; OCR: cũng `transcript.language`); trên OCR cũng kiểm khi không rõ ngôn ngữ draft. Khi draft khác ngôn ngữ nguồn (hoặc nguồn không rõ ngôn ngữ), tên không dò mờ được nữa: mục khớp giá trị chỉ `verified` khi tên đúng từng từ hoặc qua từ điển nguyên liệu (chỉ `Material`), còn lại `quote_matched` (X1, X1a, quyết định 49, 53).
+   - Đơn vị của `Material`/`Parameter` là từ ngay sau số của giá trị trong nguyên văn và trong đoạn khớp. Cùng ngôn ngữ (hoặc không rõ ngôn ngữ): viết giống hệt, không qua bảng ("chén" ≠ "cốc", "giờ" ≠ "tiếng", "g" ≠ "gram"), và đơn vị trần không khớp đơn vị dài hơn bắt đầu bằng nó ("thìa" ≠ "thìa canh", "muỗng" ≠ "muỗng cà phê"). Khác ngôn ngữ: hai bên quy về cùng một đơn vị chuẩn trong bảng (`lexicon.UNIT_TABLE`: phút = minute(s) = min, tsp = teaspoon = thìa/muỗng cà phê, tbsp = tablespoon = thìa/muỗng canh, cup = chén = cốc, °C ≠ °F, oz, lb…); đơn vị ngoài bảng ở một bên thì `unverified`. Cách viết mất dấu ("phut", "lit", "do") chỉ được đọc là đơn vị trên chữ OCR (X2, X2a, quyết định 50, 54). Đơn vị dính số (`4tsp`, `200g`, `5phút`) được tách khi là đơn vị trong bảng, không đổi giá trị số; `x2`, `2x`, `1h30`, `-18°C` giữ nguyên (X2, quyết định 50).
+   - `Material`/`Parameter` có phủ định trong nguyên văn (`quote`/`on_screen_text`), trong mệnh đề lời nói quanh đoạn khớp (tới dấu `. ! ? ;` hoặc 6 từ mỗi bên, cái nào gần hơn), hoặc trong các hàng OCR của đoạn khớp cùng hàng ngay trên và ngay dưới ("đừng cho 2 chén đường", "không nên cho 2 chén đường", "don't ever add 2 cups", "Do NOT add Salt 5g", "Do not add" / "Sugar 200g") thì `unverified` "nguyên văn có phủ định". "không phẩy năm" của một định lượng vẫn là số 0,5 (X5, X5a, quyết định 55, 57).
+   - Bằng chứng tên (I2 cùng ngôn ngữ, tên đúng từng từ, từ điển nguyên liệu) chỉ tính khi tên nằm ngay cạnh số của giá trị: giữa chúng chỉ có đơn vị (của bảng hoặc của chính mục: "quả", "giọt"), "of"/"của", mạo từ, ngoặc/nháy, `:` `-`, từ chỉ nơi/khoảng ("ở", "at", "khoảng", "about") hoặc "từ"/"from" trước một khoảng, tối đa 3 token; liên từ ("and", "và", "plus", "then", "rồi", "hoặc", "với"...), dấu `, ; + &`, xuống hàng, số khác hay từ khác đều chặn. Ngoại lệ bố cục chú thích: số đứng một mình trên hàng OCR (kèm đơn vị) thuộc về hàng nhãn ngay trên nó nếu hàng đó không có số ("Milk" / "4tsp"). Tên không có từ nào ngoài số và đơn vị thì dò như cũ trên cả nguyên văn (X6, quyết định 56).
+   - Tên không được chứng minh nếu phía bên kia của số, trong cùng hàng OCR hoặc mệnh đề (tới dấu kết câu hoặc số kế tiếp), có tên cạnh tranh: một nguyên liệu trong từ điển (cả hai ngôn ngữ) hoặc tên một `Material` khác của draft ("add salt 200 grams of sugar" không chứng minh "Muối"); khi tên nối với số qua một ký hiệu (`-`, `:`, ngoặc, "…"), từ đầu tiên phía bên kia cũng không được là một từ khác ngoài động từ bếp/mạo từ ("Hấp 180°C - Nướng"). Từ chỉ nơi/khoảng chỉ được đứng giữa số và tên, không được tính là từ "trơn" cạnh từ điển. Hàng nhãn chỉ nối lên khi không nằm trong một chồng nhãn, và hàng ngay trên/dưới cũng được xem khi xét từ bổ nghĩa ("Coconut" / "Milk 200ml"). Dấu "…", "...", chữ cái viết tắt ("A.") và viết tắt thông dụng (approx., e.g., i.e., Mr., Mrs., Dr., vs., etc.) không kết thúc mệnh đề; phạm vi phủ định OCR là hai hàng trên và một hàng dưới; "không" ngay trước chữ số là phủ định với định lượng (X7, quyết định 58).
+   - Giá trị là một khoảng hai số (`7-10`, `7 đến 10`): nguyên văn và đoạn khớp đọc `A-B`, `A – B`, `A to B`, `A đến/tới B`, `từ A đến B` (cả số đọc bằng chữ) thành `A-B`, nên khớp khi cùng hai đầu mút. Một đầu mút so với khoảng, khoảng khác đầu mút, số có dấu/dính chữ (`-7 to 10`), chuỗi (`7 to 10 to 12`), `A or B`, `between A and B` vẫn `unverified` (X3, quyết định 51).
 3. Mục `observed` chỉ có hành động: `not_checkable`, `method = none`.
 
 ### 3.4. Lỗi
@@ -146,7 +156,7 @@ Hai tầng, đều là thuật toán, không gọi LLM.
 
 - Đổi "video hướng dẫn phần mềm" thành "video hướng dẫn thực hành (how-to)". Giữ quy tắc chống bịa, `MM:SS`, scope theo đoạn, ngữ cảnh đoạn trước không đáng tin.
 - Khối gợi ý theo lĩnh vực, chỉ nói cần để ý gì, không cho phép suy đoán: nấu ăn (khẩu phần, mức lửa, thời gian, dấu hiệu chín), sửa chữa (tên và kích cỡ linh kiện, lực siết, ngắt điện), thể thao (hiệp, lần, nghỉ, tư thế), làm đẹp (lượng sản phẩm), phần mềm (lệnh chính xác, phiên bản).
-- Quy tắc nguyên văn của mục 2.3.
+- Quy tắc nguyên văn của mục 2.3. Với materials và parameters, định lượng hiện thành chữ trên màn hình thì dùng `observed` và chép `on_screen_text` nguyên văn, kể cả khi người nói cũng đọc; chỉ dùng `stated` khi định lượng được nói mà không hiện (X4, quyết định 52).
 - Che dữ liệu nhạy cảm mở rộng: secret, mật khẩu, địa chỉ, số điện thoại, giấy tờ tùy thân.
 - Từ đoạn 2, `domain` của đoạn 1 được truyền trong metadata làm ngữ cảnh.
 
@@ -181,15 +191,19 @@ Huy hiệu kiểm chứng bằng chữ (font DejaVu hỗ trợ ✓):
 | --- | --- |
 | `verified` ASR | ✓ khớp lời nói [mốc] |
 | `verified` OCR | ✓ khớp chữ trên màn hình [mốc] |
+| `quote_matched` ASR | ≈ khớp nguyên văn lời nói [mốc]: “<matched_text>” (en: ≈ quote matches speech [t]: “…”) |
+| `quote_matched` OCR | ≈ khớp nguyên văn chữ trên màn hình [mốc]: “<matched_text>” (en: ≈ quote matches on-screen text [t]: “…”) |
 | `unverified`, `not_checked` | ? chưa kiểm chứng |
 | `not_checkable` | không có văn bản để đối chiếu |
 
-Mục `unverified`/`not_checked` vẫn nằm đúng chỗ trong bước và được liệt kê thêm ở "Điểm chưa rõ". Mục `inferred`/`unclear` chỉ ở "Điểm chưa rõ".
+`matched_text` trong huy hiệu `quote_matched` được escape Markdown, cắt còn 80 ký tự kèm "…".
+
+Mục `unverified`/`not_checked` vẫn nằm đúng chỗ trong bước và được liệt kê thêm ở "Điểm chưa rõ". Mục `quote_matched` cũng vậy, dòng "<nhãn mục>, câu diễn giải chưa kiểm chứng: <text>" (en "<label>, paraphrase not verified: …"). Mục `inferred`/`unclear` chỉ ở "Điểm chưa rõ".
 
 ### 4.4. Giao diện
 
 - Câu chữ upload: "Video hướng dẫn: nấu ăn, sửa chữa, phần mềm…". Bỏ "command" trong lời nhắc kiểm tra.
-- Màn hình kết quả: nhãn lĩnh vực, tóm tắt "N/M mục đã kiểm chứng", bộ lọc "chỉ hiện mục chưa kiểm chứng", huy hiệu trong danh sách bước.
+- Màn hình kết quả: nhãn lĩnh vực, tóm tắt "N/M mục đã kiểm chứng" (N không gồm `quote_matched`, được đếm riêng), bộ lọc "chỉ hiện mục chưa kiểm chứng", huy hiệu trong danh sách bước; `quote_matched` tính là chưa kiểm chứng ở huy hiệu bước và bộ lọc.
 - Màn hình `not_tutorial` như mục 4.2.
 - Kiểu TypeScript sinh lại từ Pydantic (`scripts/generate_schema.py`, `npm --prefix frontend run types`).
 

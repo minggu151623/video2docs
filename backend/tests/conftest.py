@@ -35,6 +35,40 @@ def clip(tmp_path_factory):
     return path
 
 
+@pytest.fixture(scope="session")
+def voiced_clip(tmp_path_factory):
+    """Same picture as `clip` plus a tone track, so the asset has audio for the ASR step."""
+    path = tmp_path_factory.mktemp("media") / "voiced.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc2=size=640x360:rate=10:duration=4",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=16000:duration=4",
+            "-c:v",
+            "libx264",
+            "-threads",
+            "2",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-shortest",
+            str(path),
+        ],
+        check=True,
+    )
+    return path
+
+
 @pytest.fixture
 def env(tmp_path):
     cfg = Settings(
@@ -43,6 +77,8 @@ def env(tmp_path):
         ai_provider="mock",
         chunk_seconds=3,
         chunk_overlap_seconds=1,
+        asr_engine="none",
+        ocr_engine="none",
     )
     app = create_app(cfg)
     with TestClient(app) as client:
@@ -71,7 +107,7 @@ def create_uploaded(env, clip):
     return project, detail
 
 
-def enqueue_analysis(env, project, asset, key="test-key"):
+def enqueue_analysis(env, project, asset, key="test-key", **extra):
     client, _, _ = env
     consent = client.post(
         f"/api/v1/projects/{project['id']}/consents",
@@ -83,6 +119,7 @@ def enqueue_analysis(env, project, asset, key="test-key"):
         "allow_unknown_cost": True,
         "output_language": "vi",
         "budget_usd": 1,
+        **extra,
     }
     response = client.post(
         f"/api/v1/projects/{project['id']}/jobs", json=body, headers={"Idempotency-Key": key}

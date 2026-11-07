@@ -1,0 +1,652 @@
+{
+  "date": "2026-11-07",
+  "model": "gemini-3.1-flash-lite",
+  "output_language": "vi",
+  "chunk_seconds": 120,
+  "head": "b06662a",
+  "annotator": "Claude (also ran and scored the evaluation; not independent)",
+  "annotations_hashed_before_output": true,
+  "provider_calls": 30,
+  "input_tokens": 322010,
+  "billable_output_tokens": 60976,
+  "videos": [
+    {
+      "id": "01-software-ubuntu-gui",
+      "commons_file": "File:How to Install a Graphical Interface on Ubuntu Server 20.04 LTS.webm",
+      "commons_url": "https://commons.wikimedia.org/wiki/File:How_to_Install_a_Graphical_Interface_on_Ubuntu_Server_20.04_LTS.webm",
+      "author": "The Linux Guy",
+      "license": "CC BY 3.0",
+      "sha256": "e7f778b36cd8b84432e644ad106e61b60047158446ca869950f95b0b0f955d81",
+      "duration_sec": 409.6,
+      "annotation_asr_language": "en",
+      "job_state": "needs_review",
+      "retries": 1,
+      "verification_status": {
+        "unverified": 9,
+        "quote_matched": 4,
+        "not_checkable": 2,
+        "verified": 4
+      },
+      "asr_status": "ok",
+      "ocr_status": "ok",
+      "steps": 12,
+      "evaluate_py": {
+        "verified_precision": 0.5,
+        "wrong_verified_quantities": 0,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {
+          "count": 2,
+          "paths": [
+            "steps/9/exact_inputs/0",
+            "steps/10/exact_inputs/0"
+          ]
+        },
+        "verified_false_negative_rate": null,
+        "step_coverage": 0.7777777777777778,
+        "not_tutorial_correct": true,
+        "quote_matched": {
+          "count": 4,
+          "paths": [
+            "prerequisites/1",
+            "prerequisites/2",
+            "steps/2/tips/0",
+            "steps/5/tips/0"
+          ]
+        },
+        "counts": {
+          "verified_items": 4,
+          "verified_correct": 2,
+          "annotated_quantities": 1,
+          "annotated_quantities_in_draft": 0,
+          "annotated_steps": 9,
+          "annotated_steps_matched": 7,
+          "annotated_steps_matched_by_time_only": 1
+        },
+        "steps_matched_by_time_only": [
+          {
+            "annotation": "Chọn Numix trong Appearance",
+            "draft": "Tùy chỉnh chủ đề giao diện (Appearance)"
+          }
+        ]
+      }
+    },
+    {
+      "id": "02-software-x2go",
+      "commons_file": "File:Remote Control your Linux Server How to install and use X2Go.webm",
+      "commons_url": "https://commons.wikimedia.org/wiki/File:Remote_Control_your_Linux_Server_How_to_install_and_use_X2Go.webm",
+      "author": "The Linux Guy",
+      "license": "CC BY 3.0",
+      "sha256": "9371c4f1548dd606d8f89be0fd76214500fa2393f4282e41cf7f3732c94d98f8",
+      "duration_sec": 501.9,
+      "annotation_asr_language": "en",
+      "job_state": "needs_review",
+      "retries": 0,
+      "verification_status": {
+        "unverified": 8,
+        "verified": 3,
+        "quote_matched": 1
+      },
+      "asr_status": "ok",
+      "ocr_status": "ok",
+      "steps": 7,
+      "evaluate_py": {
+        "verified_precision": 0.3333333333333333,
+        "wrong_verified_quantities": 0,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {
+          "count": 2,
+          "paths": [
+            "steps/1/exact_inputs/0",
+            "steps/3/exact_inputs/0"
+          ]
+        },
+        "verified_false_negative_rate": null,
+        "step_coverage": 0.6,
+        "not_tutorial_correct": true,
+        "quote_matched": {
+          "count": 1,
+          "paths": [
+            "steps/5/tips/0"
+          ]
+        },
+        "counts": {
+          "verified_items": 3,
+          "verified_correct": 1,
+          "annotated_quantities": 1,
+          "annotated_quantities_in_draft": 0,
+          "annotated_steps": 10,
+          "annotated_steps_matched": 6,
+          "annotated_steps_matched_by_time_only": 3
+        },
+        "steps_matched_by_time_only": [
+          {
+            "annotation": "Thêm repository ppa:x2go/stable",
+            "draft": "Thêm kho lưu trữ (PPA) X2Go vào hệ thống"
+          },
+          {
+            "annotation": "Tạo session mới: host, user, cổng 22, XFCE",
+            "draft": "Tạo phiên làm việc mới trên X2Go Client"
+          },
+          {
+            "annotation": "Kết nối tới server",
+            "draft": "Kết nối phiên làm việc"
+          }
+        ]
+      }
+    },
+    {
+      "id": "03-software-usb",
+      "commons_file": "File:Create an Ubuntu 20.04 Bootable USB Drive Tutorial.webm",
+      "commons_url": "https://commons.wikimedia.org/wiki/File:Create_an_Ubuntu_20.04_Bootable_USB_Drive_Tutorial.webm",
+      "author": "HelpCloud",
+      "license": "CC BY 3.0",
+      "sha256": "f5b127a37f399fd1ed46683d881cd354e29dafab27c3f4ef72d1d8ba5a2054fe",
+      "duration_sec": 338.8,
+      "annotation_asr_language": "en",
+      "job_state": "needs_review",
+      "retries": 0,
+      "verification_status": {
+        "unverified": 6,
+        "quote_matched": 3
+      },
+      "asr_status": "ok",
+      "ocr_status": "ok",
+      "steps": 9,
+      "evaluate_py": {
+        "verified_precision": null,
+        "wrong_verified_quantities": 0,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {
+          "count": 0,
+          "paths": []
+        },
+        "verified_false_negative_rate": null,
+        "step_coverage": 0.7,
+        "not_tutorial_correct": true,
+        "quote_matched": {
+          "count": 3,
+          "paths": [
+            "prerequisites/1",
+            "prerequisites/2",
+            "safety/0"
+          ]
+        },
+        "counts": {
+          "verified_items": 0,
+          "verified_correct": 0,
+          "annotated_quantities": 1,
+          "annotated_quantities_in_draft": 0,
+          "annotated_steps": 10,
+          "annotated_steps_matched": 7,
+          "annotated_steps_matched_by_time_only": 4
+        },
+        "steps_matched_by_time_only": [
+          {
+            "annotation": "Tải file ISO Ubuntu Desktop từ ubuntu.com/download",
+            "draft": "Truy cập trang tải Ubuntu"
+          },
+          {
+            "annotation": "Đồng ý tải thêm file (Syslinux)",
+            "draft": "Bắt đầu quy trình ghi và xác nhận cảnh báo"
+          },
+          {
+            "annotation": "Chọn ghi ở chế độ ISO được khuyến nghị",
+            "draft": "Xác nhận các thông báo cảnh báo"
+          },
+          {
+            "annotation": "Chờ xong và bấm Close",
+            "draft": "Hoàn tất quá trình tạo USB"
+          }
+        ]
+      }
+    },
+    {
+      "id": "04-cooking-shio-koji",
+      "commons_file": "File:Making Shio Koji Michael Vera 2021.webm",
+      "commons_url": "https://commons.wikimedia.org/wiki/File:Making_Shio_Koji_Michael_Vera_2021.webm",
+      "author": "Chef's Roll",
+      "license": "CC BY 3.0",
+      "sha256": "71f4bad847f8f9007eb47dc940d92c24d9a7d41179533b6975ecfb87921b846e",
+      "duration_sec": 222.0,
+      "annotation_asr_language": "en",
+      "job_state": "needs_review",
+      "retries": 0,
+      "verification_status": {
+        "quote_matched": 6,
+        "verified": 1,
+        "unverified": 4,
+        "not_checkable": 2
+      },
+      "asr_status": "ok",
+      "ocr_status": "ok",
+      "steps": 7,
+      "evaluate_py": {
+        "verified_precision": 1.0,
+        "wrong_verified_quantities": 0,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {
+          "count": 0,
+          "paths": []
+        },
+        "verified_false_negative_rate": 1.0,
+        "step_coverage": 0.7142857142857143,
+        "not_tutorial_correct": true,
+        "quote_matched": {
+          "count": 6,
+          "paths": [
+            "prerequisites/0",
+            "safety/0",
+            "materials/2",
+            "steps/1/tips/0",
+            "steps/2/parameters/0",
+            "steps/3/parameters/0"
+          ]
+        },
+        "counts": {
+          "verified_items": 1,
+          "verified_correct": 1,
+          "annotated_quantities": 4,
+          "annotated_quantities_in_draft": 3,
+          "annotated_steps": 7,
+          "annotated_steps_matched": 5,
+          "annotated_steps_matched_by_time_only": 4
+        },
+        "steps_matched_by_time_only": [
+          {
+            "annotation": "Cân koji và trộn nước tinh khiết lượng bằng nhau",
+            "draft": "Trộn hỗn hợp Shio Koji"
+          },
+          {
+            "annotation": "Tính lượng muối 3-10%",
+            "draft": "Lên men hoặc xay Shio Koji"
+          },
+          {
+            "annotation": "Ủ lên men 5-14 ngày",
+            "draft": "Lên men Shio Koji"
+          },
+          {
+            "annotation": "Nấu nhỏ lửa",
+            "draft": "Áp chảo cá"
+          }
+        ]
+      }
+    },
+    {
+      "id": "05-cooking-steamed-fish",
+      "commons_file": "File:How To Make Steamed Fish With Fermented Soy Beans Lace Zhang.webm",
+      "commons_url": "https://commons.wikimedia.org/wiki/File:How_To_Make_Steamed_Fish_With_Fermented_Soy_Beans_Lace_Zhang.webm",
+      "author": "SETHLUI.com",
+      "license": "CC BY 3.0",
+      "sha256": "abc5212640caaacd8de325cbd9ece3fafa1bbc02055bac9ba76b27630cec54c7",
+      "duration_sec": 297.0,
+      "annotation_asr_language": "ms",
+      "job_state": "needs_review",
+      "retries": 0,
+      "verification_status": {
+        "unverified": 15,
+        "not_checkable": 2
+      },
+      "asr_status": "ok",
+      "ocr_status": "skipped",
+      "steps": 8,
+      "evaluate_py": {
+        "verified_precision": null,
+        "wrong_verified_quantities": 0,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {
+          "count": 0,
+          "paths": []
+        },
+        "verified_false_negative_rate": null,
+        "step_coverage": 0.7777777777777778,
+        "not_tutorial_correct": true,
+        "quote_matched": {
+          "count": 0,
+          "paths": []
+        },
+        "counts": {
+          "verified_items": 0,
+          "verified_correct": 0,
+          "annotated_quantities": 3,
+          "annotated_quantities_in_draft": 0,
+          "annotated_steps": 9,
+          "annotated_steps_matched": 7,
+          "annotated_steps_matched_by_time_only": 3
+        },
+        "steps_matched_by_time_only": [
+          {
+            "annotation": "Khứa mỗi bên cá 2-3 đường",
+            "draft": "Khía cá"
+          },
+          {
+            "annotation": "Phi thơm hỗn hợp với dầu mè lửa nhỏ",
+            "draft": "Chuẩn bị gia vị thơm"
+          },
+          {
+            "annotation": "Cho tương đậu nành (taucheo) vào xào",
+            "draft": "Làm nước sốt tương đậu"
+          }
+        ]
+      }
+    },
+    {
+      "id": "06-cooking-beef-stew",
+      "commons_file": "File:Easy beef stew recipe - A Delicious Twist on a Classic Stew- Chinese Irish Beef Stew.webm",
+      "commons_url": "https://commons.wikimedia.org/wiki/File:Easy_beef_stew_recipe_-_A_Delicious_Twist_on_a_Classic_Stew-_Chinese_Irish_Beef_Stew.webm",
+      "author": "Shokuiku Cuisine",
+      "license": "CC BY 3.0",
+      "sha256": "5ddef76a7881f93ec140f0df88c39d3b7d18f129ed0f373b7d5e0b63a631e3f2",
+      "duration_sec": 244.0,
+      "annotation_asr_language": "en",
+      "job_state": "needs_review",
+      "retries": 0,
+      "verification_status": {
+        "not_checkable": 5,
+        "unverified": 2,
+        "verified": 12,
+        "quote_matched": 7
+      },
+      "asr_status": "ok",
+      "ocr_status": "ok",
+      "steps": 8,
+      "evaluate_py": {
+        "verified_precision": 0.16666666666666666,
+        "wrong_verified_quantities": 0,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {
+          "count": 10,
+          "paths": [
+            "materials/10",
+            "materials/11",
+            "materials/12",
+            "materials/13",
+            "materials/14",
+            "materials/15",
+            "steps/5/parameters/0",
+            "steps/5/parameters/1",
+            "steps/5/parameters/2",
+            "steps/6/parameters/0"
+          ]
+        },
+        "verified_false_negative_rate": 0.7777777777777778,
+        "step_coverage": 0.8,
+        "not_tutorial_correct": true,
+        "quote_matched": {
+          "count": 7,
+          "paths": [
+            "materials/2",
+            "materials/3",
+            "materials/4",
+            "materials/5",
+            "materials/6",
+            "materials/7",
+            "steps/6/parameters/1"
+          ]
+        },
+        "counts": {
+          "verified_items": 12,
+          "verified_correct": 2,
+          "annotated_quantities": 14,
+          "annotated_quantities_in_draft": 9,
+          "annotated_steps": 10,
+          "annotated_steps_matched": 8,
+          "annotated_steps_matched_by_time_only": 3
+        },
+        "steps_matched_by_time_only": [
+          {
+            "annotation": "Cho rượu vang đỏ vào chảo",
+            "draft": "Pha chế sốt trong chảo"
+          },
+          {
+            "annotation": "Thêm nước và hầm khoảng 1 giờ",
+            "draft": "Ninh hỗn hợp"
+          },
+          {
+            "annotation": "Dọn với cơm gạo lứt",
+            "draft": "Trình bày món ăn"
+          }
+        ]
+      }
+    },
+    {
+      "id": "07-cooking-hoshigaki",
+      "commons_file": "File:How to Make Hoshigaki Dried Persimmons Keith Lord.webm",
+      "commons_url": "https://commons.wikimedia.org/wiki/File:How_to_Make_Hoshigaki_Dried_Persimmons_Keith_Lord.webm",
+      "author": "Chef's Roll",
+      "license": "CC BY 3.0",
+      "sha256": "b7efe9902007da02bbef7a44389f44c100afdbc241b11a053e0930e7e8caf81a",
+      "duration_sec": 151.2,
+      "annotation_asr_language": "en",
+      "job_state": "needs_review",
+      "retries": 0,
+      "verification_status": {
+        "unverified": 3,
+        "not_checkable": 3,
+        "quote_matched": 2
+      },
+      "asr_status": "ok",
+      "ocr_status": "skipped",
+      "steps": 5,
+      "evaluate_py": {
+        "verified_precision": null,
+        "wrong_verified_quantities": 0,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {
+          "count": 0,
+          "paths": []
+        },
+        "verified_false_negative_rate": null,
+        "step_coverage": 0.5555555555555556,
+        "not_tutorial_correct": true,
+        "quote_matched": {
+          "count": 2,
+          "paths": [
+            "steps/3/parameters/0",
+            "steps/4/tips/0"
+          ]
+        },
+        "counts": {
+          "verified_items": 0,
+          "verified_correct": 0,
+          "annotated_quantities": 3,
+          "annotated_quantities_in_draft": 0,
+          "annotated_steps": 9,
+          "annotated_steps_matched": 5,
+          "annotated_steps_matched_by_time_only": 4
+        },
+        "steps_matched_by_time_only": [
+          {
+            "annotation": "Buộc dây vào cuống (hoặc vít móc nếu không có cuống)",
+            "draft": "Buộc dây và treo quả hồng"
+          },
+          {
+            "annotation": "Để yên 1 ngày",
+            "draft": "Mát-xa quả hồng"
+          },
+          {
+            "annotation": "Sau 30 ngày, lớp đường nổi trắng là xong",
+            "draft": "Kiểm tra hồng treo gió đã đạt"
+          },
+          {
+            "annotation": "Thái lát mỏng để dùng",
+            "draft": "Thái hồng treo gió"
+          }
+        ]
+      }
+    },
+    {
+      "id": "08-sports-tbar-row",
+      "commons_file": "File:How to properly do Machine T-Bar Rows.webm",
+      "commons_url": "https://commons.wikimedia.org/wiki/File:How_to_properly_do_Machine_T-Bar_Rows.webm",
+      "author": "Colossus Fitness",
+      "license": "CC BY 3.0",
+      "sha256": "3fba62e48da81f8ecbb881191756f7f12700980300bb1591e5f4b90fa468be4c",
+      "duration_sec": 143.7,
+      "annotation_asr_language": "en",
+      "job_state": "needs_review",
+      "retries": 0,
+      "verification_status": {
+        "not_checkable": 1,
+        "unverified": 3,
+        "quote_matched": 3
+      },
+      "asr_status": "ok",
+      "ocr_status": "ok",
+      "steps": 3,
+      "evaluate_py": {
+        "verified_precision": null,
+        "wrong_verified_quantities": 0,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {
+          "count": 0,
+          "paths": []
+        },
+        "verified_false_negative_rate": null,
+        "step_coverage": 0.5,
+        "not_tutorial_correct": true,
+        "quote_matched": {
+          "count": 3,
+          "paths": [
+            "steps/0/tips/0",
+            "steps/1/tips/0",
+            "steps/2/tips/0"
+          ]
+        },
+        "counts": {
+          "verified_items": 0,
+          "verified_correct": 0,
+          "annotated_quantities": 0,
+          "annotated_quantities_in_draft": 0,
+          "annotated_steps": 6,
+          "annotated_steps_matched": 3,
+          "annotated_steps_matched_by_time_only": 3
+        },
+        "steps_matched_by_time_only": [
+          {
+            "annotation": "Chỉnh máy để giữa ngực tựa ra ngoài mép đệm",
+            "draft": "Thiết lập vị trí cơ thể trên máy"
+          },
+          {
+            "annotation": "Chọn kiểu nắm tay cầm",
+            "draft": "Chọn vị trí đặt tay"
+          },
+          {
+            "annotation": "Nâng ngực một chút để nhấc tạ ra",
+            "draft": "Thực hiện động tác kéo"
+          }
+        ]
+      }
+    },
+    {
+      "id": "09-craft-hijab",
+      "commons_file": "File:DIY! Cutting and stitching of triangular-V hijab(Easy tutorial).webm",
+      "commons_url": "https://commons.wikimedia.org/wiki/File:DIY!_Cutting_and_stitching_of_triangular-V_hijab(Easy_tutorial).webm",
+      "author": "Modest Baliqees",
+      "license": "CC BY 3.0",
+      "sha256": "d524231ca5f34dc0ea6e79db8acb26e29aae5ca387713ffd35f9ac923384de92",
+      "duration_sec": 314.3,
+      "annotation_asr_language": "yo",
+      "job_state": "needs_review",
+      "retries": 0,
+      "verification_status": {
+        "unverified": 7,
+        "not_checkable": 3
+      },
+      "asr_status": "ok",
+      "ocr_status": "skipped",
+      "steps": 9,
+      "evaluate_py": {
+        "verified_precision": null,
+        "wrong_verified_quantities": 0,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {
+          "count": 0,
+          "paths": []
+        },
+        "verified_false_negative_rate": 1.0,
+        "step_coverage": 0.875,
+        "not_tutorial_correct": true,
+        "quote_matched": {
+          "count": 0,
+          "paths": []
+        },
+        "counts": {
+          "verified_items": 0,
+          "verified_correct": 0,
+          "annotated_quantities": 6,
+          "annotated_quantities_in_draft": 1,
+          "annotated_steps": 8,
+          "annotated_steps_matched": 7,
+          "annotated_steps_matched_by_time_only": 3
+        },
+        "steps_matched_by_time_only": [
+          {
+            "annotation": "Trừ nửa vòng đầu (10 inch), kéo thước chéo 17 inch",
+            "draft": "Đo và đánh dấu phần vòng đầu"
+          },
+          {
+            "annotation": "Nối mép sau với mép trước thành hình tam giác",
+            "draft": "Gập và định hình khăn"
+          },
+          {
+            "annotation": "May phần phía trước",
+            "draft": "May cố định mũ vào khăn"
+          }
+        ]
+      }
+    },
+    {
+      "id": "10-software-vi-mobileundo",
+      "commons_file": "File:HuongdancaimobileUndo.webm",
+      "commons_url": "https://commons.wikimedia.org/wiki/File:HuongdancaimobileUndo.webm",
+      "author": "JohnsonLee01",
+      "license": "CC BY-SA 4.0",
+      "sha256": "9c3bf32c31ca2bb0618441df1dac0aabab93a39ccab7f9e5844d62fd0592ed9a",
+      "duration_sec": 147.8,
+      "annotation_asr_language": null,
+      "job_state": "needs_review",
+      "retries": 0,
+      "verification_status": {
+        "unverified": 7
+      },
+      "asr_status": "skipped",
+      "ocr_status": "ok",
+      "steps": 5,
+      "evaluate_py": {
+        "verified_precision": null,
+        "wrong_verified_quantities": 0,
+        "wrong_verified_exact_inputs": 0,
+        "verified_unmatched": {
+          "count": 0,
+          "paths": []
+        },
+        "verified_false_negative_rate": null,
+        "step_coverage": 0.5714285714285714,
+        "not_tutorial_correct": true,
+        "quote_matched": {
+          "count": 0,
+          "paths": []
+        },
+        "counts": {
+          "verified_items": 0,
+          "verified_correct": 0,
+          "annotated_quantities": 0,
+          "annotated_quantities_in_draft": 0,
+          "annotated_steps": 7,
+          "annotated_steps_matched": 4,
+          "annotated_steps_matched_by_time_only": 2
+        },
+        "steps_matched_by_time_only": [
+          {
+            "annotation": "Mở trang Thành viên:<tên>/minerva.js",
+            "draft": "Dán đoạn mã vào trang JS cá nhân"
+          },
+          {
+            "annotation": "Mở một sửa đổi và chọn lùi sửa",
+            "draft": "Sử dụng mobileUndo để lùi sửa đổi"
+          }
+        ]
+      }
+    }
+  ]
+}

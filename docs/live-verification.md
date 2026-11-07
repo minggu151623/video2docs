@@ -1,6 +1,82 @@
 # Kiểm tra Gemini thật với video người dùng
 
-Khởi tạo: 20/10/2026; cập nhật: 21/10/2026, Asia/Ho_Chi_Minh. Đây là báo cáo live, tách khỏi các test mock trước đó.
+Khởi tạo: 20/10/2026; cập nhật: 28/10/2026, Asia/Ho_Chi_Minh. Đây là báo cáo live, tách khỏi các test mock trước đó.
+
+## Video nấu ăn ngày 26/10/2026
+
+Người dùng đồng ý phí. Video do người dùng cung cấp: làm bánh pancake souffle từ 2 trứng, 5 phút 26, 1280×720, lời thuyết minh tiếng Anh, chữ chèn định lượng bằng tiếng Anh; video không đưa vào repo. Nhánh tại `9002802`, `gemini-3.1-flash-lite`, đoạn 120 giây, tài liệu tiếng Việt. Đáp án chuẩn được ghi **trước** khi xem output, từ crop vùng chữ chèn mỗi giây và ảnh mỗi 4 giây (chỉ lưu local vì video chưa rõ quyền). [Tóm tắt số liệu](verification/live-cooking.json), không kèm lời thoại.
+
+**Pipeline.** 3 request analyze, không repair, 12 bước, 12 ảnh, MD/ZIP; PDF lần đầu lỗi `PDF_DEPENDENCY` vì cache Chromium của Playwright đã bị xóa khỏi máy, xuất lại 15 trang sau `uv run playwright install chromium`. Cleanup pending 0. Gemini xếp `cooking`, khẩu phần "2 trứng".
+
+| Giai đoạn | Thời gian |
+| --- | --- |
+| ASR (754 từ, `en`) | 56 s |
+| Chuẩn bị + upload 3 đoạn | 252 s (upload 212 s) |
+| Gemini 3 đoạn | 56 s |
+| Trích ảnh | 43 s |
+| Kiểm chứng | 9 s |
+| Tổng, video 5 phút 26 | 418 s |
+
+**Nội dung so với đáp án.** Gemini chép đúng 4/4 định lượng trên màn hình (2 trứng, sữa 4 tsp, vani 1/2 tsp, bột mì 3 tbsp), "đường" không ghi lượng, thời gian nấu 7–10 phút và 5 phút, mẹo để lòng trắng vào tủ đông 10–15 phút, các cảnh báo đều khớp lời nói. Ảnh đúng nội dung 12/12. Bước: 12 so với 14 của đáp án; Gemini gộp sữa/vani/bột vào một bước, đường gộp vào bước đánh bông, bỏ bước bày đĩa; bước "Đánh bông lòng trắng trứng" bị lặp ở ranh giới đoạn 1/2 (77–119 s và 115–133 s). `step_coverage` của script là 5/14 vì ghép tiêu đề chặt (±10 s, token_set ≥ 60).
+
+**Kiểm chứng: 28 mục, 1 ✓, 7 ≈, 15 ?, 5 không có văn bản.** ✓ duy nhất (vani 1/2 tsp, OCR 36 s) đúng; script báo `verified_precision` 0 chỉ vì đáp án ghi vani là nguyên liệu còn output ghi là thông số của bước. 0 định lượng sai mang ✓. Nhưng `verified_false_negative_rate` = 1,0: cả 4 định lượng đúng đều không được ✓. Nguyên nhân, theo lý do trong báo cáo:
+
+| Nguyên nhân | Mục bị ảnh hưởng |
+| --- | --- |
+| Luật tên mục (I2) luôn áp cho OCR: tên tiếng Việt ("Sữa", "Bột mì") không xuất hiện trong chữ tiếng Anh trên màn hình | sữa, bột mì, đường, 2 thông số |
+| Đơn vị đã dịch ("phút") không có trong câu trích tiếng Anh ("minutes"); luật đơn vị cho nguyên liệu/thông số không dùng bảng quy đổi | thời gian 5 phút |
+| Giá trị là một khoảng ("7-10") bị luật khoảng giá trị chặn dù câu trích nói đúng "7 to 10 minutes" | thời gian 7–10 phút |
+| Model ghi trứng là `stated` với câu trích không chứa số, dù có chữ "2 eggs" trên màn hình | trứng |
+| Mô tả tiếng Việt diễn giải câu tiếng Anh: được ≈ nếu qua mọi kiểm tra; bị ? khi số/phủ định giữa bản dịch và câu gốc lệch | 7 ≈, 6 ? |
+
+Kết luận cho video này: phần trích nội dung của Gemini tốt; phần kiểm chứng an toàn (không có ✓ sai) nhưng gần như không xác nhận được gì khi tài liệu khác ngôn ngữ video. Một video, chưa phải điểm rubric.
+
+## Schema v2 và kiểm chứng ASR/OCR ngày 24/10/2026
+
+Người dùng đồng ý phí. Nhánh `feat/general-tutorials` tại `72006e2`, model `gemini-3.1-flash-lite`, đoạn 120 giây.
+
+**Probe schema v2 (chỉ văn bản, 3 request).** Google chấp nhận schema provider v2 (~16 KB): 3/3 `completed`, 5–7 giây, không có HTTP 400. 2/3 qua validation Pydantic; 1 lần model ghi thông số "Mức lửa" là `observed` mà không chép `on_screen_text`, trái quy tắc prompt, trong app sẽ tốn lượt repair duy nhất của job. [Kết quả](verification/schema-v2-probe.json).
+
+**Toàn video Python Windows 11.** Project `3152f50e-cfe0-4fa6-8136-6d03b926107c`. Pipeline pass ngay lần đầu: 2 request analyze, không repair (13.057 + 11.582 token đầu vào), 11 bước, 11 ảnh, MD/ZIP/PDF 12 trang, cleanup pending 0, hash nguồn giữ nguyên. Gemini xếp đúng lĩnh vực `software`, `is_tutorial=true`. [Báo cáo](verification/live-v9-general.json).
+
+| Giai đoạn | Thời gian |
+| --- | --- |
+| Chép lời nói (ASR, gồm lần đầu tải whisper `small` 927 MB) | 48 s |
+| Phân tích 2 đoạn (chuẩn bị + upload + Gemini) | 80 s |
+| Trích ảnh | 16 s |
+| Kiểm chứng (OCR 4 mục + khớp) | 92 s |
+| Tổng job, video 3 phút 37 | 237 s |
+
+ASR nhận ngôn ngữ `en`, 431 từ, chép đúng lời người nói (kể cả "python space hyphen hyphen version").
+
+**Đối chiếu frame gốc.** Thứ tự 11 bước khớp video; Optional Features 59–78 s, Advanced Options 79–99 s, progress 99–120 s, hoàn tất 115–135 s. Ảnh đúng nội dung ở 10/11 bước: Advanced Options 93 s, progress 110 s, "Setup was successful" 134 s (lượt v8 chỉ có progress), `python --version` + `Python 3.13.0` 150 s, IDLE `print("Amit Diwan")` 179 s, Save As "Demo" 192 s. Ảnh bước "Tùy chỉnh tính năng" (63 s) là màn hình đầu đang bấm Customize, chưa phải Optional Features.
+
+**Kiểm chứng: 6 mục, 2 ✓, 4 ?.**
+
+| Mục | Trạng thái | Đối chiếu |
+| --- | --- | --- |
+| Lệnh `python` (tìm trên Google) | ✓ OCR 13,5 s | Đúng |
+| Ngữ cảnh đoạn "Đã hoàn tất cài đặt Python" | ✓ OCR 115 s | **Sai về nghĩa**: chữ trích "Setup Progress" có trên màn hình, nhưng lúc 115 s cài đặt còn đang chạy. ✓ chỉ chứng minh chữ trích tồn tại, không chứng minh câu diễn giải |
+| Lệnh `python --version` | ? | Có trên màn hình 150 s; hàng OCR là `C:\Users\hp>python --version`, dấu nhắc Windows chưa được bỏ |
+| Lệnh `print("Amit Diwan")` | ? | Có trên màn hình 179 s; hàng OCR có dấu nhắc IDLE `>>>` |
+| Thông số "Tên tệp: Demo" | ? | Đúng; bị luật tên mục phải có trong nguyên văn |
+| Chuẩn bị "Windows 11" | ? | Đúng; lý do "giá trị không có trong nguyên văn" |
+
+Trên video này: 1/2 ✓ sai nghĩa (mục tiêu spec ≥ 95% ✓ đúng) và 4 mục đúng bị "?". Video phần mềm có ít định lượng nên phần kiểm chứng định lượng chưa được thử; cần một video nấu ăn hoặc sửa chữa. Một video không phải điểm rubric.
+
+**Kiểm chứng lại sau khi sửa (24/10/2026, không gọi Gemini).** Sau commit `2c0f00c` (bỏ dấu nhắc `C:\...>`, `>>>`, `...`, `In [n]:` khi khớp lệnh OCR; mô tả chỉ được ✓ khi cùng ngôn ngữ và trùng từng từ với câu trích, ngược lại là `quote_matched` "≈ khớp nguyên văn … “đoạn đã khớp”"), chạy job `verify` trên cùng generation: 0 request provider, 77 giây (OCR), generation vẫn `needs_review`. [Kết quả](verification/live-v9-reverify.json).
+
+| Mục | Trước | Sau |
+| --- | --- | --- |
+| Lệnh `python` 13,5 s | ✓ | ✓ |
+| Lệnh `python --version` | ? | ✓ OCR 150 s |
+| Lệnh `print("Amit Diwan")` | ? | ✓ OCR 177 s |
+| "Đã hoàn tất cài đặt Python" (sai nghĩa) | ✓ | ≈ khớp nguyên văn “setup progress”, liệt kê ở "Điểm chưa rõ" |
+| "Tên tệp: Demo", "Windows 11" | ? | ? (luật tên mục; giá trị không có trong nguyên văn) |
+
+3/3 ✓ đúng trên video này; 2 mục đúng vẫn "?". Đây vẫn là một video phần mềm, chưa đo phần định lượng.
+
+**Kiểm chứng lại offline sau follow-up 2 (`docs/decisions.md` mục 47–48), không gọi Gemini.** Cùng draft, transcript ASR đã cache và PaddleOCR local trên các frame `ocr_seconds` của từng mục: `python --version` ✓ OCR 150 s, `print("Amit Diwan")` ✓ OCR 177 s; câu "Đã hoàn tất cài đặt Python" thành `quote_matched` (≈, chưa kiểm chứng câu diễn giải), không còn ✓. Lệnh `python` (13,5 s) lần này ra "?" cả với code trước thay đổi: OCR offline đọc hàng thành `α python` thay vì `python`, khác lượt live; không do thay đổi này.
 
 ## Cải tiến chất lượng ngày 21/10/2026
 
@@ -75,4 +151,4 @@ Chi phí tham chiếu Standard của riêng smoke pass là 0,0128565 USD cho hai
 
 ## Giới hạn đánh giá
 
-Chỉ một video người dùng được cung cấp. Chưa hoàn thành bộ 5 tutorial, chưa đo coverage/timestamp theo rubric đầy đủ, chưa thử thao tác cài đặt trong Windows. Không có command từ video được thực thi trên máy này.
+Các lượt live riêng lẻ hiện có video Python và video nấu ăn. Bộ đánh giá mới gồm 8 video nhiều lĩnh vực vẫn chưa hoàn thành; chưa đo đầy đủ coverage/timestamp trên bộ đó và chưa thử thao tác cài đặt trong Windows. Không có command từ video được thực thi trên máy này.

@@ -1,13 +1,67 @@
 {
   "$defs": {
-    "Command": {
+    "Equipment": {
       "additionalProperties": false,
       "properties": {
-        "language": {
-          "maxLength": 40,
+        "name": {
+          "maxLength": 100,
           "minLength": 1,
-          "title": "Language",
+          "title": "Name",
           "type": "string"
+        },
+        "spec": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Spec"
+        },
+        "evidence_spans": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "maxItems": 5,
+          "minItems": 1,
+          "title": "Evidence Spans",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "spec",
+        "evidence_spans"
+      ],
+      "title": "Equipment",
+      "type": "object"
+    },
+    "ExactInput": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "code",
+            "command",
+            "text"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Language"
         },
         "text": {
           "maxLength": 12000,
@@ -32,18 +86,56 @@
           "minItems": 1,
           "title": "Evidence Spans",
           "type": "array"
+        },
+        "basis": {
+          "enum": [
+            "observed",
+            "stated",
+            "inferred",
+            "unclear"
+          ],
+          "title": "Basis",
+          "type": "string"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Quote"
+        },
+        "on_screen_text": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "On Screen Text"
         }
       },
       "required": [
+        "kind",
         "language",
         "text",
         "completeness",
-        "evidence_spans"
+        "evidence_spans",
+        "basis",
+        "quote",
+        "on_screen_text"
       ],
-      "title": "Command",
+      "title": "ExactInput",
       "type": "object"
     },
-    "SourceClaim": {
+    "GroundedClaim": {
       "additionalProperties": false,
       "properties": {
         "text": {
@@ -80,13 +172,224 @@
           ],
           "title": "Scope",
           "type": "string"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        },
+        "on_screen_text": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "On Screen Text"
         }
       },
       "required": [
         "text",
         "evidence_spans"
       ],
-      "title": "SourceClaim",
+      "title": "GroundedClaim",
+      "type": "object"
+    },
+    "Material": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "quantity": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Quantity"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Unit"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Note"
+        },
+        "evidence_spans": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "maxItems": 5,
+          "minItems": 1,
+          "title": "Evidence Spans",
+          "type": "array"
+        },
+        "basis": {
+          "enum": [
+            "observed",
+            "stated",
+            "inferred",
+            "unclear"
+          ],
+          "title": "Basis",
+          "type": "string"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Quote"
+        },
+        "on_screen_text": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "On Screen Text"
+        }
+      },
+      "required": [
+        "name",
+        "quantity",
+        "unit",
+        "note",
+        "evidence_spans",
+        "basis",
+        "quote",
+        "on_screen_text"
+      ],
+      "title": "Material",
+      "type": "object"
+    },
+    "Parameter": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Unit"
+        },
+        "evidence_spans": {
+          "items": {
+            "$ref": "#/$defs/Span"
+          },
+          "maxItems": 5,
+          "minItems": 1,
+          "title": "Evidence Spans",
+          "type": "array"
+        },
+        "basis": {
+          "enum": [
+            "observed",
+            "stated",
+            "inferred",
+            "unclear"
+          ],
+          "title": "Basis",
+          "type": "string"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Quote"
+        },
+        "on_screen_text": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "On Screen Text"
+        }
+      },
+      "required": [
+        "name",
+        "value",
+        "unit",
+        "evidence_spans",
+        "basis",
+        "quote",
+        "on_screen_text"
+      ],
+      "title": "Parameter",
       "type": "object"
     },
     "Span": {
@@ -127,7 +430,7 @@
       "title": "Span",
       "type": "object"
     },
-    "Step": {
+    "StepV2": {
       "additionalProperties": false,
       "properties": {
         "local_id": {
@@ -176,12 +479,36 @@
           ],
           "title": "Expected Result"
         },
-        "commands": {
+        "parameters": {
           "items": {
-            "$ref": "#/$defs/Command"
+            "$ref": "#/$defs/Parameter"
           },
           "maxItems": 10,
-          "title": "Commands",
+          "title": "Parameters",
+          "type": "array"
+        },
+        "exact_inputs": {
+          "items": {
+            "$ref": "#/$defs/ExactInput"
+          },
+          "maxItems": 10,
+          "title": "Exact Inputs",
+          "type": "array"
+        },
+        "warnings": {
+          "items": {
+            "$ref": "#/$defs/GroundedClaim"
+          },
+          "maxItems": 5,
+          "title": "Warnings",
+          "type": "array"
+        },
+        "tips": {
+          "items": {
+            "$ref": "#/$defs/GroundedClaim"
+          },
+          "maxItems": 5,
+          "title": "Tips",
           "type": "array"
         },
         "evidence_spans": {
@@ -227,52 +554,16 @@
         "end_sec",
         "actions",
         "expected_result",
-        "commands",
+        "parameters",
+        "exact_inputs",
+        "warnings",
+        "tips",
         "evidence_spans",
         "screenshot_candidates_sec",
         "needs_review",
         "review_reason"
       ],
-      "title": "Step",
-      "type": "object"
-    },
-    "ToolMention": {
-      "additionalProperties": false,
-      "properties": {
-        "name": {
-          "maxLength": 100,
-          "minLength": 1,
-          "title": "Name",
-          "type": "string"
-        },
-        "version": {
-          "anyOf": [
-            {
-              "maxLength": 100,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Version"
-        },
-        "evidence_spans": {
-          "items": {
-            "$ref": "#/$defs/Span"
-          },
-          "maxItems": 5,
-          "minItems": 1,
-          "title": "Evidence Spans",
-          "type": "array"
-        }
-      },
-      "required": [
-        "name",
-        "version",
-        "evidence_spans"
-      ],
-      "title": "ToolMention",
+      "title": "StepV2",
       "type": "object"
     },
     "Uncertainty": {
@@ -321,9 +612,52 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "const": "1.0",
+      "const": "2.0",
       "title": "Schema Version",
       "type": "string"
+    },
+    "is_tutorial": {
+      "title": "Is Tutorial",
+      "type": "boolean"
+    },
+    "not_tutorial_reason": {
+      "anyOf": [
+        {
+          "maxLength": 1000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Not Tutorial Reason"
+    },
+    "domain": {
+      "enum": [
+        "software",
+        "cooking",
+        "repair",
+        "craft",
+        "fitness",
+        "beauty",
+        "gardening",
+        "music",
+        "other"
+      ],
+      "title": "Domain",
+      "type": "string"
+    },
+    "yield": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Yield"
     },
     "title": {
       "maxLength": 200,
@@ -355,23 +689,39 @@
     },
     "prerequisites": {
       "items": {
-        "$ref": "#/$defs/SourceClaim"
+        "$ref": "#/$defs/GroundedClaim"
       },
       "maxItems": 30,
       "title": "Prerequisites",
       "type": "array"
     },
-    "tools": {
+    "safety": {
       "items": {
-        "$ref": "#/$defs/ToolMention"
+        "$ref": "#/$defs/GroundedClaim"
       },
       "maxItems": 30,
-      "title": "Tools",
+      "title": "Safety",
+      "type": "array"
+    },
+    "materials": {
+      "items": {
+        "$ref": "#/$defs/Material"
+      },
+      "maxItems": 60,
+      "title": "Materials",
+      "type": "array"
+    },
+    "equipment": {
+      "items": {
+        "$ref": "#/$defs/Equipment"
+      },
+      "maxItems": 30,
+      "title": "Equipment",
       "type": "array"
     },
     "steps": {
       "items": {
-        "$ref": "#/$defs/Step"
+        "$ref": "#/$defs/StepV2"
       },
       "maxItems": 80,
       "title": "Steps",
@@ -379,7 +729,7 @@
     },
     "troubleshooting": {
       "items": {
-        "$ref": "#/$defs/SourceClaim"
+        "$ref": "#/$defs/GroundedClaim"
       },
       "maxItems": 30,
       "title": "Troubleshooting",
@@ -396,16 +746,22 @@
   },
   "required": [
     "schema_version",
+    "is_tutorial",
+    "not_tutorial_reason",
+    "domain",
+    "yield",
     "title",
     "summary",
     "language",
     "objectives",
     "prerequisites",
-    "tools",
+    "safety",
+    "materials",
+    "equipment",
     "steps",
     "troubleshooting",
     "uncertainties"
   ],
-  "title": "TutorialDraftV1",
+  "title": "TutorialDraftV2",
   "type": "object"
 }

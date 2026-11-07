@@ -4,15 +4,31 @@ version = "0.1.0"
 description = "Local video tutorial documentation workspace"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-  "fastapi>=0.115", "uvicorn>=0.30", "pydantic-settings>=2.6",
-  "sqlalchemy>=2.0", "alembic>=1.14", "python-multipart>=0.0.20",
-  "google-genai>=2.3.0", "markdown-it-py>=3", "bleach>=6.2",
-  "playwright>=1.50", "pypdf>=5", "httpx>=0.28"
+  "fastapi>=0.115",
+  "uvicorn>=0.30",
+  "pydantic-settings>=2.6",
+  "sqlalchemy>=2.0",
+  "alembic>=1.14",
+  "python-multipart>=0.0.20",
+  "google-genai>=2.3.0",
+  "markdown-it-py>=3",
+  "bleach>=6.2",
+  "playwright>=1.50",
+  "pypdf>=5",
+  "httpx>=0.28",
+  "rapidfuzz>=3.14.6",
+  "faster-whisper>=1.2.1",
+  "paddleocr==3.7.0",
+  "paddlepaddle==3.3.1",
+  # faster-whisper 1.2.1 allows any av>=11, but av 19 dropped open(metadata_errors=...) and breaks decode_audio
+  "av>=15,<17",
 ]
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.9"]
 [tool.pytest.ini_options]
 pythonpath = ["backend"]
 testpaths = ["backend/tests"]
+addopts = "-m \"not slow\""
+markers = ["slow: runs a real ASR/OCR engine and may download model weights"]
 [tool.ruff]
 line-length = 110

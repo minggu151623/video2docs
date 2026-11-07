@@ -4,8 +4,8 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root / "backend"))
-from app.schemas.tutorial import TutorialDraftV1
+from app.schemas.tutorial_v2 import TutorialDraftV2
 
 (root / "frontend/src/types/tutorial.schema.json").write_text(
-    json.dumps(TutorialDraftV1.model_json_schema(), indent=2)
+    json.dumps(TutorialDraftV2.model_json_schema(), indent=2)
 )

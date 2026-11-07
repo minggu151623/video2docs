@@ -6,6 +6,8 @@ Ngôn ngữ đặc tả: tiếng Việt
 Mục đích: tài liệu bàn giao cho Codex để triển khai MVP chạy local  
 Trạng thái: đặc tả triển khai; chưa phải ứng dụng đã xây dựng hoặc đã kiểm thử
 
+> **Cập nhật 22/10/2026.** Phạm vi đã mở rộng từ tutorial phần mềm sang mọi video how-to, dùng schema v2, chặn video không phải tutorial ở đoạn 1 và kiểm chứng độc lập bằng ASR/OCR chạy local. Phần thay đổi nằm trong `docs/superpowers/specs/2026-10-22-general-tutorials-design.md` (nguồn chuẩn cho các mục đó) và `docs/decisions.md`; các mục bên dưới chưa được viết lại và còn nhắc `TutorialDraftV1`, tutorial phần mềm và bộ 5 clip. Khi mâu thuẫn, ưu tiên spec thiết kế ngày 22/10/2026. Chưa chạy bộ đánh giá 8 video của spec đó.
+
 ## 1. Cơ sở quyết định và các giả định
 
 ### 1.1. Điều xác nhận được từ hội thoại
@@ -26,7 +28,7 @@ Các mục dưới đây là mặc định để triển khai, có thể sửa t
 
 | Hạng mục | Mặc định | Cách thay đổi |
 | --- | --- | --- |
-| Phạm vi video | Tutorial phần mềm: IDE, terminal, website, ứng dụng desktop | Sửa phạm vi và bộ video đánh giá |
+| Phạm vi video | Mọi video how-to có các bước làm theo (phần mềm, nấu ăn, sửa chữa, thủ công, thể thao, làm đẹp, …); video không phải tutorial bị báo rõ, không bịa bước. Trước 22/10/2026: chỉ tutorial phần mềm (IDE, terminal, website, ứng dụng desktop) | Sửa phạm vi và bộ video đánh giá |
 | Đầu vào | File video từ máy người dùng | Thêm connector URL trong giai đoạn sau |
 | AI provider | Gemini Developer API | Thay adapter provider |
 | Model | `gemini-3.8-flash`, kiểm tra quyền dùng khi cấu hình | `GEMINI_MODEL` |
@@ -106,7 +108,7 @@ Không buộc model điền cho đủ mọi phần. Dữ liệu không có phả
 ### Ngoài phạm vi MVP
 
 - Nhập YouTube/URL, tải video từ Internet, livestream.
-- OCR/Whisper riêng, huấn luyện hoặc chạy LLM local, vector database, RAG.
+- Huấn luyện hoặc chạy LLM local, vector database, RAG. Từ 22/10/2026, ASR (faster-whisper) và OCR (PaddleOCR) chạy local trên server được phép để đối chiếu trích dẫn của model; chúng không thay model sinh tài liệu, và bản ghi lời nói không được gửi cho Gemini.
 - Agent tự điều khiển máy tính, chạy lệnh trong tutorial hoặc duyệt web.
 - Cộng tác nhiều người, tài khoản SaaS, thanh toán, public deployment.
 - Tái dựng đầy đủ source code bị che/khuất hoặc chỉ hiện thoáng qua.

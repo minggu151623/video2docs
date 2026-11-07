@@ -1,0 +1,257 @@
+{
+  "video": "cooking (souffle pancakes, English narration, 326 s, 1280x720; not in repo)",
+  "branch_head": "9002802",
+  "model": "gemini-3.1-flash-lite",
+  "provider_calls": 3,
+  "repairs": 0,
+  "steps": 12,
+  "images": 12,
+  "pdf_pages": 15,
+  "pdf_note": "first export failed with PDF_DEPENDENCY because the Playwright Chromium cache had been removed from the machine; re-exported after `uv run playwright install chromium`",
+  "cleanup_pending": 0,
+  "phases": [
+    {
+      "phase": "queued",
+      "seconds": 1.0
+    },
+    {
+      "phase": "transcribing",
+      "seconds": 56.5
+    },
+    {
+      "phase": "preparing",
+      "seconds": 12.1
+    },
+    {
+      "phase": "uploading",
+      "seconds": 91.1
+    },
+    {
+      "phase": "analyzing",
+      "seconds": 19.2
+    },
+    {
+      "phase": "preparing",
+      "seconds": 16.1
+    },
+    {
+      "phase": "uploading",
+      "seconds": 76.7
+    },
+    {
+      "phase": "analyzing",
+      "seconds": 20.2
+    },
+    {
+      "phase": "preparing",
+      "seconds": 12.1
+    },
+    {
+      "phase": "uploading",
+      "seconds": 44.4
+    },
+    {
+      "phase": "analyzing",
+      "seconds": 16.2
+    },
+    {
+      "phase": "extracting_evidence",
+      "seconds": 43.2
+    },
+    {
+      "phase": "verifying",
+      "seconds": 9.1
+    }
+  ],
+  "total_seconds": 417.9,
+  "asr": [
+    "ok",
+    null
+  ],
+  "ocr": [
+    "ok",
+    null
+  ],
+  "status_counts": {
+    "not_checkable": 5,
+    "quote_matched": 7,
+    "unverified": 15,
+    "verified": 1
+  },
+  "items": {
+    "prerequisites/0": {
+      "status": "not_checkable",
+      "method": "none",
+      "reason": "chỉ có hành động, không có lời nói hay chữ để đối chiếu"
+    },
+    "prerequisites/1": {
+      "status": "quote_matched",
+      "method": "asr",
+      "reason": null
+    },
+    "safety/0": {
+      "status": "unverified",
+      "method": "none",
+      "reason": "giá trị không có trong nguyên văn"
+    },
+    "safety/1": {
+      "status": "quote_matched",
+      "method": "asr",
+      "reason": null
+    },
+    "materials/0": {
+      "status": "unverified",
+      "method": "none",
+      "reason": "giá trị không có trong nguyên văn"
+    },
+    "materials/1": {
+      "status": "unverified",
+      "method": "none",
+      "reason": "tên mục không có trong nguyên văn"
+    },
+    "materials/2": {
+      "status": "unverified",
+      "method": "none",
+      "reason": "tên mục không có trong nguyên văn"
+    },
+    "materials/3": {
+      "status": "unverified",
+      "method": "none",
+      "reason": "tên mục không có trong nguyên văn"
+    },
+    "materials/4": {
+      "status": "unverified",
+      "method": "none",
+      "reason": "tên mục không có trong nguyên văn"
+    },
+    "materials/5": {
+      "status": "not_checkable",
+      "method": "none",
+      "reason": "chỉ có hành động, không có lời nói hay chữ để đối chiếu"
+    },
+    "materials/6": {
+      "status": "not_checkable",
+      "method": "none",
+      "reason": "chỉ có hành động, không có lời nói hay chữ để đối chiếu"
+    },
+    "materials/7": {
+      "status": "not_checkable",
+      "method": "none",
+      "reason": "chỉ có hành động, không có lời nói hay chữ để đối chiếu"
+    },
+    "materials/8": {
+      "status": "not_checkable",
+      "method": "none",
+      "reason": "chỉ có hành động, không có lời nói hay chữ để đối chiếu"
+    },
+    "materials/9": {
+      "status": "unverified",
+      "method": "none",
+      "reason": "giá trị không có trong nguyên văn"
+    },
+    "steps/1/parameters/0": {
+      "status": "unverified",
+      "method": "none",
+      "reason": "tên mục không có trong nguyên văn"
+    },
+    "steps/1/parameters/1": {
+      "status": "verified",
+      "method": "ocr",
+      "reason": null
+    },
+    "steps/1/parameters/2": {
+      "status": "unverified",
+      "method": "none",
+      "reason": "tên mục không có trong nguyên văn"
+    },
+    "steps/1/warnings/0": {
+      "status": "unverified",
+      "method": "none",
+      "reason": "giá trị không có trong nguyên văn"
+    },
+    "steps/2/tips/0": {
+      "status": "unverified",
+      "method": "asr",
+      "reason": "con số hoặc giá trị không khớp bản ghi lời nói"
+    },
+    "steps/3/warnings/0": {
+      "status": "unverified",
+      "method": "none",
+      "reason": "giá trị không có trong nguyên văn"
+    },
+    "steps/4/warnings/0": {
+      "status": "quote_matched",
+      "method": "asr",
+      "reason": null
+    },
+    "steps/5/warnings/0": {
+      "status": "quote_matched",
+      "method": "asr",
+      "reason": null
+    },
+    "steps/5/tips/0": {
+      "status": "quote_matched",
+      "method": "asr",
+      "reason": null
+    },
+    "steps/7/warnings/0": {
+      "status": "unverified",
+      "method": "none",
+      "reason": "giá trị không có trong nguyên văn"
+    },
+    "steps/8/tips/0": {
+      "status": "quote_matched",
+      "method": "asr",
+      "reason": null
+    },
+    "steps/9/parameters/0": {
+      "status": "unverified",
+      "method": "none",
+      "reason": "nguyên văn có khoảng giá trị hoặc phân số"
+    },
+    "steps/9/warnings/0": {
+      "status": "quote_matched",
+      "method": "asr",
+      "reason": null
+    },
+    "steps/11/parameters/0": {
+      "status": "unverified",
+      "method": "none",
+      "reason": "giá trị không có trong nguyên văn"
+    }
+  },
+  "evaluate": {
+    "verified_precision": 0.0,
+    "wrong_verified_quantities": 0,
+    "wrong_verified_exact_inputs": 0,
+    "verified_unmatched": {
+      "count": 1,
+      "paths": [
+        "steps/1/parameters/1"
+      ]
+    },
+    "verified_false_negative_rate": 1.0,
+    "step_coverage": 0.35714285714285715,
+    "not_tutorial_correct": true,
+    "quote_matched": {
+      "count": 7,
+      "paths": [
+        "prerequisites/1",
+        "safety/1",
+        "steps/4/warnings/0",
+        "steps/5/warnings/0",
+        "steps/5/tips/0",
+        "steps/8/tips/0",
+        "steps/9/warnings/0"
+      ]
+    },
+    "counts": {
+      "verified_items": 1,
+      "verified_correct": 0,
+      "annotated_quantities": 4,
+      "annotated_quantities_in_draft": 4,
+      "annotated_steps": 14,
+      "annotated_steps_matched": 5
+    }
+  }
+}
