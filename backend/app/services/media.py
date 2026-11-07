@@ -179,9 +179,18 @@ def encode(source, target, start, end, check_cancel=lambda: None, upload=False):
         partial.unlink(missing_ok=True)
 
 
+SEEK_PREROLL = 3.0  # seconds decoded before the wanted frame; the seek itself lands on a keyframe
+
+
 def extract_frame(source, target, timestamp, check_cancel=lambda: None):
+    """The first frame at or after `timestamp` as PNG; returns (its time, width, height).
+
+    ffmpeg seeks to SEEK_PREROLL seconds before it and decodes from there (frame-accurate: it starts from
+    the keyframe before the seek point and drops what comes earlier), instead of decoding the video from
+    its start, which took 25-37 s per frame near the middle of a 9-minute 1080p video."""
     target.parent.mkdir(parents=True, exist_ok=True)
     partial = target.with_suffix(".partial")
+    start = max(0.0, timestamp - SEEK_PREROLL)
     try:
         _, stderr = run_process(
             [
@@ -194,10 +203,12 @@ def extract_frame(source, target, timestamp, check_cancel=lambda: None):
                 "file",
                 "-threads",
                 "2",
+                "-ss",
+                f"{start:.6f}",
                 "-i",
                 str(source),
                 "-vf",
-                f"select=gte(t\\,{timestamp:.6f}),scale=w='min(1920,iw)':h='min(1920,ih)':force_original_aspect_ratio=decrease,showinfo",
+                f"select=gte(t\\,{timestamp - start:.6f}),scale=w='min(1920,iw)':h='min(1920,ih)':force_original_aspect_ratio=decrease,showinfo",
                 "-frames:v",
                 "1",
                 "-threads",
@@ -214,7 +225,7 @@ def extract_frame(source, target, timestamp, check_cancel=lambda: None):
         matches = re.findall(rb"pts_time:([0-9.e+\-]+)", stderr)
         if not matches or not partial.exists() or partial.stat().st_size == 0:
             raise AppError("FRAME_FAILED", "Không trích được frame tại mốc đã chọn.", 422)
-        actual = float(matches[0])
+        actual = start + float(matches[0])  # timestamps after an input seek count from `start`
         if abs(actual - timestamp) > 0.5:
             raise AppError("FRAME_TIMING", "Frame lệch quá 0,5 giây; hãy chọn mốc khác.", 422)
         os.replace(partial, target)

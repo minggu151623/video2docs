@@ -1091,3 +1091,31 @@ def test_provider_clips_are_downscaled_but_playback_keeps_resolution(tmp_path):
     encode(source, tmp_path / "clip.mp4", 0, 2, upload=True)
     assert size(tmp_path / "playback.mp4") == (1920, 1080)
     assert size(tmp_path / "clip.mp4") == (1280, 720)
+
+
+def test_frame_after_a_seek_is_the_frame_decoded_from_the_start(tmp_path):
+    """extract_frame seeks a few seconds before the mark; the frame, its time and its pixels must be the
+    ones a decode from the start gives, also far from a keyframe (one keyframe every 10 s here)."""
+    import hashlib
+    import subprocess
+    from app.services.media import extract_frame
+
+    source = tmp_path / "long.mp4"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=25", "-t", "24",
+         "-g", "250", "-pix_fmt", "yuv420p", str(source)],
+        check=True,
+    )
+
+    def from_start(at, target):
+        subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", "-i", str(source), "-vf", f"select=gte(t\\,{at})",
+             "-frames:v", "1", "-c:v", "png", str(target)],
+            check=True,
+        )
+        return hashlib.md5(target.read_bytes()).hexdigest()
+
+    for at in (0.0, 2.0, 7.37, 19.96):
+        actual, width, height = extract_frame(source, tmp_path / f"{at}.png", at)
+        assert abs(actual - at) < 0.04 and (width, height) == (320, 240)
+        assert hashlib.md5((tmp_path / f"{at}.png").read_bytes()).hexdigest() == from_start(at, tmp_path / "ref.png")
